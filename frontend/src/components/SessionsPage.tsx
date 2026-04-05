@@ -1,0 +1,161 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useSession } from "../App";
+import { useToolCall } from "../hooks/useMCP";
+
+interface Session {
+  session_id: string;
+  label: string;
+  tx_count: number;
+  updated_at: string;
+}
+
+interface ListResult {
+  sessions: Session[];
+}
+
+interface CreateResult {
+  session_id: string;
+  label: string;
+}
+
+interface LoadResult {
+  session_id?: string;
+  label?: string;
+  error?: string;
+}
+
+export default function SessionsPage() {
+  const { setSession } = useSession();
+  const navigate = useNavigate();
+
+  const listTool = useToolCall<ListResult>("list_sessions");
+  const createTool = useToolCall<CreateResult>("create_session");
+  const loadTokenTool = useToolCall<LoadResult>("load_share_token");
+
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [newLabel, setNewLabel] = useState("");
+  const [shareToken, setShareToken] = useState("");
+  const [fetched, setFetched] = useState(false);
+
+  async function fetchSessions() {
+    const data = await listTool.invoke({});
+    if (data?.sessions) setSessions(data.sessions);
+    setFetched(true);
+  }
+
+  useEffect(() => { fetchSessions(); }, []);
+
+  async function handleCreate() {
+    if (!newLabel.trim()) return;
+    const data = await createTool.invoke({ label: newLabel.trim() });
+    if (data?.session_id) {
+      setSession(data.session_id, data.label);
+      navigate("/import");
+    }
+  }
+
+  async function handleLoadToken() {
+    if (!shareToken.trim()) return;
+    const data = await loadTokenTool.invoke({ share_token: shareToken.trim() });
+    if (data?.session_id) {
+      setSession(data.session_id, data.label ?? "Shared session");
+      navigate("/transactions");
+    } else {
+      alert(data?.error ?? "Invalid token");
+    }
+  }
+
+  function openSession(s: Session) {
+    setSession(s.session_id, s.label);
+    navigate("/transactions");
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      <h1 className="text-xl font-semibold mb-6 text-stone-800">Tax sessions</h1>
+
+      {/* Create new */}
+      <div className="bg-white border border-stone-200 rounded-xl p-5 mb-4">
+        <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
+          New session
+        </div>
+        <div className="flex gap-2">
+          <input
+            className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm bg-stone-50 focus:outline-none focus:border-stone-400"
+            placeholder="e.g. 2025 Taxes"
+            value={newLabel}
+            onChange={e => setNewLabel(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleCreate()}
+          />
+          <button
+            onClick={handleCreate}
+            disabled={createTool.loading || !newLabel.trim()}
+            className="bg-stone-900 text-white text-sm px-4 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
+          >
+            {createTool.loading ? "Creating…" : "Create →"}
+          </button>
+        </div>
+      </div>
+
+      {/* Load shared */}
+      <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
+        <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
+          Load shared session
+        </div>
+        <div className="flex gap-2">
+          <input
+            className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm bg-stone-50 focus:outline-none focus:border-stone-400 font-mono"
+            placeholder="Share token"
+            value={shareToken}
+            onChange={e => setShareToken(e.target.value)}
+          />
+          <button
+            onClick={handleLoadToken}
+            disabled={loadTokenTool.loading || !shareToken.trim()}
+            className="bg-green-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-600 disabled:opacity-40 transition-colors"
+          >
+            {loadTokenTool.loading ? "Loading…" : "Load"}
+          </button>
+        </div>
+      </div>
+
+      {/* Existing sessions */}
+      {fetched && sessions.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">
+            Your sessions
+          </div>
+          <div className="space-y-2">
+            {sessions.map(s => (
+              <button
+                key={s.session_id}
+                onClick={() => openSession(s)}
+                className="w-full text-left bg-white border border-stone-200 rounded-xl px-5 py-4 hover:border-stone-400 transition-colors flex items-center gap-4"
+              >
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-stone-800">{s.label}</div>
+                  <div className="text-xs text-stone-400 mt-0.5">
+                    {s.tx_count} transactions · updated{" "}
+                    {new Date(s.updated_at).toLocaleDateString()}
+                  </div>
+                </div>
+                <span className="text-stone-300 text-lg">&rarr;</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {fetched && sessions.length === 0 && (
+        <p className="text-sm text-stone-400 text-center py-8">
+          No sessions yet. Create one above to get started.
+        </p>
+      )}
+
+      {listTool.loading && !fetched && (
+        <p className="text-sm text-stone-400 text-center py-8">Loading…</p>
+      )}
+    </div>
+  );
+}
