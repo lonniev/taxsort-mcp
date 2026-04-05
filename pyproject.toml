@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "taxsort-mcp"
+version = "0.1.0"
+description = "TaxSort — Tollbooth-monetized MCP server for personal tax transaction classification"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "tollbooth-dpyc[nostr]>=0.2.12",
+    "httpx>=0.27.0",
+    "anthropic>=0.40.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "respx>=0.22.0",
+    "ruff>=0.4.0",
+]
+
+[tool.setuptools]
+py-modules = ["server", "config"]
+packages = ["tools", "db"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

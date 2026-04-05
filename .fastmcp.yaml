@@ -1,0 +1,5 @@
+name: taxsort-mcp
+install: pip install -e .
+command: python -m server
+runtime:
+  python: "3.12"
