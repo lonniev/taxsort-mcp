@@ -40,7 +40,7 @@ function fmt$(n: number) {
 }
 
 export default function SummaryPage() {
-  const { sessionId } = useSession();
+  const { sessionId, npub } = useSession();
   const summaryTool = useToolCall<Summary>("get_summary");
 
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -53,6 +53,7 @@ export default function SummaryPage() {
       session_id: sessionId,
       group_by: groupBy,
       scope,
+      npub,
     });
     if (data) setSummary(data);
   }

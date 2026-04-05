@@ -63,7 +63,7 @@ const CAT_COLOR: Record<string, string> = {
 };
 
 export default function TransactionsPage() {
-  const { sessionId } = useSession();
+  const { sessionId, npub } = useSession();
 
   const txTool = useToolCall<TxResult>("get_transactions");
   const overrideTool = useToolCall("override_transaction");
@@ -87,6 +87,7 @@ export default function TransactionsPage() {
       session_id: sessionId,
       limit: LIMIT,
       offset: off,
+      npub,
     };
     if (cat === "Needs Review") {
       args.needs_review_only = true;
@@ -107,7 +108,7 @@ export default function TransactionsPage() {
   // Start polling for classification status if there are unclassified transactions
   useEffect(() => {
     if (sessionId && statusPoll.data?.status !== "complete") {
-      statusPoll.start({ session_id: sessionId });
+      statusPoll.start({ session_id: sessionId, npub });
     }
     return () => statusPoll.stop();
   }, [sessionId]);
@@ -141,6 +142,7 @@ export default function TransactionsPage() {
       transaction_id: selected.id,
       category: editCat,
       subcategory: editSub,
+      npub,
     });
     setSelected(null);
     fetchTxns(filter, offset);
@@ -152,6 +154,7 @@ export default function TransactionsPage() {
     await revertTool.invoke({
       session_id: sessionId,
       transaction_id: selected.id,
+      npub,
     });
     setSelected(null);
     fetchTxns(filter, offset);

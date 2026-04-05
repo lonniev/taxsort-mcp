@@ -7,14 +7,14 @@ interface ShareResult {
 }
 
 export default function SettingsPage() {
-  const { sessionId, sessionLabel } = useSession();
+  const { sessionId, sessionLabel, npub } = useSession();
   const shareTool = useToolCall<ShareResult>("create_share_token");
   const [shareResult, setShareResult] = useState<string | null>(null);
 
   async function createShare() {
     if (!sessionId) return;
     setShareResult(null);
-    const data = await shareTool.invoke({ session_id: sessionId, expires_days: 30 });
+    const data = await shareTool.invoke({ session_id: sessionId, expires_days: 30, npub });
     if (data?.share_token) {
       setShareResult(data.share_token);
     }

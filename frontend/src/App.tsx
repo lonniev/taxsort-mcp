@@ -7,6 +7,7 @@ import SummaryPage from "./components/SummaryPage";
 import SettingsPage from "./components/SettingsPage";
 import Nav from "./components/Nav";
 import { useToolCall } from "./hooks/useMCP";
+import DebugPanel from "./components/DebugPanel";
 
 // ── Contexts ───────────────────────────────────────────────────────────────
 
@@ -195,6 +196,7 @@ export default function App() {
           </div>
         </BrowserRouter>
       </SessionContext.Provider>
+    <DebugPanel />
     </NpubGate>
   );
 }

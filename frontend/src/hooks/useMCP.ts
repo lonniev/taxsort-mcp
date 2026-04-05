@@ -15,6 +15,39 @@ const MCP_URL = _envUrl.startsWith("/")
   ? `${window.location.origin}${_envUrl}`
   : _envUrl;
 
+// ── Debug log (visible in on-screen panel) ─────────────────────────────────
+
+export interface DebugEntry {
+  ts: string;
+  type: "info" | "call" | "result" | "error";
+  message: string;
+}
+
+const _debugLog: DebugEntry[] = [];
+const _listeners: Set<() => void> = new Set();
+const MAX_LOG = 50;
+
+function debugPush(type: DebugEntry["type"], message: string) {
+  const ts = new Date().toLocaleTimeString();
+  _debugLog.unshift({ ts, type, message });
+  if (_debugLog.length > MAX_LOG) _debugLog.length = MAX_LOG;
+  _listeners.forEach((fn) => fn());
+}
+
+export function useDebugLog() {
+  const [, setTick] = useState(0);
+  const ref = useRef<() => void>();
+
+  if (!ref.current) {
+    ref.current = () => setTick((t) => t + 1);
+    _listeners.add(ref.current);
+  }
+
+  return _debugLog;
+}
+
+// ── Client ──────────��──────────────────────────────────────────────────────
+
 let client: Client | null = null;
 let connecting: Promise<void> | null = null;
 
@@ -26,11 +59,11 @@ async function getClient(): Promise<Client> {
   }
 
   connecting = (async () => {
-    console.log(`[MCP] connecting to ${MCP_URL}`);
+    debugPush("info", `Connecting to ${MCP_URL}`);
     const c = new Client({ name: "taxsort-app", version: "0.1.0" });
     const transport = new StreamableHTTPClientTransport(new URL(MCP_URL));
     await c.connect(transport);
-    console.log("[MCP] connected");
+    debugPush("info", "Connected");
     client = c;
     connecting = null;
   })();
@@ -40,13 +73,20 @@ async function getClient(): Promise<Client> {
 }
 
 async function mcpCall(toolName: string, args: Record<string, unknown>): Promise<unknown> {
-  console.log(`[MCP] calling taxsort_${toolName}`, args);
+  debugPush("call", `taxsort_${toolName}(${JSON.stringify(args).slice(0, 120)})`);
   const c = await getClient();
-  const result = await c.callTool({
-    name: `taxsort_${toolName}`,
-    arguments: args,
-  });
-  console.log(`[MCP] result for taxsort_${toolName}`, result);
+  let result;
+  try {
+    result = await c.callTool({
+      name: `taxsort_${toolName}`,
+      arguments: args,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    debugPush("error", `taxsort_${toolName}: ${msg}`);
+    throw e;
+  }
+  debugPush("result", `taxsort_${toolName} → ${JSON.stringify(result).slice(0, 200)}`);
 
   if (result.isError) {
     const content = result.content as Array<Record<string, unknown>> | undefined;
