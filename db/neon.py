@@ -141,7 +141,15 @@ def _qualify(query: str) -> str:
 
 async def execute(query: str, *args: Any) -> dict:
     v = await _get_vault()
-    return await v._execute(_qualify(query), list(args))
+    qualified = _qualify(query)
+    try:
+        return await v._execute(qualified, list(args))
+    except Exception as e:
+        import httpx as _hx
+        if isinstance(e, _hx.HTTPStatusError):
+            body = e.response.text[:500]
+            raise RuntimeError(f"Neon {e.response.status_code}: {body}\nSQL: {qualified[:200]}\nArgs: {list(args)[:5]}") from e
+        raise
 
 
 async def fetch(query: str, *args: Any) -> list[dict]:
