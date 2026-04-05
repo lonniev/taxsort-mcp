@@ -22,7 +22,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -183,14 +183,25 @@ async def db_diagnostic(npub: NpubField = "") -> dict[str, Any]:
         except Exception as e:
             results.append({"create_sessions": "error", "msg": str(e)[:300]})
 
-        # Try selecting from sessions
+        # Try selecting from sessions (direct vault)
         try:
             r = await v._execute(f"SELECT COUNT(*) as n FROM {t('sessions')}", [])
-            results.append({"count_sessions": r})
+            results.append({"count_sessions_direct": r})
         except _httpx.HTTPStatusError as e:
-            results.append({"count_sessions": "error", "status": e.response.status_code, "body": e.response.text[:500]})
+            results.append({"count_sessions_direct": "error", "status": e.response.status_code, "body": e.response.text[:500]})
         except Exception as e:
-            results.append({"count_sessions": "error", "msg": str(e)[:300]})
+            results.append({"count_sessions_direct": "error", "msg": str(e)[:300]})
+
+        # Try through db/neon.py fetch() path (same as list_sessions uses)
+        try:
+            from db.neon import fetch as _fetch, _qualify
+            test_query = "SELECT COUNT(*) as n FROM sessions"
+            qualified = _qualify(test_query)
+            results.append({"qualify_test": {"input": test_query, "output": qualified}})
+            r = await _fetch(test_query)
+            results.append({"count_via_neon_fetch": r})
+        except Exception as e:
+            results.append({"count_via_neon_fetch": "error", "msg": str(e)[:500]})
 
     except Exception as e:
         results.append({"vault_error": str(e)[:300]})
