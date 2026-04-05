@@ -10,14 +10,27 @@ from pathlib import Path
 from typing import Any
 
 _vault: Any = None
+_schema_done: bool = False
 
 
 async def _get_vault() -> Any:
-    global _vault
+    global _vault, _schema_done
     if _vault is None:
         from server import runtime
         _vault = await runtime.vault()
+    if not _schema_done:
+        _schema_done = True
+        await _ensure_domain_schema(_vault)
     return _vault
+
+
+async def _ensure_domain_schema(vault: Any) -> None:
+    """Run schema.sql idempotently on first vault access."""
+    sql = (Path(__file__).parent / "schema.sql").read_text()
+    for stmt in sql.split(";"):
+        stmt = stmt.strip()
+        if stmt:
+            await vault._execute(stmt, [])
 
 
 async def execute(query: str, *args: Any) -> dict:
@@ -41,11 +54,3 @@ async def executemany(query: str, args_list: list) -> None:
         await v._execute(query, list(args))
 
 
-async def ensure_domain_schema() -> None:
-    """Run schema.sql idempotently on startup."""
-    sql = (Path(__file__).parent / "schema.sql").read_text()
-    v = await _get_vault()
-    for stmt in sql.split(";"):
-        stmt = stmt.strip()
-        if stmt:
-            await v._execute(stmt, [])

@@ -146,19 +146,9 @@ register_standard_tools(
 )
 
 # ---------------------------------------------------------------------------
-# Startup — create domain tables
-# ---------------------------------------------------------------------------
-
-
-@mcp.on_startup
-async def startup() -> None:
-    from db.neon import ensure_domain_schema
-    await ensure_domain_schema()
-
-
-# ---------------------------------------------------------------------------
 # Domain-specific MCP tools
 # ---------------------------------------------------------------------------
+# Domain schema is created lazily on first vault access (see db/neon.py).
 
 # ── Sessions ──────────────────────────────────────────────────────────────
 
