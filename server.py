@@ -56,6 +56,7 @@ mcp = FastMCP(
 )
 tool = make_slug_tool(mcp, "taxsort")
 
+
 # Shared npub field annotation
 NpubField = Annotated[
     str,
@@ -160,9 +161,8 @@ async def create_session(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """Create a new TaxSort session for a tax year."""
-    user_id = OperatorRuntime.require_user_id()
     from tools.sessions import create_session as _create_session
-    return await _create_session(owner_npub=npub or user_id, label=label, tax_year=tax_year)
+    return await _create_session(owner_npub=npub, label=label, tax_year=tax_year)
 
 
 @tool
@@ -182,9 +182,8 @@ async def list_sessions(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """List all sessions owned by the current patron."""
-    user_id = OperatorRuntime.require_user_id()
     from tools.sessions import list_sessions as _list_sessions
-    return await _list_sessions(owner_npub=npub or user_id)
+    return await _list_sessions(owner_npub=npub)
 
 
 # ── Import ────────────────────────────────────────────────────────────────
@@ -289,10 +288,9 @@ async def classify_session(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """Classify all unclassified transactions in a session using Claude AI."""
-    user_id = OperatorRuntime.require_user_id()
     from tools.classify import classify_session as _classify_session
     return await _classify_session(
-        session_id=session_id, owner_npub=npub or user_id,
+        session_id=session_id, owner_npub=npub,
         reclassify_edited=reclassify_edited,
     )
 
@@ -330,9 +328,8 @@ async def get_rules(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """Get all classification rules for the current patron."""
-    user_id = OperatorRuntime.require_user_id()
     from tools.rules import get_rules as _get_rules
-    return await _get_rules(owner_npub=npub or user_id, session_id=session_id)
+    return await _get_rules(owner_npub=npub, session_id=session_id)
 
 
 @tool
@@ -346,10 +343,9 @@ async def save_rule(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """Create or update a classification rule."""
-    user_id = OperatorRuntime.require_user_id()
     from tools.rules import save_rule as _save_rule
     return await _save_rule(
-        owner_npub=npub or user_id, rule_type=rule_type,
+        owner_npub=npub, rule_type=rule_type,
         keyword=keyword, subcategory=subcategory, note=note,
         session_id=session_id,
     )
@@ -362,9 +358,8 @@ async def delete_rule(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """Delete a classification rule by ID."""
-    user_id = OperatorRuntime.require_user_id()
     from tools.rules import delete_rule as _delete_rule
-    return await _delete_rule(owner_npub=npub or user_id, rule_id=rule_id)
+    return await _delete_rule(owner_npub=npub, rule_id=rule_id)
 
 
 @tool
@@ -374,9 +369,8 @@ async def apply_rules(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """Re-apply all rules to transactions in a session."""
-    user_id = OperatorRuntime.require_user_id()
     from tools.rules import apply_rules as _apply_rules
-    return await _apply_rules(owner_npub=npub or user_id, session_id=session_id)
+    return await _apply_rules(owner_npub=npub, session_id=session_id)
 
 
 # ── Sharing ───────────────────────────────────────────────────────────────
@@ -389,10 +383,9 @@ async def create_share_token(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """Create a share token so another user can access this session."""
-    user_id = OperatorRuntime.require_user_id()
     from tools.share import create_share_token as _create_share_token
     return await _create_share_token(
-        owner_npub=npub or user_id, session_id=session_id,
+        owner_npub=npub, session_id=session_id,
         expires_days=expires_days,
     )
 

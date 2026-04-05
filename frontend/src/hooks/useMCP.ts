@@ -10,7 +10,10 @@ import { useState, useCallback, useRef } from "react";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-const MCP_URL = import.meta.env.VITE_MCP_URL as string;
+const _envUrl = import.meta.env.VITE_MCP_URL as string;
+const MCP_URL = _envUrl.startsWith("/")
+  ? `${window.location.origin}${_envUrl}`
+  : _envUrl;
 
 let client: Client | null = null;
 let connecting: Promise<void> | null = null;
@@ -23,9 +26,11 @@ async function getClient(): Promise<Client> {
   }
 
   connecting = (async () => {
+    console.log(`[MCP] connecting to ${MCP_URL}`);
     const c = new Client({ name: "taxsort-app", version: "0.1.0" });
     const transport = new StreamableHTTPClientTransport(new URL(MCP_URL));
     await c.connect(transport);
+    console.log("[MCP] connected");
     client = c;
     connecting = null;
   })();
@@ -35,11 +40,13 @@ async function getClient(): Promise<Client> {
 }
 
 async function mcpCall(toolName: string, args: Record<string, unknown>): Promise<unknown> {
+  console.log(`[MCP] calling taxsort_${toolName}`, args);
   const c = await getClient();
   const result = await c.callTool({
     name: `taxsort_${toolName}`,
     arguments: args,
   });
+  console.log(`[MCP] result for taxsort_${toolName}`, result);
 
   if (result.isError) {
     const content = result.content as Array<Record<string, unknown>> | undefined;

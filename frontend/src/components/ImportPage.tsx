@@ -19,7 +19,7 @@ const FMT_LABELS: Record<string, string> = {
 };
 
 export default function ImportPage() {
-  const { sessionId } = useSession();
+  const { sessionId, npub } = useSession();
   const navigate = useNavigate();
 
   const importTool = useToolCall<ImportResult>("import_csv");
@@ -70,6 +70,7 @@ export default function ImportPage() {
         session_id: sessionId,
         content,
         filename: f.name,
+        npub,
       });
       if (data) newResults.push(data);
     }
@@ -83,7 +84,7 @@ export default function ImportPage() {
     if (!sessionId) return;
     setClassifying(true);
     setPhase("Starting classification…");
-    await classifyTool.invoke({ session_id: sessionId });
+    await classifyTool.invoke({ session_id: sessionId, npub });
     setClassifying(false);
     setPhase("");
     navigate("/transactions");

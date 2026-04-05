@@ -26,7 +26,7 @@ interface LoadResult {
 }
 
 export default function SessionsPage() {
-  const { setSession } = useSession();
+  const { setSession, npub } = useSession();
   const navigate = useNavigate();
 
   const listTool = useToolCall<ListResult>("list_sessions");
@@ -39,7 +39,7 @@ export default function SessionsPage() {
   const [fetched, setFetched] = useState(false);
 
   async function fetchSessions() {
-    const data = await listTool.invoke({});
+    const data = await listTool.invoke({ npub });
     if (data?.sessions) setSessions(data.sessions);
     setFetched(true);
   }
@@ -48,7 +48,7 @@ export default function SessionsPage() {
 
   async function handleCreate() {
     if (!newLabel.trim()) return;
-    const data = await createTool.invoke({ label: newLabel.trim() });
+    const data = await createTool.invoke({ label: newLabel.trim(), npub });
     if (data?.session_id) {
       setSession(data.session_id, data.label);
       navigate("/import");
@@ -57,7 +57,7 @@ export default function SessionsPage() {
 
   async function handleLoadToken() {
     if (!shareToken.trim()) return;
-    const data = await loadTokenTool.invoke({ share_token: shareToken.trim() });
+    const data = await loadTokenTool.invoke({ share_token: shareToken.trim(), npub });
     if (data?.session_id) {
       setSession(data.session_id, data.label ?? "Shared session");
       navigate("/transactions");
@@ -71,9 +71,17 @@ export default function SessionsPage() {
     navigate("/transactions");
   }
 
+  const anyError = listTool.error || createTool.error || loadTokenTool.error;
+
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-xl font-semibold mb-6 text-stone-800">Tax sessions</h1>
+
+      {anyError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-sm text-red-700 break-all">
+          {anyError}
+        </div>
+      )}
 
       {/* Create new */}
       <div className="bg-white border border-stone-200 rounded-xl p-5 mb-4">
