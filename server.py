@@ -151,6 +151,53 @@ register_standard_tools(
 # ---------------------------------------------------------------------------
 # Domain schema is created lazily on first vault access (see db/neon.py).
 
+# ── Diagnostics (temporary) ────────────────────────────────────────────────
+
+@tool
+async def db_diagnostic(npub: NpubField = "") -> dict[str, Any]:
+    """Run a diagnostic query against Neon to check schema status."""
+    import httpx as _httpx
+    results = []
+    try:
+        v = await runtime.vault()
+        results.append({"vault": "ok", "prefix": getattr(v, "_schema_prefix", "")})
+
+        # Try a raw SELECT 1
+        r = await v._execute("SELECT 1 as ok", [])
+        results.append({"select_1": r})
+
+        # Try creating the sessions table
+        t = v._t
+        try:
+            r = await v._execute(
+                f"CREATE TABLE IF NOT EXISTS {t('sessions')} ("
+                "id TEXT PRIMARY KEY, "
+                "owner_npub TEXT NOT NULL, "
+                "label TEXT, "
+                "created_at TIMESTAMPTZ DEFAULT NOW(), "
+                "updated_at TIMESTAMPTZ DEFAULT NOW())", []
+            )
+            results.append({"create_sessions": "ok", "result": str(r)[:200]})
+        except _httpx.HTTPStatusError as e:
+            results.append({"create_sessions": "error", "status": e.response.status_code, "body": e.response.text[:500]})
+        except Exception as e:
+            results.append({"create_sessions": "error", "msg": str(e)[:300]})
+
+        # Try selecting from sessions
+        try:
+            r = await v._execute(f"SELECT COUNT(*) as n FROM {t('sessions')}", [])
+            results.append({"count_sessions": r})
+        except _httpx.HTTPStatusError as e:
+            results.append({"count_sessions": "error", "status": e.response.status_code, "body": e.response.text[:500]})
+        except Exception as e:
+            results.append({"count_sessions": "error", "msg": str(e)[:300]})
+
+    except Exception as e:
+        results.append({"vault_error": str(e)[:300]})
+
+    return {"diagnostic": results}
+
+
 # ── Sessions ──────────────────────────────────────────────────────────────
 
 @tool
