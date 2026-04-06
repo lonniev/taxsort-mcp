@@ -173,10 +173,19 @@ async def _background_classify(session_id: str, owner_npub: str, reclassify: boo
             job["errors"].append("No Anthropic API key available.")
             return
 
+        # For reclassify: reset all classifications so progress starts from 0
+        if reclassify:
+            await execute(
+                "UPDATE transactions SET "
+                "category=NULL, subcategory=NULL, confidence=NULL, "
+                "reason=NULL, merchant=NULL, edited=FALSE "
+                "WHERE session_id=$1",
+                session_id,
+            )
+            _log.info("Reset all classifications for session %s", session_id)
+
         rules_ctx = await _get_rules_context(session_id, owner_npub)
         where = "session_id=$1 AND (category IS NULL OR category='Needs Review')"
-        if reclassify:
-            where = "session_id=$1"
 
         while job["status"] == "running":
             rows = await fetch(
