@@ -152,6 +152,53 @@ export default function TransactionsPage() {
     fetchTxns(filter, subFilter, search, offset);
   }
 
+  const [groupBy, setGroupBy] = useState("none");
+  const [scope, setScope] = useState("all");
+
+  const GROUP_OPTIONS = [
+    ["none", "No grouping"],
+    ["category", "Category"],
+    ["taxline", "Tax Line (IRS)"],
+    ["month", "Month"],
+    ["account", "Account"],
+    ["month+category", "Month + Category"],
+  ];
+
+  const SCOPE_OPTIONS = [
+    ["all", "All transactions"],
+    ["tax", "Tax items (Sch A + C)"],
+    ["Schedule C", "Schedule C only"],
+    ["Schedule A", "Schedule A only"],
+  ];
+
+  // Group transactions for display
+  function groupKey(t: Transaction): string {
+    switch (groupBy) {
+      case "category": return t.category ?? "Unclassified";
+      case "taxline": return t.subcategory ?? t.category ?? "Unclassified";
+      case "month": return t.date?.slice(0, 7) ?? "Unknown";
+      case "account": return t.account ?? "Unknown";
+      case "month+category": return `${t.date?.slice(0, 7)} / ${t.category ?? "Unclassified"}`;
+      default: return "";
+    }
+  }
+
+  // Filter by scope
+  const scopedTxns = scope === "all" ? txns
+    : scope === "tax" ? txns.filter(t => t.category === "Schedule C" || t.category === "Schedule A")
+    : txns.filter(t => t.category === scope);
+
+  // Build groups
+  const grouped: Record<string, Transaction[]> = {};
+  if (groupBy !== "none") {
+    for (const t of scopedTxns) {
+      const k = groupKey(t);
+      if (!grouped[k]) grouped[k] = [];
+      grouped[k].push(t);
+    }
+  }
+  const groupKeys = Object.keys(grouped).sort();
+
   const filters = ["all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Needs Review"];
 
   return (
@@ -187,6 +234,30 @@ export default function TransactionsPage() {
             Refresh
           </button>
           <span className="ml-auto text-xs text-stone-400">{total} transactions</span>
+        </div>
+
+        {/* Group by + Scope */}
+        <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-stone-400">Group</label>
+            <select
+              value={groupBy}
+              onChange={e => setGroupBy(e.target.value)}
+              className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50"
+            >
+              {GROUP_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-stone-400">Show</label>
+            <select
+              value={scope}
+              onChange={e => setScope(e.target.value)}
+              className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50"
+            >
+              {SCOPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
         </div>
 
         {/* Search + active filters */}
@@ -234,34 +305,75 @@ export default function TransactionsPage() {
               </tr>
             </thead>
             <tbody>
-              {txns.map(t => (
-                <tr
-                  key={t.id}
-                  onClick={() => openEdit(t)}
-                  className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer transition-colors"
-                >
-                  <td className="px-4 py-2.5 font-mono text-xs text-stone-400 whitespace-nowrap">{t.date}</td>
-                  <td className="px-4 py-2.5 max-w-xs">
-                    <div className="truncate font-medium text-stone-700">{t.description}</div>
-                    {t.ambiguous && <div className="text-xs text-red-500">Indistinguishable duplicate in CSV</div>}
-                    {t.hint2 && <div className="text-xs text-blue-500">{t.hint1} &rsaquo; {t.hint2}</div>}
-                    {t.reason && !t.hint2 && <div className="text-xs text-stone-400 italic">{t.reason}</div>}
-                  </td>
-                  <td className={`px-4 py-2.5 font-mono text-right whitespace-nowrap ${t.amount >= 0 ? "text-green-700" : "text-stone-700"}`}>
-                    {t.amount >= 0 ? "+" : ""}{t.amount.toFixed(2)}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <span className={`text-xs font-medium ${CAT_COLOR[t.category ?? "Needs Review"] ?? "text-stone-400"}`}>
-                      {t.category ?? "\u2014"}
-                    </span>
-                    {t.subcategory && t.subcategory !== t.category && (
-                      <div className="text-xs text-stone-400 truncate max-w-32">{t.subcategory}</div>
-                    )}
-                    {t.edited && <span className="text-xs text-blue-400 ml-1">edited</span>}
-                  </td>
-                </tr>
-              ))}
-              {txns.length === 0 && !txTool.loading && (
+              {groupBy === "none" ? (
+                // Flat list (with scope filter)
+                scopedTxns.map(t => (
+                  <tr
+                    key={t.id}
+                    onClick={() => openEdit(t)}
+                    className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer transition-colors"
+                  >
+                    <td className="px-4 py-2.5 font-mono text-xs text-stone-400 whitespace-nowrap">{t.date}</td>
+                    <td className="px-4 py-2.5 max-w-xs">
+                      <div className="truncate font-medium text-stone-700">{t.description}</div>
+                      {t.ambiguous && <div className="text-xs text-red-500">Indistinguishable duplicate in CSV</div>}
+                      {t.hint2 && <div className="text-xs text-blue-500">{t.hint1} &rsaquo; {t.hint2}</div>}
+                      {t.reason && !t.hint2 && <div className="text-xs text-stone-400 italic">{t.reason}</div>}
+                    </td>
+                    <td className={`px-4 py-2.5 font-mono text-right whitespace-nowrap ${t.amount >= 0 ? "text-green-700" : "text-stone-700"}`}>
+                      {t.amount >= 0 ? "+" : ""}{t.amount.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className={`text-xs font-medium ${CAT_COLOR[t.category ?? "Needs Review"] ?? "text-stone-400"}`}>
+                        {t.category ?? "\u2014"}
+                      </span>
+                      {t.subcategory && t.subcategory !== t.category && (
+                        <div className="text-xs text-stone-400 truncate max-w-32">{t.subcategory}</div>
+                      )}
+                      {t.edited && <span className="text-xs text-blue-400 ml-1">edited</span>}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                // Grouped with section headers
+                groupKeys.map(gk => [
+                  <tr key={`hdr-${gk}`} className="bg-stone-50 border-t border-stone-200">
+                    <td colSpan={4} className="px-4 py-2 text-xs font-semibold text-stone-600">
+                      {gk}
+                      <span className="ml-2 text-stone-400 font-normal">
+                        ({grouped[gk].length} transactions &middot; ${Math.abs(grouped[gk].reduce((s, t) => s + t.amount, 0)).toFixed(2)})
+                      </span>
+                    </td>
+                  </tr>,
+                  ...grouped[gk].map(t => (
+                    <tr
+                      key={t.id}
+                      onClick={() => openEdit(t)}
+                      className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer transition-colors"
+                    >
+                      <td className="px-4 py-2.5 font-mono text-xs text-stone-400 whitespace-nowrap">{t.date}</td>
+                      <td className="px-4 py-2.5 max-w-xs">
+                        <div className="truncate font-medium text-stone-700">{t.description}</div>
+                        {t.hint2 && <div className="text-xs text-blue-500">{t.hint1} &rsaquo; {t.hint2}</div>}
+                        {t.reason && !t.hint2 && <div className="text-xs text-stone-400 italic">{t.reason}</div>}
+                      </td>
+                      <td className={`px-4 py-2.5 font-mono text-right whitespace-nowrap ${t.amount >= 0 ? "text-green-700" : "text-stone-700"}`}>
+                        {t.amount >= 0 ? "+" : ""}{t.amount.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className={`text-xs font-medium ${CAT_COLOR[t.category ?? "Needs Review"] ?? "text-stone-400"}`}>
+                          {t.category ?? "\u2014"}
+                        </span>
+                        {t.subcategory && t.subcategory !== t.category && (
+                          <div className="text-xs text-stone-400 truncate max-w-32">{t.subcategory}</div>
+                        )}
+                        {t.edited && <span className="text-xs text-blue-400 ml-1">edited</span>}
+                      </td>
+                    </tr>
+                  )),
+                ])
+              )}
+              {scopedTxns.length === 0 && !txTool.loading && (
                 <tr><td colSpan={4} className="px-4 py-10 text-center text-sm text-stone-400">No transactions match this filter.</td></tr>
               )}
             </tbody>
