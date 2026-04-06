@@ -7,6 +7,7 @@ import ClassifyPage from "./components/ClassifyPage";
 import SummaryPage from "./components/SummaryPage";
 import AdvisorPage from "./components/AdvisorPage";
 import TaxResearcherPage from "./components/TaxResearcherPage";
+import SubscriptionsPage from "./components/SubscriptionsPage";
 import WalletPage from "./components/WalletPage";
 import FeedbackPage from "./components/FeedbackPage";
 import PrivacyPage from "./components/PrivacyPage";
@@ -365,6 +366,7 @@ export default function App() {
                   path="/summary"
                   element={sessionId ? <SummaryPage /> : <Navigate to="/" />}
                 />
+                <Route path="/subscriptions" element={<SubscriptionsPage />} />
                 <Route path="/wallet" element={<WalletPage />} />
                 <Route path="/advisor" element={<AdvisorPage />} />
                 <Route path="/tax-research" element={<TaxResearcherPage />} />

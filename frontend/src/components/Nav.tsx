@@ -64,7 +64,8 @@ export default function Nav() {
             {link("/classify", "Classify", "Run Claude AI to categorize your transactions")}
             {link("/transactions", "Transactions", "Browse, search, filter, and edit classifications")}
             {link("/summary", "Summary", "View tax totals by IRS line, category, month, or account")}
-            {link("/wallet", "Wallet", "Check your credit balance, buy more sats via Lightning")}
+            {link("/subscriptions", "Subscriptions", "Find recurring charges, forgotten money leaks, cancel URLs")}
+          {link("/wallet", "Wallet", "Check your credit balance, buy more sats via Lightning")}
             {link("/advisor", "Advisor", "Ask the Financial Advisor how to use TaxSort")}
             {link("/tax-research", "Tax Code", "Look up IRS code sections — chapter and verse")}
             {link("/feedback", "Feedback", "Report bugs, request features, ask questions")}
