@@ -1,7 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
+import SortableTable from "./SortableTable";
+import type { Column } from "./SortableTable";
 
 interface Transaction {
   id: string;
@@ -188,16 +190,65 @@ export default function TransactionsPage() {
     : scope === "tax" ? txns.filter(t => t.category === "Schedule C" || t.category === "Schedule A")
     : txns.filter(t => t.category === scope);
 
-  // Build groups
-  const grouped: Record<string, Transaction[]> = {};
-  if (groupBy !== "none") {
-    for (const t of scopedTxns) {
-      const k = groupKey(t);
-      if (!grouped[k]) grouped[k] = [];
-      grouped[k].push(t);
-    }
-  }
-  const groupKeys = Object.keys(grouped).sort();
+  // (grouping is handled by SortableTable)
+
+  const txColumns: Column<Transaction>[] = useMemo(() => [
+    {
+      key: "date",
+      label: "Date",
+      sortValue: t => t.date,
+      className: "font-mono text-xs text-stone-400 whitespace-nowrap",
+      render: t => t.date,
+    },
+    {
+      key: "description",
+      label: "Description",
+      sortValue: t => t.description.toLowerCase(),
+      className: "max-w-xs",
+      render: t => (
+        <>
+          <div className="truncate font-medium text-stone-700">{t.description}</div>
+          {t.ambiguous && <div className="text-xs text-red-500">Indistinguishable duplicate</div>}
+          {t.hint2 && <div className="text-xs text-blue-500">{t.hint1} &rsaquo; {t.hint2}</div>}
+          {t.reason && !t.hint2 && <div className="text-xs text-stone-400 italic">{t.reason}</div>}
+        </>
+      ),
+    },
+    {
+      key: "amount",
+      label: "Amount",
+      align: "right" as const,
+      sortValue: t => t.amount,
+      className: "font-mono whitespace-nowrap",
+      render: t => (
+        <span className={t.amount >= 0 ? "text-green-700" : "text-stone-700"}>
+          {t.amount >= 0 ? "+" : ""}{t.amount.toFixed(2)}
+        </span>
+      ),
+    },
+    {
+      key: "account",
+      label: "Account",
+      sortValue: t => t.account,
+      render: t => <span className="text-xs text-stone-500">{t.account}</span>,
+    },
+    {
+      key: "category",
+      label: "Category",
+      sortValue: t => t.category ?? "zzz",
+      render: t => (
+        <>
+          <span className={`text-xs font-medium ${CAT_COLOR[t.category ?? "Needs Review"] ?? "text-stone-400"}`}>
+            {t.category ?? "\u2014"}
+          </span>
+          {t.subcategory && t.subcategory !== t.category && (
+            <div className="text-xs text-stone-400 truncate max-w-32">{t.subcategory}</div>
+          )}
+          {t.edited && <span className="text-xs text-blue-400 ml-1">edited</span>}
+        </>
+      ),
+    },
+  ], []);
 
   const filters = ["all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Needs Review"];
 
@@ -294,98 +345,29 @@ export default function TransactionsPage() {
           </div>
         )}
 
-        <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-stone-50 text-xs font-semibold text-stone-400 uppercase tracking-wider">
-                <th className="px-4 py-2.5 text-left">Date</th>
-                <th className="px-4 py-2.5 text-left">Description</th>
-                <th className="px-4 py-2.5 text-right">Amount</th>
-                <th className="px-4 py-2.5 text-left">Category</th>
-              </tr>
-            </thead>
-            <tbody>
-              {groupBy === "none" ? (
-                // Flat list (with scope filter)
-                scopedTxns.map(t => (
-                  <tr
-                    key={t.id}
-                    onClick={() => openEdit(t)}
-                    className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer transition-colors"
-                  >
-                    <td className="px-4 py-2.5 font-mono text-xs text-stone-400 whitespace-nowrap">{t.date}</td>
-                    <td className="px-4 py-2.5 max-w-xs">
-                      <div className="truncate font-medium text-stone-700">{t.description}</div>
-                      {t.ambiguous && <div className="text-xs text-red-500">Indistinguishable duplicate in CSV</div>}
-                      {t.hint2 && <div className="text-xs text-blue-500">{t.hint1} &rsaquo; {t.hint2}</div>}
-                      {t.reason && !t.hint2 && <div className="text-xs text-stone-400 italic">{t.reason}</div>}
-                    </td>
-                    <td className={`px-4 py-2.5 font-mono text-right whitespace-nowrap ${t.amount >= 0 ? "text-green-700" : "text-stone-700"}`}>
-                      {t.amount >= 0 ? "+" : ""}{t.amount.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span className={`text-xs font-medium ${CAT_COLOR[t.category ?? "Needs Review"] ?? "text-stone-400"}`}>
-                        {t.category ?? "\u2014"}
-                      </span>
-                      {t.subcategory && t.subcategory !== t.category && (
-                        <div className="text-xs text-stone-400 truncate max-w-32">{t.subcategory}</div>
-                      )}
-                      {t.edited && <span className="text-xs text-blue-400 ml-1">edited</span>}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                // Grouped with section headers
-                groupKeys.map(gk => [
-                  <tr key={`hdr-${gk}`} className="bg-stone-50 border-t border-stone-200">
-                    <td colSpan={4} className="px-4 py-2 text-xs font-semibold text-stone-600">
-                      {gk}
-                      <span className="ml-2 text-stone-400 font-normal">
-                        ({grouped[gk].length} transactions &middot; ${Math.abs(grouped[gk].reduce((s, t) => s + t.amount, 0)).toFixed(2)})
-                      </span>
-                    </td>
-                  </tr>,
-                  ...grouped[gk].map(t => (
-                    <tr
-                      key={t.id}
-                      onClick={() => openEdit(t)}
-                      className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer transition-colors"
-                    >
-                      <td className="px-4 py-2.5 font-mono text-xs text-stone-400 whitespace-nowrap">{t.date}</td>
-                      <td className="px-4 py-2.5 max-w-xs">
-                        <div className="truncate font-medium text-stone-700">{t.description}</div>
-                        {t.hint2 && <div className="text-xs text-blue-500">{t.hint1} &rsaquo; {t.hint2}</div>}
-                        {t.reason && !t.hint2 && <div className="text-xs text-stone-400 italic">{t.reason}</div>}
-                      </td>
-                      <td className={`px-4 py-2.5 font-mono text-right whitespace-nowrap ${t.amount >= 0 ? "text-green-700" : "text-stone-700"}`}>
-                        {t.amount >= 0 ? "+" : ""}{t.amount.toFixed(2)}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span className={`text-xs font-medium ${CAT_COLOR[t.category ?? "Needs Review"] ?? "text-stone-400"}`}>
-                          {t.category ?? "\u2014"}
-                        </span>
-                        {t.subcategory && t.subcategory !== t.category && (
-                          <div className="text-xs text-stone-400 truncate max-w-32">{t.subcategory}</div>
-                        )}
-                        {t.edited && <span className="text-xs text-blue-400 ml-1">edited</span>}
-                      </td>
-                    </tr>
-                  )),
-                ])
-              )}
-              {scopedTxns.length === 0 && !txTool.loading && (
-                <tr><td colSpan={4} className="px-4 py-10 text-center text-sm text-stone-400">No transactions match this filter.</td></tr>
-              )}
-            </tbody>
-          </table>
-          {total > LIMIT && (
-            <div className="flex items-center justify-between px-4 py-2.5 border-t border-stone-100 bg-stone-50 text-xs text-stone-400">
-              <button onClick={() => setOffset(Math.max(0, offset - LIMIT))} disabled={offset === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
-              <span>{offset + 1}&ndash;{Math.min(offset + LIMIT, total)} of {total}</span>
-              <button onClick={() => setOffset(offset + LIMIT)} disabled={offset + LIMIT >= total} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
-            </div>
+        <SortableTable<Transaction>
+          columns={txColumns}
+          rows={scopedTxns}
+          rowKey={t => t.id}
+          onRowClick={openEdit}
+          groupBy={groupBy !== "none" ? groupKey : undefined}
+          groupLabel={(gk, rows) => (
+            <span className="font-semibold text-stone-600">
+              {gk}
+              <span className="ml-2 font-normal text-stone-400">
+                ({rows.length} &middot; ${Math.abs(rows.reduce((s, t) => s + t.amount, 0)).toFixed(2)})
+              </span>
+            </span>
           )}
-        </div>
+          emptyMessage="No transactions match this filter."
+        />
+        {total > LIMIT && (
+          <div className="flex items-center justify-between px-4 py-2.5 mt-2 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-400">
+            <button onClick={() => setOffset(Math.max(0, offset - LIMIT))} disabled={offset === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
+            <span>{offset + 1}&ndash;{Math.min(offset + LIMIT, total)} of {total}</span>
+            <button onClick={() => setOffset(offset + LIMIT)} disabled={offset + LIMIT >= total} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
+          </div>
+        )}
       </div>
 
       {/* Side panel */}

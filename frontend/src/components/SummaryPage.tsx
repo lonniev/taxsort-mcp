@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "../App";
+import SortableTable from "./SortableTable";
+import type { Column } from "./SortableTable";
 import { useToolCall } from "../hooks/useMCP";
 import DonutChart from "./DonutChart";
 
@@ -51,8 +53,6 @@ export default function SummaryPage() {
   const [classifyStatus, setClassifyStatus] = useState<{ total: number; classified: number; needs_review: number } | null>(null);
   const [groupBy, setGroupBy] = useState("taxline");
   const [scope, setScope] = useState("tax");
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
   async function fetchSummary() {
     const data = await summaryTool.invoke({
       session_id: sessionId,
@@ -76,22 +76,45 @@ export default function SummaryPage() {
     }
   }, [sessionId, groupBy, scope]);
 
-  function toggleExpand(label: string) {
-    setExpanded(prev => {
-      const next = new Set(prev);
-      next.has(label) ? next.delete(label) : next.add(label);
-      return next;
-    });
-  }
-
   const isNested = groupBy.includes("+");
-  const grouped: Record<string, SummaryRow[]> = {};
-  if (summary && isNested) {
-    for (const row of summary.rows) {
-      if (!grouped[row.label]) grouped[row.label] = [];
-      grouped[row.label].push(row);
-    }
-  }
+
+  const summaryColumns: Column<SummaryRow>[] = useMemo(() => [
+    {
+      key: "label",
+      label: GROUP_OPTIONS.find(([v]) => v === groupBy)?.[1] ?? "Group",
+      sortValue: r => r.label ?? "",
+      render: r => (
+        <>
+          <div className="font-medium text-stone-700">{isNested ? (r.sublabel ?? r.label) : r.label}</div>
+          {r.irs_line && <div className="text-xs text-stone-400">{r.irs_line}</div>}
+        </>
+      ),
+    },
+    {
+      key: "count",
+      label: "Count",
+      align: "right" as const,
+      sortValue: r => r.count,
+      className: "font-mono text-xs text-stone-500",
+      render: r => <>{r.count}</>,
+    },
+    {
+      key: "expenses",
+      label: "Expenses",
+      align: "right" as const,
+      sortValue: r => r.expenses,
+      className: "font-mono text-xs text-stone-700",
+      render: r => <>{r.expenses > 0 ? "$" + fmt$(r.expenses) : "\u2014"}</>,
+    },
+    {
+      key: "income",
+      label: "Income",
+      align: "right" as const,
+      sortValue: r => r.income,
+      className: "font-mono text-xs text-green-700",
+      render: r => <>{r.income > 0 ? "$" + fmt$(r.income) : "\u2014"}</>,
+    },
+  ], [groupBy, isNested]);
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -156,101 +179,40 @@ export default function SummaryPage() {
       )}
 
       {summary && (
-        <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-stone-50 text-xs font-semibold text-stone-400 uppercase tracking-wider">
-                <th className="px-4 py-2.5 text-left">
-                  {GROUP_OPTIONS.find(([v]) => v === groupBy)?.[1] ?? "Group"}
-                </th>
-                <th className="px-4 py-2.5 text-right">Count</th>
-                <th className="px-4 py-2.5 text-right">Expenses</th>
-                <th className="px-4 py-2.5 text-right">Income</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!isNested &&
-                summary.rows.map((row, i) => (
-                  <tr
-                    key={i}
-                    className="border-t border-stone-100 hover:bg-amber-50 cursor-pointer transition-colors"
-                    onClick={() => {
-                      const params = new URLSearchParams();
-                      if (groupBy === "taxline" || groupBy === "category") {
-                        params.set("subcategory", row.label);
-                      } else if (groupBy === "month") {
-                        // Can't filter by month in transactions yet, use search
-                      } else {
-                        params.set("subcategory", row.label);
-                      }
-                      navigate(`/transactions?${params.toString()}`);
-                    }}
-                  >
-                    <td className="px-4 py-2.5">
-                      <div className="font-medium text-stone-700">{row.label}</div>
-                      {row.irs_line && <div className="text-xs text-stone-400">{row.irs_line}</div>}
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-right text-stone-500">{row.count}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-right text-stone-700">
-                      {row.expenses > 0 ? "$" + fmt$(row.expenses) : "—"}
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-right text-green-700">
-                      {row.income > 0 ? "$" + fmt$(row.income) : "—"}
-                    </td>
-                  </tr>
-                ))}
-
-              {isNested &&
-                Object.entries(grouped).map(([label, rows]) => {
-                  const exp = rows.reduce((s, r) => s + r.expenses, 0);
-                  const inc = rows.reduce((s, r) => s + r.income, 0);
-                  const cnt = rows.reduce((s, r) => s + r.count, 0);
-                  const open = expanded.has(label);
-                  return [
-                    <tr
-                      key={label}
-                      className="border-t border-stone-100 bg-stone-50 cursor-pointer hover:bg-stone-100"
-                      onClick={() => toggleExpand(label)}
-                    >
-                      <td className="px-4 py-2.5">
-                        <span className="font-mono text-xs text-stone-400 mr-2">{open ? "\u25BC" : "\u25B6"}</span>
-                        <span className="font-semibold text-stone-700">{label}</span>
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-right text-stone-400">{cnt}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-right text-stone-700">{exp > 0 ? "$" + fmt$(exp) : "—"}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-right text-green-700">{inc > 0 ? "$" + fmt$(inc) : "—"}</td>
-                    </tr>,
-                    ...(open
-                      ? rows.map((row, i) => (
-                          <tr key={label + i} className="border-t border-stone-100 hover:bg-stone-50">
-                            <td className="px-4 py-2 pl-10">
-                              <div className="text-xs text-stone-600">{row.sublabel ?? row.label}</div>
-                              {row.irs_line && <div className="text-xs text-stone-400">{row.irs_line}</div>}
-                            </td>
-                            <td className="px-4 py-2 font-mono text-xs text-right text-stone-400">{row.count}</td>
-                            <td className="px-4 py-2 font-mono text-xs text-right text-stone-600">{row.expenses > 0 ? "$" + fmt$(row.expenses) : "—"}</td>
-                            <td className="px-4 py-2 font-mono text-xs text-right text-green-600">{row.income > 0 ? "$" + fmt$(row.income) : "—"}</td>
-                          </tr>
-                        ))
-                      : []),
-                  ];
-                })}
-
-              {summary && (
-                <tr className="border-t border-stone-200 bg-stone-50 font-semibold">
-                  <td className="px-4 py-2.5 text-xs text-stone-500">{summary.totals.transactions} transactions</td>
-                  <td />
-                  <td className="px-4 py-2.5 font-mono text-xs text-right text-stone-700">
-                    {summary.totals.expenses > 0 ? "$" + fmt$(summary.totals.expenses) : "—"}
-                  </td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-right text-green-700">
-                    {summary.totals.income > 0 ? "$" + fmt$(summary.totals.income) : "—"}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <SortableTable<SummaryRow>
+            columns={summaryColumns}
+            rows={summary.rows}
+            rowKey={(r, i) => `${r.label}-${r.sublabel}-${i}`}
+            onRowClick={(row) => {
+              const params = new URLSearchParams();
+              if (groupBy === "taxline" || groupBy === "category") {
+                params.set("subcategory", row.label);
+              } else {
+                params.set("subcategory", row.label);
+              }
+              navigate(`/transactions?${params.toString()}`);
+            }}
+            groupBy={isNested ? (r) => r.label : undefined}
+            groupLabel={(gk, rows) => {
+              const exp = rows.reduce((s, r) => s + r.expenses, 0);
+              const inc = rows.reduce((s, r) => s + r.income, 0);
+              return (
+                <span className="font-semibold text-stone-700">
+                  {gk}
+                  <span className="ml-2 font-normal text-stone-400">
+                    ({rows.reduce((s, r) => s + r.count, 0)} &middot; ${fmt$(exp)} exp &middot; ${fmt$(inc)} inc)
+                  </span>
+                </span>
+              );
+            }}
+          />
+          <div className="mt-2 bg-stone-50 border border-stone-200 rounded-lg px-4 py-2 flex items-center gap-6 text-xs">
+            <span className="text-stone-500">{summary.totals.transactions} transactions</span>
+            <span className="font-mono text-stone-700">${fmt$(summary.totals.expenses)} expenses</span>
+            <span className="font-mono text-green-700">${fmt$(summary.totals.income)} income</span>
+          </div>
+        </>
       )}
 
       {summaryTool.loading && !summary && (
