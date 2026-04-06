@@ -15,6 +15,7 @@ SCHED_A = [
     "Property Tax", "State & Local Tax", "Other Itemized Deduction",
 ]
 PERSONAL = [
+    "Income", "Salary", "Bonus", "Tax Refund",
     "Auto Insurance", "Home Insurance", "Life Insurance", "Health Insurance",
     "Groceries", "Dining Out", "Clothing",
     "Personal Care", "Entertainment", "Streaming & Subscriptions",
@@ -125,7 +126,9 @@ CLASSIFICATION RULES:
    Streaming → name the service. Subscriptions → what kind?
 5. If something could be business OR personal, classify as Personal unless clearly business.
 6. Transfers between own accounts (credit card payments, savings moves) are Internal Transfer.
-7. Payroll/salary deposits → "Other Personal" (income).
+7. INCOME: Positive amounts with words like "salary", "payroll", "direct deposit",
+   "wage", "bonus", "tax refund", "IRS" → Personal / Income (or Salary, Bonus, Tax Refund).
+   NEVER classify income as "Other Personal". Use the specific income subcategory.
 
 Respond ONLY with a JSON array, no markdown or preamble:
 [{{"idx":N,"category":"...",

@@ -44,6 +44,7 @@ const SCHED_A_SUBS = [
   "Property Tax", "State & Local Tax", "Other Itemized Deduction",
 ];
 const PERSONAL_SUBS = [
+  "Income", "Salary", "Bonus", "Tax Refund",
   "Auto Insurance", "Home Insurance", "Life Insurance", "Health Insurance",
   "Groceries", "Dining Out", "Clothing",
   "Personal Care", "Entertainment", "Streaming & Subscriptions",
