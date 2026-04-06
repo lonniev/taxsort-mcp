@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
 
@@ -41,6 +42,7 @@ function fmt$(n: number) {
 
 export default function SummaryPage() {
   const { sessionId, npub } = useSession();
+  const navigate = useNavigate();
   const summaryTool = useToolCall<Summary>("get_summary");
 
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -146,7 +148,21 @@ export default function SummaryPage() {
             <tbody>
               {!isNested &&
                 summary.rows.map((row, i) => (
-                  <tr key={i} className="border-t border-stone-100 hover:bg-stone-50">
+                  <tr
+                    key={i}
+                    className="border-t border-stone-100 hover:bg-amber-50 cursor-pointer transition-colors"
+                    onClick={() => {
+                      const params = new URLSearchParams();
+                      if (groupBy === "taxline" || groupBy === "category") {
+                        params.set("subcategory", row.label);
+                      } else if (groupBy === "month") {
+                        // Can't filter by month in transactions yet, use search
+                      } else {
+                        params.set("subcategory", row.label);
+                      }
+                      navigate(`/transactions?${params.toString()}`);
+                    }}
+                  >
                     <td className="px-4 py-2.5">
                       <div className="font-medium text-stone-700">{row.label}</div>
                       {row.irs_line && <div className="text-xs text-stone-400">{row.irs_line}</div>}

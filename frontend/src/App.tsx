@@ -93,22 +93,139 @@ function StatusBanner() {
 
 // ── Npub gate ──────────────────────────────────────────────────────────────
 
+interface VerifyResult {
+  verified?: boolean;
+  status?: string;
+  message?: string;
+}
+
 function NpubGate({ children, npub, setNpub }: {
   children: React.ReactNode;
   npub: string;
   setNpub: (v: string) => void;
 }) {
   const [input, setInput] = useState(npub);
+  const [verified, setVerified] = useState(
+    localStorage.getItem("taxsort_verified") === "true",
+  );
+  const [verifyPhase, setVerifyPhase] = useState<"enter" | "waiting" | "checking">("enter");
 
-  if (npub) return <>{children}</>;
+  const verifyTool = useToolCall<VerifyResult>("verify_npub");
+  const checkTool = useToolCall<VerifyResult>("check_verification");
 
+  // If npub is set and verified, show the app
+  if (npub && verified) return <>{children}</>;
+
+  // If npub is set but not verified, show verification UI
+  if (npub && !verified) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+        <div className="bg-white border border-stone-200 rounded-xl p-8 max-w-md w-full shadow-sm">
+          <h1 className="text-lg font-semibold text-stone-800 mb-2">Verify Your Identity</h1>
+          <p className="text-xs text-stone-400 font-mono mb-4 break-all">{npub}</p>
+
+          {verifyPhase === "enter" && (
+            <>
+              <p className="text-sm text-stone-500 mb-5">
+                To protect your tax data, we need to verify you own this npub.
+                We&apos;ll send a Nostr DM &mdash; reply with any passphrase.
+              </p>
+              <button
+                onClick={async () => {
+                  setVerifyPhase("waiting");
+                  await verifyTool.invoke({ npub });
+                }}
+                disabled={verifyTool.loading}
+                className="w-full bg-amber-600 text-white text-sm py-2.5 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors mb-3"
+              >
+                {verifyTool.loading ? "Sending\u2026" : "Send Verification DM"}
+              </button>
+              <button
+                onClick={() => {
+                  // Check if already verified (e.g. from previous session)
+                  setVerifyPhase("checking");
+                  checkTool.invoke({ npub }).then((r) => {
+                    if (r?.verified) {
+                      localStorage.setItem("taxsort_verified", "true");
+                      setVerified(true);
+                    } else {
+                      setVerifyPhase("enter");
+                    }
+                  });
+                }}
+                className="w-full text-sm text-stone-400 hover:text-stone-700 py-1"
+              >
+                Already verified? Check status
+              </button>
+            </>
+          )}
+
+          {verifyPhase === "waiting" && (
+            <>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-5">
+                <p className="text-sm text-amber-800 mb-2">
+                  Check your Nostr client for a DM from TaxSort.
+                </p>
+                <p className="text-xs text-amber-600">
+                  Reply with any passphrase to prove you own this npub.
+                  Your passphrase protects your tax data.
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  setVerifyPhase("checking");
+                  const r = await checkTool.invoke({ npub });
+                  if (r?.verified) {
+                    localStorage.setItem("taxsort_verified", "true");
+                    setVerified(true);
+                  } else {
+                    setVerifyPhase("waiting");
+                  }
+                }}
+                disabled={checkTool.loading}
+                className="w-full bg-stone-900 text-white text-sm py-2.5 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors mb-3"
+              >
+                {checkTool.loading ? "Checking\u2026" : "I\u2019ve Replied \u2014 Check Verification"}
+              </button>
+              {checkTool.error && (
+                <p className="text-xs text-red-500 mt-2">{checkTool.error}</p>
+              )}
+            </>
+          )}
+
+          {verifyPhase === "checking" && checkTool.loading && (
+            <p className="text-sm text-stone-400 text-center py-4">Checking\u2026</p>
+          )}
+
+          {verifyTool.error && (
+            <p className="text-xs text-red-500 mt-2">{verifyTool.error}</p>
+          )}
+
+          <button
+            onClick={() => {
+              localStorage.removeItem("taxsort_npub");
+              localStorage.removeItem("taxsort_verified");
+              setNpub("");
+              setVerified(false);
+              setVerifyPhase("enter");
+            }}
+            className="w-full text-xs text-stone-400 hover:text-red-500 mt-4 py-1"
+          >
+            Use a different npub
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // No npub yet — enter one
   return (
     <div className="min-h-screen bg-stone-50 flex items-center justify-center">
       <div className="bg-white border border-stone-200 rounded-xl p-8 max-w-md w-full shadow-sm">
         <h1 className="text-lg font-semibold text-stone-800 mb-2">TaxSort</h1>
         <p className="text-sm text-stone-500 mb-5">
           Enter your Nostr public key (npub) to get started.
-          Your transactions and sessions are tied to this identity.
+          You&apos;ll verify ownership via a signed Nostr DM.
         </p>
         <input
           className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm font-mono bg-stone-50 focus:outline-none focus:border-stone-400 mb-3"

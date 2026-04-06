@@ -25,7 +25,9 @@ IRS_MAP = {
 async def get_transactions(
     session_id: str,
     category: str = "",
+    subcategory: str = "",
     month: str = "",
+    search: str = "",
     needs_review_only: bool = False,
     limit: int = 200,
     offset: int = 0,
@@ -42,9 +44,19 @@ async def get_transactions(
         params.append(category)
         idx += 1
 
+    if subcategory:
+        where.append(f"subcategory = ${idx}")
+        params.append(subcategory)
+        idx += 1
+
     if month:
         where.append(f"TO_CHAR(date, 'YYYY-MM') = ${idx}")
         params.append(month)
+        idx += 1
+
+    if search:
+        where.append(f"description ~* ${idx}")
+        params.append(search)
         idx += 1
 
     where_clause = " AND ".join(where)

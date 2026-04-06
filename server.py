@@ -22,7 +22,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -34,11 +34,9 @@ mcp = FastMCP(
         "TaxSort MCP — Personal tax transaction classifier, monetized "
         "via Tollbooth DPYC Bitcoin Lightning micropayments.\n\n"
         "## Onboarding\n"
-        "Call taxsort_get_operator_onboarding_status to check configuration.\n"
-        "1. Register with an Authority (provides Neon database automatically)\n"
-        "2. Deliver operator secrets via Secure Courier:\n"
-        "   - btcpay_host, btcpay_api_key, btcpay_store_id, anthropic_api_key\n"
-        "   Call taxsort_request_credential_channel to start.\n\n"
+        "1. Call taxsort_verify_npub(npub=...) to start identity verification\n"
+        "2. Reply to the Nostr DM with any passphrase to prove npub ownership\n"
+        "3. Call taxsort_check_verification(npub=...) to complete verification\n\n"
         "## Workflow\n"
         "1. taxsort_create_session() → get a session_id\n"
         "2. taxsort_import_csv(session_id, content, filename) → parse and store\n"
@@ -72,6 +70,8 @@ NpubField = Annotated[
 
 _DOMAIN_TOOLS = [
     # All free for smoke testing — will set real tiers + prices later
+    ToolIdentity(capability="verify_npub", category="free", intent="Start npub verification via Secure Courier"),
+    ToolIdentity(capability="check_verification", category="free", intent="Check if npub verification completed"),
     ToolIdentity(capability="create_session", category="free", intent="Create a tax session"),
     ToolIdentity(capability="get_session", category="free", intent="Get session details"),
     ToolIdentity(capability="list_sessions", category="free", intent="List patron sessions"),
@@ -124,9 +124,29 @@ runtime = OperatorRuntime(
         },
     ),
     operator_credential_greeting=(
-        "Hi — I'm TaxSort MCP, a Tollbooth service for personal tax "
+        "Hi \u2014 I'm TaxSort MCP, a Tollbooth service for personal tax "
         "transaction classification. To come online I need your "
         "BTCPay credentials and Anthropic API key."
+    ),
+    patron_credential_template=CredentialTemplate(
+        service="taxsort-patron",
+        version=1,
+        description="Verify your npub ownership with any passphrase",
+        fields={
+            "passphrase": FieldSpec(
+                required=True, sensitive=False,
+                description=(
+                    "Any passphrase of your choice. This proves you own "
+                    "this npub (the Nostr DM is signed with your nsec). "
+                    "Your passphrase protects your tax data."
+                ),
+            ),
+        },
+    ),
+    patron_credential_greeting=(
+        "Hi \u2014 I'm TaxSort MCP. To verify you own this npub and "
+        "protect your tax data, please reply with any passphrase. "
+        "Your response will be encrypted and signed by your Nostr key."
     ),
     service_name="TaxSort MCP",
 )
@@ -148,112 +168,90 @@ register_standard_tools(
 # ---------------------------------------------------------------------------
 # Domain schema is created lazily on first vault access (see db/neon.py).
 
-# ── Diagnostics (temporary) ────────────────────────────────────────────────
+
+# ── Verification ──────────────────────────────────────────────────────────
 
 @tool
-async def db_diagnostic(npub: NpubField = "") -> dict[str, Any]:
-    """Run a diagnostic query against Neon to check schema status."""
-    import httpx as _httpx
-    results = []
+@runtime.paid_tool(capability_uuid("verify_npub"))
+async def verify_npub(
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Start npub verification via Secure Courier.
+
+    Sends a Nostr DM to the given npub asking for a passphrase.
+    The patron replies with any passphrase via their Nostr client.
+    Then call check_verification to complete.
+    """
+    # Use the standard Secure Courier to send the patron credential request
+    courier = await runtime.courier()
+    result = await courier.open_channel(
+        service="taxsort-patron",
+        greeting=(
+            "Hi \u2014 TaxSort needs to verify you own this npub. "
+            "Please reply with any passphrase of your choice. "
+            "Your signed reply proves ownership and protects your data."
+        ),
+        recipient_npub=npub,
+    )
+    return {
+        "status": "verification_sent",
+        "npub": npub,
+        "message": (
+            "A Nostr DM has been sent to your npub. "
+            "Reply with any passphrase using your Nostr client, "
+            "then call taxsort_check_verification."
+        ),
+        **{k: v for k, v in result.items() if k != "success"},
+    }
+
+
+@tool
+@runtime.paid_tool(capability_uuid("check_verification"))
+async def check_verification(
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Check if npub verification completed.
+
+    Picks up the signed Nostr DM reply and stores the proof.
+    The passphrase protects the patron's tax data.
+    """
+    from tools.verification import get_verification_status, store_verification
+
+    # Check if already verified
+    existing = await get_verification_status(npub)
+    if existing.get("verified"):
+        return {**existing, "message": "Already verified."}
+
+    # Try to receive the patron's credential (passphrase)
+    courier = await runtime.courier()
+    result = await courier.receive(
+        sender_npub=npub,
+        service="taxsort-patron",
+    )
+
+    if not result.get("success"):
+        return {
+            "verified": False,
+            "npub": npub,
+            "message": (
+                "No reply received yet. Open your Nostr client, "
+                "find the DM from TaxSort, and reply with any passphrase."
+            ),
+        }
+
+    # The patron replied — the signed DM proves npub ownership.
+    # Store verification. The passphrase is in the credential vault.
     try:
-        v = await runtime.vault()
-        results.append({"vault": "ok", "prefix": getattr(v, "_schema_prefix", "")})
+        creds = await runtime.load_patron_session(npub, service="taxsort-patron")
+        passphrase = creds.get("passphrase", "") if creds else ""
+    except Exception:
+        passphrase = "verified"
 
-        # Try a raw SELECT 1
-        r = await v._execute("SELECT 1 as ok", [])
-        results.append({"select_1": r})
-
-        # Try creating the sessions table
-        t = v._t
-        try:
-            r = await v._execute(
-                f"CREATE TABLE IF NOT EXISTS {t('sessions')} ("
-                "id TEXT PRIMARY KEY, "
-                "owner_npub TEXT NOT NULL, "
-                "label TEXT, "
-                "created_at TIMESTAMPTZ DEFAULT NOW(), "
-                "updated_at TIMESTAMPTZ DEFAULT NOW())", []
-            )
-            results.append({"create_sessions": "ok", "result": str(r)[:200]})
-        except _httpx.HTTPStatusError as e:
-            results.append({"create_sessions": "error", "status": e.response.status_code, "body": e.response.text[:500]})
-        except Exception as e:
-            results.append({"create_sessions": "error", "msg": str(e)[:300]})
-
-        # Try selecting from sessions (direct vault)
-        try:
-            r = await v._execute(f"SELECT COUNT(*) as n FROM {t('sessions')}", [])
-            results.append({"count_sessions_direct": r})
-        except _httpx.HTTPStatusError as e:
-            results.append({"count_sessions_direct": "error", "status": e.response.status_code, "body": e.response.text[:500]})
-        except Exception as e:
-            results.append({"count_sessions_direct": "error", "msg": str(e)[:300]})
-
-        # Test exact list_sessions query via vault directly
-        try:
-            q = (
-                f"SELECT s.id, s.label, s.created_at, s.updated_at, "
-                f"COUNT(t.id) as tx_count "
-                f"FROM {t('sessions')} s "
-                f"LEFT JOIN {t('transactions')} t ON t.session_id = s.id "
-                f"WHERE s.owner_npub = $1 "
-                f"GROUP BY s.id, s.label, s.created_at, s.updated_at "
-                f"ORDER BY s.updated_at DESC"
-            )
-            results.append({"list_query": q})
-            r = await v._execute(q, [npub])
-            results.append({"list_sessions_direct": r})
-        except _httpx.HTTPStatusError as e:
-            results.append({"list_sessions_direct": "error", "status": e.response.status_code, "body": e.response.text[:500]})
-        except Exception as e:
-            results.append({"list_sessions_direct": "error", "msg": str(e)[:500]})
-
-        # Check if transactions table exists and its columns
-        try:
-            r = await v._execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_schema = $1 AND table_name = 'transactions' "
-                "ORDER BY ordinal_position",
-                [t('').rstrip('.')]
-            )
-            cols = [row.get("column_name") for row in r.get("rows", [])]
-            results.append({"transactions_columns": cols if cols else "TABLE DOES NOT EXIST"})
-        except Exception as e:
-            results.append({"transactions_columns": "error", "msg": str(e)[:300]})
-
-        # Test simple SELECT via db/neon.py path
-        try:
-            from db.neon import fetch as _fetch, _qualify
-            simple = "SELECT 1 as ok"
-            results.append({"qualify_simple": _qualify(simple)})
-            r = await _fetch(simple)
-            results.append({"fetch_simple": r})
-        except Exception as e:
-            results.append({"fetch_simple": "error", "msg": str(e)[:500]})
-
-        # Test list_sessions via db/neon.py path
-        try:
-            from db.neon import fetch as _fetch2
-            q2 = (
-                "SELECT s.id, s.label, s.created_at, s.updated_at, "
-                "COUNT(t.id) as tx_count "
-                "FROM sessions s "
-                "LEFT JOIN transactions t ON t.session_id = s.id "
-                "WHERE s.owner_npub = $1 "
-                "GROUP BY s.id, s.label, s.created_at, s.updated_at "
-                "ORDER BY s.updated_at DESC"
-            )
-            from db.neon import _qualify as _q2
-            results.append({"qualify_list": _q2(q2)})
-            r = await _fetch2(q2, npub)
-            results.append({"list_via_neon": r})
-        except Exception as e:
-            results.append({"list_via_neon": "error", "msg": str(e)[:500]})
-
-    except Exception as e:
-        results.append({"vault_error": str(e)[:300]})
-
-    return {"diagnostic": results}
+    stored = await store_verification(npub, passphrase or "verified")
+    return {
+        **stored,
+        "message": "Npub verified! Your tax data is now protected.",
+    }
 
 
 # ── Sessions ──────────────────────────────────────────────────────────────
@@ -324,16 +322,24 @@ async def get_import_stats(
 async def get_transactions(
     session_id: str,
     category: str = "",
+    subcategory: str = "",
     month: str = "",
+    search: str = "",
     needs_review_only: bool = False,
     limit: int = 200,
     offset: int = 0,
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Get transactions for a session with optional filters."""
+    """Get transactions for a session with optional filters.
+
+    Args:
+        search: Regex pattern to match against description (case-insensitive).
+        subcategory: Filter by exact subcategory.
+    """
     from tools.transactions import get_transactions as _get_transactions
     return await _get_transactions(
-        session_id=session_id, category=category, month=month,
+        session_id=session_id, category=category, subcategory=subcategory,
+        month=month, search=search,
         needs_review_only=needs_review_only, limit=limit, offset=offset,
     )
 
