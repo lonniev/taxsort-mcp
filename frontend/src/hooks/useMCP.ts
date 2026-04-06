@@ -77,10 +77,11 @@ async function mcpCall(toolName: string, args: Record<string, unknown>): Promise
   const c = await getClient();
   let result;
   try {
-    result = await c.callTool({
-      name: `taxsort_${toolName}`,
-      arguments: args,
-    });
+    result = await c.callTool(
+      { name: `taxsort_${toolName}`, arguments: args },
+      undefined,
+      { timeout: 120_000 },
+    );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     debugPush("error", `taxsort_${toolName}: ${msg}`);
