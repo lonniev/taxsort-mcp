@@ -29,6 +29,7 @@ export default function Nav() {
         <>
           {link("/", "Sessions")}
           {link("/import", "Import")}
+          {link("/classify", "Classify")}
           {link("/transactions", "Transactions")}
           {link("/summary", "Summary")}
         </>

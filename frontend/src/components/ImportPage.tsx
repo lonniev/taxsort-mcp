@@ -23,12 +23,10 @@ export default function ImportPage() {
   const navigate = useNavigate();
 
   const importTool = useToolCall<ImportResult>("import_csv");
-  const classifyTool = useToolCall<{ status: string }>("classify_session");
 
   const [files, setFiles] = useState<File[]>([]);
   const [results, setResults] = useState<ImportResult[]>([]);
   const [importing, setImporting] = useState(false);
-  const [classifying, setClassifying] = useState(false);
   const [phase, setPhase] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -80,14 +78,8 @@ export default function ImportPage() {
     setImporting(false);
   }
 
-  async function handleClassify() {
-    if (!sessionId) return;
-    setClassifying(true);
-    setPhase("Starting classification…");
-    await classifyTool.invoke({ session_id: sessionId, npub });
-    setClassifying(false);
-    setPhase("");
-    navigate("/transactions");
+  function handleClassify() {
+    navigate("/classify");
   }
 
   const hasResults = results.length > 0;
@@ -140,7 +132,7 @@ export default function ImportPage() {
           <div className="flex items-center gap-3 pt-1">
             <button
               onClick={handleImport}
-              disabled={importing || classifying}
+              disabled={importing}
               className="bg-stone-900 text-white text-sm px-5 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
             >
               {importing ? "Importing…" : "Import files"}
@@ -178,16 +170,15 @@ export default function ImportPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleClassify}
-            disabled={classifying || importing}
-            className="bg-amber-600 text-white text-sm px-5 py-2 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors"
+            className="bg-amber-600 text-white text-sm px-5 py-2 rounded-lg hover:bg-amber-500 transition-colors"
           >
-            {classifying ? "Classifying…" : "Classify with Claude →"}
+            Classify with Claude &rarr;
           </button>
           <button
             onClick={() => navigate("/transactions")}
             className="text-sm text-stone-400 hover:text-stone-600"
           >
-            Skip — view transactions
+            Skip &mdash; view transactions
           </button>
         </div>
       )}

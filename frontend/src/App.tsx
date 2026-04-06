@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import SessionsPage from "./components/SessionsPage";
 import ImportPage from "./components/ImportPage";
 import TransactionsPage from "./components/TransactionsPage";
+import ClassifyPage from "./components/ClassifyPage";
 import SummaryPage from "./components/SummaryPage";
 import SettingsPage from "./components/SettingsPage";
 import Nav from "./components/Nav";
@@ -181,6 +182,10 @@ export default function App() {
                 <Route
                   path="/import"
                   element={sessionId ? <ImportPage /> : <Navigate to="/" />}
+                />
+                <Route
+                  path="/classify"
+                  element={sessionId ? <ClassifyPage /> : <Navigate to="/" />}
                 />
                 <Route
                   path="/transactions"
