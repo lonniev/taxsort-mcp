@@ -20,6 +20,7 @@ interface ListResult {
 
 interface SubmitResult {
   created?: boolean;
+  needs_manual?: boolean;
   issue_number?: number;
   url?: string;
   message?: string;
@@ -159,7 +160,23 @@ export default function FeedbackPage() {
           </div>
         )}
 
-        {submitted && !submitted.created && submitted.error && (
+        {submitted?.needs_manual && (
+          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+            <p className="mb-2">{submitted.message}</p>
+            {submitted.url && (
+              <a
+                href={submitted.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block bg-amber-600 text-white px-4 py-1.5 rounded-lg hover:bg-amber-500 transition-colors"
+              >
+                Create Issue on GitHub &rarr;
+              </a>
+            )}
+          </div>
+        )}
+
+        {submitted && !submitted.created && !submitted.needs_manual && submitted.error && (
           <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
             {submitted.error}
           </div>

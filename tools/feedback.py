@@ -80,16 +80,23 @@ async def create_issue(
             else:
                 return {"created": False, "error": f"GitHub API error: {resp.status_code} {resp.text[:200]}"}
     else:
-        # No GitHub token — store locally only
-        await execute(
-            "INSERT INTO tax_feedback (npub, title, body, category, contact, created_at) "
-            "VALUES ($1, $2, $3, $4, $5, NOW())",
-            npub, title, body, category, contact,
+        # No GitHub token — direct user to GitHub
+        encoded_title = title.replace(" ", "+")
+        encoded_body = body.replace(" ", "+").replace("\n", "%0A")
+        new_issue_url = (
+            f"https://github.com/{REPO}/issues/new"
+            f"?title=%5BFeedback%5D+{encoded_title}"
+            f"&body={encoded_body}%0A%0A---%0ASubmitted+via+TaxSort+App"
+            f"&labels=feedback,cat:{category}"
         )
         return {
-            "created": True,
-            "stored_locally": True,
-            "message": "Feedback recorded. The operator will review it shortly.",
+            "created": False,
+            "needs_manual": True,
+            "url": new_issue_url,
+            "message": (
+                "GitHub integration not configured yet. "
+                "Click the link to create the issue directly on GitHub."
+            ),
         }
 
 
