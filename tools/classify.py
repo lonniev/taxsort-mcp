@@ -82,11 +82,11 @@ async def _classify_batch(
         for i, t in enumerate(batch)
     )
 
-    system = f"""You are a US personal finance and tax classifier. Your job is to categorize
-every transaction into exactly one category with a specific subcategory.
+    system = f"""You are a US personal finance and tax classifier AND a merchant name resolver.
 
-GOAL: Classify EVERY transaction. "Needs Review" is a LAST RESORT — only use it
-when you genuinely cannot determine the category even with context clues.
+TWO JOBS per transaction:
+1. Classify into category + subcategory
+2. Resolve cryptic merchant names into their real full business names
 
 {rules_context}
 
@@ -107,19 +107,34 @@ Internal Transfer (money moving between own accounts):
 Needs Review — ONLY if truly ambiguous after considering all signals.
 
 CLASSIFICATION RULES:
-1. Bank category hints (after "Bank:") are STRONG signals. "Insurance > Other Insurance"
-   means insurance — classify it (e.g. Auto Insurance, Home Insurance). Don't mark it Needs Review.
-2. Use the merchant name semantically: "State Farm" = insurance, "Kroger" = groceries,
-   "Netflix" = streaming, "Shell" = auto fuel, "Amazon" = shopping.
-3. If something could be business OR personal, classify it as Personal unless the description
-   or bank hint clearly indicates business use.
-4. Transfers between accounts (credit card payments, savings moves) are Internal Transfer.
-5. Payroll/salary deposits are Personal (income, not an expense category — classify as "Other Personal").
-6. When in doubt between two Personal subcategories, pick the most specific one.
+1. Bank category hints (after "Bank:") are STRONG signals. Use them for precise subcategory:
+   "Insurance > Auto" → Auto Insurance, "Insurance > Home" → Home Insurance,
+   "Insurance > Other" → determine from merchant (State Farm auto? home? life?).
+2. RESOLVE MERCHANT NAMES: Banks abbreviate merchants cryptically. Decode them:
+   "Nat*Groc Midd VT" → "Natural Groceries Middlebury Co-op, VT" → Groceries
+   "SQ *JOES DINER" → "Joe's Diner (Square)" → Dining Out
+   "AMZN MKTP US" → "Amazon Marketplace" → Shopping
+   "GEICO *AUTO" → "GEICO Auto Insurance" → Auto Insurance
+   "WM SUPERCENTER" → "Walmart Supercenter" → Groceries
+   "TST* BLUE MOON" → "Blue Moon Restaurant (Toast POS)" → Dining Out
+   "SP * SOME STORE" → "Some Store (Shopify)" → Shopping
+3. Use ALL available signals: merchant name, amount, bank category, account name, date patterns.
+   A $4.99 monthly charge is likely a subscription. A $50-150 weekly charge at a grocery merchant is groceries.
+4. Pick the MOST SPECIFIC subcategory. Don't use "Other Personal" when a better fit exists.
+   Insurance → which kind? Shopping → could it be Clothing, Electronics, Gifts?
+   Streaming → name the service. Subscriptions → what kind?
+5. If something could be business OR personal, classify as Personal unless clearly business.
+6. Transfers between own accounts (credit card payments, savings moves) are Internal Transfer.
+7. Payroll/salary deposits → "Other Personal" (income).
 
 Respond ONLY with a JSON array, no markdown or preamble:
-[{{"idx":N,"category":"Schedule C"|"Schedule A"|"Internal Transfer"|"Personal"|"Needs Review",
-  "subcategory":string,"confidence":"high"|"medium"|"low","reason":"max 8 words"}}]"""
+[{{"idx":N,"category":"...",
+  "subcategory":"...",
+  "confidence":"high"|"medium"|"low",
+  "reason":"max 8 words",
+  "merchant":"resolved full merchant name"}}]
+
+The "merchant" field is the RESOLVED human-readable business name. Always provide it."""
 
     client = anthropic.AsyncAnthropic(api_key=api_key)
     message = await client.messages.create(
@@ -185,6 +200,7 @@ async def _background_classify(session_id: str, owner_npub: str, reclassify: boo
                             str(r.get("subcategory", "")),
                             str(r.get("confidence", "")),
                             str(r.get("reason", "")),
+                            str(r.get("merchant", "")),
                             str(tx["id"]),
                             session_id,
                         ))
@@ -194,8 +210,9 @@ async def _background_classify(session_id: str, owner_npub: str, reclassify: boo
                         UPDATE transactions SET
                             category=$1, subcategory=$2,
                             confidence=$3, reason=$4,
+                            merchant=$5,
                             updated_at=NOW()
-                        WHERE id=$5 AND session_id=$6
+                        WHERE id=$6 AND session_id=$7
                         """,
                         updates,
                     )

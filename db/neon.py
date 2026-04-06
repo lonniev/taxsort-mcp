@@ -84,7 +84,7 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "account TEXT NOT NULL, "
         "format TEXT NOT NULL, "
         "hint1 TEXT, hint2 TEXT, src_id TEXT, "
-        "category TEXT, subcategory TEXT, confidence TEXT, reason TEXT, "
+        "category TEXT, subcategory TEXT, confidence TEXT, reason TEXT, merchant TEXT, "
         "edited BOOLEAN DEFAULT FALSE, ambiguous BOOLEAN DEFAULT FALSE, "
         "original_category TEXT, original_subcategory TEXT, "
         "original_confidence TEXT, original_reason TEXT, "
@@ -95,6 +95,10 @@ async def _ensure_domain_schema(vault: Any) -> None:
         f"CREATE INDEX IF NOT EXISTS idx_ttx_session ON {t('tax_transactions')}(session_id)",
         f"CREATE INDEX IF NOT EXISTS idx_ttx_date ON {t('tax_transactions')}(session_id, date)",
         f"CREATE INDEX IF NOT EXISTS idx_ttx_category ON {t('tax_transactions')}(session_id, category)",
+        f"CREATE INDEX IF NOT EXISTS idx_ttx_subcategory ON {t('tax_transactions')}(session_id, subcategory)",
+
+        # Migration: add merchant column if missing
+        f"ALTER TABLE {t('tax_transactions')} ADD COLUMN IF NOT EXISTS merchant TEXT",
 
         f"CREATE TABLE IF NOT EXISTS {t('tax_rules')} ("
         "id SERIAL PRIMARY KEY, "

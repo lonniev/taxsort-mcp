@@ -19,6 +19,7 @@ interface Transaction {
   subcategory: string | null;
   confidence: string | null;
   reason: string | null;
+  merchant: string | null;
   edited: boolean;
   can_revert: boolean;
   paired_id: string | null;
@@ -162,10 +163,13 @@ export default function TransactionsPage() {
   const GROUP_OPTIONS = [
     ["none", "No grouping"],
     ["category", "Category"],
+    ["subcategory", "Subcategory"],
     ["taxline", "Tax Line (IRS)"],
     ["month", "Month"],
     ["account", "Account"],
+    ["merchant", "Merchant"],
     ["month+category", "Month + Category"],
+    ["category+subcategory", "Category + Sub"],
   ];
 
   const SCOPE_OPTIONS = [
@@ -179,10 +183,13 @@ export default function TransactionsPage() {
   function groupKey(t: Transaction): string {
     switch (groupBy) {
       case "category": return t.category ?? "Unclassified";
+      case "subcategory": return t.subcategory ?? t.category ?? "Unclassified";
       case "taxline": return t.subcategory ?? t.category ?? "Unclassified";
       case "month": return t.date?.slice(0, 7) ?? "Unknown";
       case "account": return t.account ?? "Unknown";
+      case "merchant": return t.merchant ?? t.description?.split(/\s+/).slice(0, 3).join(" ") ?? "Unknown";
       case "month+category": return `${t.date?.slice(0, 7)} / ${t.category ?? "Unclassified"}`;
+      case "category+subcategory": return `${t.category ?? "Unclassified"} / ${t.subcategory ?? "—"}`;
       default: return "";
     }
   }
@@ -205,14 +212,19 @@ export default function TransactionsPage() {
     {
       key: "description",
       label: "Description",
-      sortValue: t => t.description.toLowerCase(),
+      sortValue: t => (t.merchant ?? t.description).toLowerCase(),
       className: "max-w-xs",
       render: t => (
         <>
-          <div className="truncate font-medium text-stone-700">{t.description}</div>
+          <div className="truncate font-medium text-stone-700">
+            {t.merchant ?? t.description}
+          </div>
+          {t.merchant && t.merchant !== t.description && (
+            <div className="text-xs text-stone-400 truncate" title={t.description}>{t.description}</div>
+          )}
           {t.ambiguous && <div className="text-xs text-red-500">Indistinguishable duplicate</div>}
           {t.hint2 && <div className="text-xs text-blue-500">{t.hint1} &rsaquo; {t.hint2}</div>}
-          {t.reason && !t.hint2 && <div className="text-xs text-stone-400 italic">{t.reason}</div>}
+          {t.reason && !t.hint2 && !t.merchant && <div className="text-xs text-stone-400 italic">{t.reason}</div>}
         </>
       ),
     },

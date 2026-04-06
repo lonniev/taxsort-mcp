@@ -70,7 +70,7 @@ async def get_transactions(
         f"""
         SELECT id, date, description, amount, account, format,
                hint1, hint2, src_id, ambiguous,
-               category, subcategory, confidence, reason, edited,
+               category, subcategory, confidence, reason, merchant, edited,
                original_category, original_subcategory,
                paired_id, imported_at, updated_at
         FROM transactions
@@ -101,6 +101,7 @@ async def get_transactions(
                 "subcategory": r.get("subcategory"),
                 "confidence": r.get("confidence"),
                 "reason": r.get("reason"),
+                "merchant": r.get("merchant"),
                 "edited": bool(r.get("edited")),
                 "can_revert": bool(r.get("edited")) and r.get("original_category") is not None,
                 "paired_id": r.get("paired_id"),
