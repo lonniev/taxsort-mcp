@@ -89,17 +89,22 @@ export default function TransactionsPage() {
   const [editCat, setEditCat] = useState("");
   const [editSub, setEditSub] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [groupBy, setGroupBy] = useState("none");
+  const [scope, setScope] = useState("all");
 
   const LIMIT = 100;
+  const isGrouped = groupBy !== "none";
 
   const fetchTxns = useCallback(async (cat: string, sub: string, srch: string, off: number) => {
     if (!sessionId) return;
     setError(null);
     try {
+      // When grouped, fetch all rows so grouping sees everything.
+      // When ungrouped, paginate normally.
       const args: Record<string, unknown> = {
         session_id: sessionId,
-        limit: LIMIT,
-        offset: off,
+        limit: isGrouped ? 10000 : LIMIT,
+        offset: isGrouped ? 0 : off,
         npub,
       };
       if (cat === "Needs Review") {
@@ -117,11 +122,11 @@ export default function TransactionsPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load transactions");
     }
-  }, [sessionId, npub]);
+  }, [sessionId, npub, isGrouped]);
 
   useEffect(() => {
     fetchTxns(filter, subFilter, search, offset);
-  }, [sessionId, filter, subFilter, search, offset, fetchTxns]);
+  }, [sessionId, filter, subFilter, search, offset, groupBy, fetchTxns]);
 
   function openEdit(t: Transaction) {
     setSelected(t);
@@ -153,9 +158,6 @@ export default function TransactionsPage() {
     setSelected(null);
     fetchTxns(filter, subFilter, search, offset);
   }
-
-  const [groupBy, setGroupBy] = useState("none");
-  const [scope, setScope] = useState("all");
 
   const GROUP_OPTIONS = [
     ["none", "No grouping"],
@@ -361,7 +363,7 @@ export default function TransactionsPage() {
           )}
           emptyMessage="No transactions match this filter."
         />
-        {total > LIMIT && (
+        {!isGrouped && total > LIMIT && (
           <div className="flex items-center justify-between px-4 py-2.5 mt-2 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-400">
             <button onClick={() => setOffset(Math.max(0, offset - LIMIT))} disabled={offset === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
             <span>{offset + 1}&ndash;{Math.min(offset + LIMIT, total)} of {total}</span>
