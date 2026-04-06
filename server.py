@@ -22,7 +22,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -92,6 +92,8 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="classify_session", category="free", intent="AI-classify all transactions"),
     ToolIdentity(capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
     ToolIdentity(capability="check_unlock", category="free", intent="Check if session unlock was approved"),
+    ToolIdentity(capability="ask_advisor", category="free", intent="Ask the Financial Advisor about TaxSort"),
+    ToolIdentity(capability="ask_tax_researcher", category="free", intent="Ask the Tax Code Researcher about IRS provisions"),
 ]
 
 TOOL_REGISTRY: dict[str, ToolIdentity] = {ti.tool_id: ti for ti in _DOMAIN_TOOLS}
@@ -512,6 +514,50 @@ async def load_share_token(
     """Load a shared session via a share token."""
     from tools.share import load_share_token as _load_share_token
     return await _load_share_token(share_token=share_token)
+
+
+# ── AI Advisors ───────────────────────────────────────────────────────────
+
+@tool
+@runtime.paid_tool(capability_uuid("ask_advisor"))
+async def ask_advisor(
+    question: str,
+    session_id: str = "",
+    history: str = "",
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Ask the Financial Advisor about using TaxSort.
+
+    Args:
+        question: Your question in natural language.
+        session_id: Current session for context (optional).
+        history: JSON array of previous turns [{role, text}, ...] (optional).
+    """
+    import json as _json
+    from tools.advisors import ask_advisor as _ask_advisor
+    h = _json.loads(history) if history else []
+    return await _ask_advisor(question=question, session_id=session_id, history=h)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("ask_tax_researcher"))
+async def ask_tax_researcher(
+    question: str,
+    session_id: str = "",
+    history: str = "",
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Ask the Tax Code Researcher about IRS provisions.
+
+    Args:
+        question: Your tax code question (e.g. "Can I deduct home office internet?").
+        session_id: Current session for context (optional).
+        history: JSON array of previous turns [{role, text}, ...] (optional).
+    """
+    import json as _json
+    from tools.advisors import ask_tax_researcher as _ask_tax_researcher
+    h = _json.loads(history) if history else []
+    return await _ask_tax_researcher(question=question, session_id=session_id, history=h)
 
 
 # ── Session Lock/Unlock ────────────────────────────────────────────────────

@@ -1,0 +1,142 @@
+"""AI advisors — Financial Advisor and Tax Code Researcher.
+
+Both use the operator's stored Anthropic API key for Claude calls.
+"""
+
+import anthropic
+from db.neon import fetch
+
+
+async def _get_api_key() -> str | None:
+    from server import runtime
+    try:
+        creds = await runtime.load_credentials(["anthropic_api_key"])
+        return creds.get("anthropic_api_key")
+    except Exception:
+        return None
+
+
+async def _get_session_context(session_id: str) -> str:
+    """Build context from the user's session for grounded answers."""
+    if not session_id:
+        return "No session loaded."
+
+    rows = await fetch(
+        "SELECT category, subcategory, COUNT(*) as n, "
+        "SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses "
+        "FROM transactions WHERE session_id = $1 AND category IS NOT NULL "
+        "GROUP BY category, subcategory ORDER BY expenses DESC LIMIT 20",
+        session_id,
+    )
+    if not rows:
+        return "Session has no classified transactions yet."
+
+    lines = ["Current session summary:"]
+    for r in rows:
+        lines.append(
+            f"  {r.get('category', '?')} / {r.get('subcategory', '?')}: "
+            f"{int(r.get('n', 0))} transactions, ${float(r.get('expenses', 0)):.2f} expenses"
+        )
+    return "\n".join(lines)
+
+
+ADVISOR_SYSTEM = """You are a friendly Financial Advisor for TaxSort, a personal tax transaction classifier.
+
+Help the user understand:
+- How to use TaxSort (import CSVs, classify, review, override, summarize)
+- What the categories mean (Schedule C = business expenses, Schedule A = itemized deductions)
+- How to interpret their tax summary
+- General financial literacy around tax deductions
+- What the IRS line items mean
+
+You have access to their current session data (if loaded).
+Be concise, practical, and encouraging. Use plain language.
+Do NOT give specific tax advice — remind them to consult a CPA for their specific situation.
+When referencing TaxSort features, use the actual page names: Sessions, Import, Classify, Transactions, Summary, Settings."""
+
+RESEARCHER_SYSTEM = """You are an IRS Tax Code Researcher. Your role is to look up and quote specific IRS tax code provisions.
+
+When answering questions:
+1. Cite the specific IRC section, subsection, and paragraph (e.g., IRC §162(a))
+2. Quote the relevant statutory language verbatim when possible
+3. Reference applicable Treasury Regulations (e.g., Treas. Reg. §1.162-1)
+4. Note relevant IRS Publications for plain-language guidance
+5. Mention any recent changes from tax reform legislation
+
+Key areas for Schedule C (self-employment):
+- IRC §162: Trade or business expenses (ordinary and necessary)
+- IRC §274: Meals and entertainment limitations
+- IRC §280A: Home office deduction
+- IRC §167/168: Depreciation
+- IRC §179: Expensing
+- IRC §199A: Qualified business income deduction
+
+Key areas for Schedule A (itemized deductions):
+- IRC §170: Charitable contributions
+- IRC §213: Medical and dental expenses (7.5% AGI floor)
+- IRC §163: Interest deduction (mortgage)
+- IRC §164: State and local taxes (SALT $10,000 cap per TCJA)
+
+Always be precise. If you're uncertain about a provision, say so.
+Format citations consistently: IRC §[section]([subsection])([paragraph]).
+When the user asks "Can I deduct X?", cite the specific code section that governs it."""
+
+
+async def ask_advisor(
+    question: str,
+    session_id: str = "",
+    history: list[dict] | None = None,
+) -> dict:
+    """Ask the Financial Advisor a question about using TaxSort."""
+    api_key = await _get_api_key()
+    if not api_key:
+        return {"error": "No Anthropic API key available."}
+
+    context = await _get_session_context(session_id)
+
+    messages = []
+    if history:
+        for h in history[-6:]:  # Keep last 6 turns
+            messages.append({"role": h.get("role", "user"), "content": str(h.get("text", ""))})
+    messages.append({"role": "user", "content": question})
+
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+    message = await client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=1024,
+        system=f"{ADVISOR_SYSTEM}\n\n{context}",
+        messages=messages,
+    )
+
+    reply = message.content[0].text if message.content else "No response."
+    return {"role": "advisor", "text": reply}
+
+
+async def ask_tax_researcher(
+    question: str,
+    session_id: str = "",
+    history: list[dict] | None = None,
+) -> dict:
+    """Ask the Tax Code Researcher about IRS provisions."""
+    api_key = await _get_api_key()
+    if not api_key:
+        return {"error": "No Anthropic API key available."}
+
+    context = await _get_session_context(session_id)
+
+    messages = []
+    if history:
+        for h in history[-6:]:
+            messages.append({"role": h.get("role", "user"), "content": str(h.get("text", ""))})
+    messages.append({"role": "user", "content": question})
+
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+    message = await client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=2048,
+        system=f"{RESEARCHER_SYSTEM}\n\n{context}",
+        messages=messages,
+    )
+
+    reply = message.content[0].text if message.content else "No response."
+    return {"role": "researcher", "text": reply}
