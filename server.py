@@ -22,7 +22,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator

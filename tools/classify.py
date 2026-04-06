@@ -14,6 +14,19 @@ SCHED_A = [
     "Charitable Contributions", "Medical & Dental", "Mortgage Interest",
     "Property Tax", "State & Local Tax", "Other Itemized Deduction",
 ]
+PERSONAL = [
+    "Auto Insurance", "Home Insurance", "Life Insurance", "Health Insurance",
+    "Groceries", "Dining Out", "Clothing",
+    "Personal Care", "Entertainment", "Streaming & Subscriptions",
+    "Gym & Fitness", "Pet Care", "Childcare",
+    "Utilities (Personal)", "Rent", "Auto Loan", "Student Loan",
+    "Cash & ATM", "Shopping", "Gifts",
+    "Education", "Travel (Personal)", "Other Personal",
+]
+TRANSFER = [
+    "Internal Transfer", "Credit Card Payment", "Savings Transfer",
+    "Investment Transfer", "Loan Payment",
+]
 
 BATCH_SIZE = 30
 
@@ -69,14 +82,41 @@ async def _classify_batch(
         for i, t in enumerate(batch)
     )
 
-    system = f"""You are a US tax classifier for Schedule A and Schedule C.
+    system = f"""You are a US personal finance and tax classifier. Your job is to categorize
+every transaction into exactly one category with a specific subcategory.
+
+GOAL: Classify EVERY transaction. "Needs Review" is a LAST RESORT — only use it
+when you genuinely cannot determine the category even with context clues.
 
 {rules_context}
 
-Schedule C subcategories: {', '.join(SCHED_C)}
-Schedule A subcategories: {', '.join(SCHED_A)}
+CATEGORIES AND SUBCATEGORIES:
 
-When a Bank category hint is present, use it as a strong signal.
+Schedule C (self-employment business expenses):
+  {', '.join(SCHED_C)}
+
+Schedule A (itemized deductions):
+  {', '.join(SCHED_A)}
+
+Personal (non-deductible personal spending):
+  {', '.join(PERSONAL)}
+
+Internal Transfer (money moving between own accounts):
+  {', '.join(TRANSFER)}
+
+Needs Review — ONLY if truly ambiguous after considering all signals.
+
+CLASSIFICATION RULES:
+1. Bank category hints (after "Bank:") are STRONG signals. "Insurance > Other Insurance"
+   means insurance — classify it (e.g. Auto Insurance, Home Insurance). Don't mark it Needs Review.
+2. Use the merchant name semantically: "State Farm" = insurance, "Kroger" = groceries,
+   "Netflix" = streaming, "Shell" = auto fuel, "Amazon" = shopping.
+3. If something could be business OR personal, classify it as Personal unless the description
+   or bank hint clearly indicates business use.
+4. Transfers between accounts (credit card payments, savings moves) are Internal Transfer.
+5. Payroll/salary deposits are Personal (income, not an expense category — classify as "Other Personal").
+6. When in doubt between two Personal subcategories, pick the most specific one.
+
 Respond ONLY with a JSON array, no markdown or preamble:
 [{{"idx":N,"category":"Schedule C"|"Schedule A"|"Internal Transfer"|"Personal"|"Needs Review",
   "subcategory":string,"confidence":"high"|"medium"|"low","reason":"max 8 words"}}]"""

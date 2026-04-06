@@ -40,11 +40,24 @@ const SCHED_A_SUBS = [
   "Charitable Contributions", "Medical & Dental", "Mortgage Interest",
   "Property Tax", "State & Local Tax", "Other Itemized Deduction",
 ];
+const PERSONAL_SUBS = [
+  "Auto Insurance", "Home Insurance", "Life Insurance", "Health Insurance",
+  "Groceries", "Dining Out", "Clothing",
+  "Personal Care", "Entertainment", "Streaming & Subscriptions",
+  "Gym & Fitness", "Pet Care", "Childcare",
+  "Utilities (Personal)", "Rent", "Auto Loan", "Student Loan",
+  "Cash & ATM", "Shopping", "Gifts",
+  "Education", "Travel (Personal)", "Other Personal",
+];
+const TRANSFER_SUBS = [
+  "Internal Transfer", "Credit Card Payment", "Savings Transfer",
+  "Investment Transfer", "Loan Payment",
+];
 const CAT_SUBS: Record<string, string[]> = {
   "Schedule C": SCHED_C_SUBS,
   "Schedule A": SCHED_A_SUBS,
-  "Internal Transfer": ["Internal Transfer"],
-  "Personal": ["Personal"],
+  "Internal Transfer": TRANSFER_SUBS,
+  "Personal": PERSONAL_SUBS,
   "Needs Review": ["Needs Review"],
 };
 const CAT_COLOR: Record<string, string> = {
