@@ -15,12 +15,19 @@ interface BalanceResult {
   tranches?: { id: string; amount_sats: number; remaining_sats: number; expires_at: string }[];
 }
 
+interface AuthBalanceResult {
+  balance_api_sats?: number;
+  success?: boolean;
+  error?: string;
+}
+
 interface PurchaseResult {
   invoice_id?: string;
   checkout_link?: string;
   lightning_invoice?: string;
   amount_sats?: number;
   error?: string;
+  success?: boolean;
 }
 
 interface PaymentResult {
@@ -41,11 +48,13 @@ export default function WalletPage() {
   const { npub } = useSession();
 
   const balanceTool = useToolCall<BalanceResult>("check_balance");
+  const authBalanceTool = useToolCall<AuthBalanceResult>("check_authority_balance");
   const purchaseTool = useToolCall<PurchaseResult>("purchase_credits");
   const paymentTool = useToolCall<PaymentResult>("check_payment");
   const statementTool = useToolCall<StatementResult>("account_statement");
 
   const [balance, setBalance] = useState<BalanceResult | null>(null);
+  const [authBalance, setAuthBalance] = useState<AuthBalanceResult | null>(null);
   const [statement, setStatement] = useState<StatementResult | null>(null);
   const [purchase, setPurchase] = useState<PurchaseResult | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
@@ -57,13 +66,25 @@ export default function WalletPage() {
     if (data) setBalance(data);
   }
 
+  async function loadAuthBalance() {
+    const data = await authBalanceTool.invoke({ npub });
+    if (data) setAuthBalance(data);
+  }
+
   async function loadStatement() {
     const data = await statementTool.invoke({ npub });
     if (data) setStatement(data);
     setShowStatement(true);
   }
 
-  useEffect(() => { loadBalance(); }, []);
+  useEffect(() => {
+    loadBalance();
+    loadAuthBalance();
+  }, []);
+
+  const operatorCanSell = authBalance && !authBalance.error && (authBalance.balance_api_sats ?? 0) > 0;
+  const authError = authBalance?.error;
+  const authBalSats = authBalance?.balance_api_sats ?? 0;
 
   async function handlePurchase(amount: number) {
     setPurchase(null);
@@ -100,7 +121,7 @@ export default function WalletPage() {
             </div>
           </div>
           <button
-            onClick={loadBalance}
+            onClick={() => { loadBalance(); loadAuthBalance(); }}
             disabled={balanceTool.loading}
             className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded"
           >
@@ -147,6 +168,32 @@ export default function WalletPage() {
         <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
           Top Off Credits
         </div>
+
+        {/* Operator Authority status */}
+        {authBalance && !authBalanceTool.loading && (
+          <div className={`rounded-lg px-3 py-2 text-xs mb-4 border ${
+            operatorCanSell
+              ? "bg-green-50 border-green-200 text-green-700"
+              : "bg-red-50 border-red-200 text-red-700"
+          }`}>
+            {operatorCanSell ? (
+              <>Operator has {authBalSats.toLocaleString()} certified sats available for sale.</>
+            ) : authError ? (
+              <>Operator status: {authError}</>
+            ) : (
+              <>
+                <strong>Operator has no certified sats.</strong> Credit purchases are unavailable
+                until the operator tops off their Authority account. This is not your problem &mdash;
+                the operator needs to fund their position with the Authority.
+              </>
+            )}
+          </div>
+        )}
+
+        {authBalanceTool.loading && (
+          <div className="text-xs text-stone-400 mb-4">Checking operator status&hellip;</div>
+        )}
+
         <p className="text-xs text-stone-500 mb-4">
           Purchase credits via Bitcoin Lightning. Credits are used for tool calls.
         </p>
@@ -158,7 +205,7 @@ export default function WalletPage() {
                 <button
                   key={amt}
                   onClick={() => handlePurchase(amt)}
-                  disabled={purchaseTool.loading}
+                  disabled={purchaseTool.loading || !operatorCanSell}
                   className="bg-stone-900 text-white text-xs px-4 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
                 >
                   {amt.toLocaleString()} sats
@@ -172,13 +219,13 @@ export default function WalletPage() {
                 value={customAmount}
                 onChange={e => setCustomAmount(e.target.value.replace(/\D/g, ""))}
                 onKeyDown={e => {
-                  if (e.key === "Enter" && customAmount) handlePurchase(parseInt(customAmount, 10));
+                  if (e.key === "Enter" && customAmount && operatorCanSell) handlePurchase(parseInt(customAmount, 10));
                 }}
               />
               {customAmount && (
                 <button
                   onClick={() => handlePurchase(parseInt(customAmount, 10))}
-                  disabled={purchaseTool.loading}
+                  disabled={purchaseTool.loading || !operatorCanSell}
                   className="bg-amber-600 text-white text-xs px-4 py-1.5 rounded-lg hover:bg-amber-500 disabled:opacity-40"
                 >
                   Purchase
@@ -186,12 +233,12 @@ export default function WalletPage() {
               )}
             </div>
             {purchaseTool.loading && (
-              <p className="text-xs text-stone-400 mt-2">Creating invoice&hellip;</p>
+              <p className="text-xs text-amber-600 mt-2">Creating Lightning invoice&hellip; this may take a moment.</p>
             )}
           </>
         )}
 
-        {purchase && !purchase.error && (
+        {purchase && !purchase.error && purchase.success !== false && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
             <div className="text-xs font-semibold text-amber-700 mb-2">
               Lightning Invoice &mdash; {purchase.amount_sats?.toLocaleString()} sats
@@ -254,11 +301,11 @@ export default function WalletPage() {
           </div>
         )}
 
-        {purchase?.error && (
+        {purchase && (purchase.error || purchase.success === false) && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-700">
-            {purchase.error}
+            {purchase.error ?? "Purchase failed. The operator may not have sufficient certified sats."}
             <button
-              onClick={() => setPurchase(null)}
+              onClick={() => { setPurchase(null); loadAuthBalance(); }}
               className="block mt-2 text-red-500 hover:text-red-700 underline"
             >
               Try again
@@ -268,7 +315,9 @@ export default function WalletPage() {
 
         {purchaseTool.error && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-3 text-xs text-red-700">
-            {purchaseTool.error}
+            {purchaseTool.error.includes("timeout") || purchaseTool.error.includes("-32001")
+              ? "Request timed out. The operator may not have certified sats available. Check the operator status above."
+              : purchaseTool.error}
           </div>
         )}
       </div>
