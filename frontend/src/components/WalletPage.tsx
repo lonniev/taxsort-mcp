@@ -67,7 +67,7 @@ export default function WalletPage() {
   }
 
   async function loadAuthBalance() {
-    const data = await authBalanceTool.invoke({ npub });
+    const data = await authBalanceTool.invoke({});
     if (data) setAuthBalance(data);
   }
 
