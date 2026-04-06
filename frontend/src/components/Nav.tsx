@@ -33,9 +33,10 @@ export default function Nav() {
     };
   }, [sessionId, npub]);
 
-  const link = (to: string, label: string) => (
+  const link = (to: string, label: string, tip?: string) => (
     <Link
       to={to}
+      title={tip}
       className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
         loc.pathname === to
           ? "bg-amber-100 text-amber-800"
@@ -55,14 +56,14 @@ export default function Nav() {
 
       {sessionId && (
         <>
-          {link("/", "Sessions")}
-          {link("/import", "Import")}
-          {link("/classify", "Classify")}
-          {link("/transactions", "Transactions")}
-          {link("/summary", "Summary")}
-          {link("/wallet", "Wallet")}
-          {link("/advisor", "Advisor")}
-          {link("/tax-research", "Tax Code")}
+          {link("/", "Sessions", "Create and switch between tax year sessions")}
+          {link("/import", "Import", "Upload bank CSV files (SoFi, Chase, Schwab, PayPal, etc.)")}
+          {link("/classify", "Classify", "Run Claude AI to categorize your transactions")}
+          {link("/transactions", "Transactions", "Browse, search, filter, and edit transaction classifications")}
+          {link("/summary", "Summary", "View tax totals grouped by IRS line, category, month, or account")}
+          {link("/wallet", "Wallet", "Check your credit balance, buy more sats via Lightning")}
+          {link("/advisor", "Advisor", "Ask the Financial Advisor how to use TaxSort")}
+          {link("/tax-research", "Tax Code", "Look up IRS code sections — chapter and verse")}
         </>
       )}
 
@@ -97,8 +98,8 @@ export default function Nav() {
             {sessionLabel}
           </span>
         )}
-        {link("/privacy", "Privacy")}
-        {link("/settings", "Settings")}
+        {link("/privacy", "Privacy", "How your data is protected — no KYC, no email, Nostr identity")}
+        {link("/settings", "Settings", "Session timeout, sharing, and about")}
         {sessionId && (
           <button
             onClick={clearSession}
