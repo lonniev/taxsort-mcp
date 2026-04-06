@@ -44,7 +44,8 @@ export default function Nav() {
             {sessionLabel}
           </span>
         )}
-        {link("/settings", "⚙ Settings")}
+        {link("/privacy", "Privacy")}
+        {link("/settings", "Settings")}
         {sessionId && (
           <button
             onClick={clearSession}

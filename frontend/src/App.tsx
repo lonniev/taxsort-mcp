@@ -8,6 +8,7 @@ import SummaryPage from "./components/SummaryPage";
 import AdvisorPage from "./components/AdvisorPage";
 import TaxResearcherPage from "./components/TaxResearcherPage";
 import WalletPage from "./components/WalletPage";
+import PrivacyPage from "./components/PrivacyPage";
 import SettingsPage from "./components/SettingsPage";
 import Nav from "./components/Nav";
 import LockScreen from "./components/LockScreen";
@@ -258,6 +259,10 @@ function NpubGate({ children, npub, setNpub }: {
         <p className="text-xs text-stone-400 mt-3">
           Don&apos;t have one? Get a Nostr keypair from any Nostr client.
         </p>
+        <p className="text-xs text-stone-400 mt-2">
+          No email. No password. No KYC.{" "}
+          <a href="/privacy" className="text-amber-600 hover:text-amber-800 underline">Read our Privacy Policy</a>
+        </p>
       </div>
     </div>
   );
@@ -347,6 +352,7 @@ export default function App() {
                 <Route path="/wallet" element={<WalletPage />} />
                 <Route path="/advisor" element={<AdvisorPage />} />
                 <Route path="/tax-research" element={<TaxResearcherPage />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Routes>
             </main>
