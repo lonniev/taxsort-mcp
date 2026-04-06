@@ -119,15 +119,30 @@ export default function ClassifyPage() {
   const needsReview = status?.needs_review ?? 0;
   const pct = total > 0 ? Math.round((classified / total) * 100) : 0;
 
-  // Pie chart as SVG
-  const pieAngle = (classified / Math.max(total, 1)) * 360;
-  const rad = (deg: number) => (deg - 90) * (Math.PI / 180);
-  const pieX = (deg: number) => 50 + 40 * Math.cos(rad(deg));
-  const pieY = (deg: number) => 50 + 40 * Math.sin(rad(deg));
-  const largeArc = pieAngle > 180 ? 1 : 0;
-  const piePath = pieAngle >= 360
-    ? "M50,10 A40,40 0 1,1 49.99,10 Z"
-    : `M50,50 L50,10 A40,40 0 ${largeArc},1 ${pieX(pieAngle).toFixed(2)},${pieY(pieAngle).toFixed(2)} Z`;
+  // 3-slice donut chart
+  const other = Math.max(0, total - classified - needsReview);
+  const slices = [
+    { label: "Classified", count: classified, color: "#d97706" },
+    { label: "Needs Review", count: needsReview, color: "#ef4444" },
+    { label: "Other", count: other, color: "#d6d3d1" },
+  ].filter(s => s.count > 0);
+
+  let cumAngle = 0;
+  const piePaths = total > 0 ? slices.map(s => {
+    const angle = (s.count / total) * 360;
+    const startAngle = cumAngle;
+    cumAngle += angle;
+    const rad = (deg: number) => ((deg - 90) * Math.PI) / 180;
+    const x1 = 50 + 40 * Math.cos(rad(startAngle));
+    const y1 = 50 + 40 * Math.sin(rad(startAngle));
+    const x2 = 50 + 40 * Math.cos(rad(startAngle + angle));
+    const y2 = 50 + 40 * Math.sin(rad(startAngle + angle));
+    const large = angle > 180 ? 1 : 0;
+    const d = angle >= 359.9
+      ? "M50,10 A40,40 0 1,1 49.99,10 Z"
+      : `M50,50 L${x1.toFixed(2)},${y1.toFixed(2)} A40,40 0 ${large},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z`;
+    return { d, color: s.color, label: s.label };
+  }) : [];
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -146,25 +161,29 @@ export default function ClassifyPage() {
       {/* Status card */}
       <div className="bg-white border border-stone-200 rounded-xl p-6 mb-6">
         <div className="flex items-center gap-8">
-          {/* Pie chart */}
-          <div className="relative w-32 h-32 flex-shrink-0">
-            <svg viewBox="0 0 100 100" className="w-full h-full">
-              {/* Background circle */}
-              <circle cx="50" cy="50" r="40" fill="none" stroke="#e7e5e4" strokeWidth="2" />
-              {/* Classified slice */}
-              {classified > 0 && (
-                <path d={piePath} fill="#d97706" opacity="0.8" />
-              )}
-              {/* Needs review slice (remaining) */}
-              {needsReview > 0 && total > 0 && classified < total && (
-                <circle cx="50" cy="50" r="40" fill="none" stroke="#e7e5e4" strokeWidth="20" opacity="0.3" />
-              )}
-              {/* Center circle for donut effect */}
-              <circle cx="50" cy="50" r="25" fill="white" />
-            </svg>
-            {/* Center percentage */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-2xl font-bold text-stone-800">{pct}%</span>
+          {/* Donut chart */}
+          <div className="flex-shrink-0">
+            <div className="relative w-32 h-32">
+              <svg viewBox="0 0 100 100" className="w-full h-full">
+                <circle cx="50" cy="50" r="40" fill="none" stroke="#e7e5e4" strokeWidth="2" />
+                {piePaths.map((p, i) => (
+                  <path key={i} d={p.d} fill={p.color} opacity="0.85" />
+                ))}
+                <circle cx="50" cy="50" r="22" fill="white" />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-2xl font-bold text-stone-800">{pct}%</span>
+              </div>
+            </div>
+            {/* Legend */}
+            <div className="mt-2 space-y-1">
+              {slices.map(s => (
+                <div key={s.label} className="flex items-center gap-1.5 text-xs">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                  <span className="text-stone-500">{s.label}</span>
+                  <span className="ml-auto font-mono text-stone-600">{s.count}</span>
+                </div>
+              ))}
             </div>
           </div>
 
