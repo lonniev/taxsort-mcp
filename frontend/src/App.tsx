@@ -8,6 +8,7 @@ import SummaryPage from "./components/SummaryPage";
 import AdvisorPage from "./components/AdvisorPage";
 import TaxResearcherPage from "./components/TaxResearcherPage";
 import WalletPage from "./components/WalletPage";
+import FeedbackPage from "./components/FeedbackPage";
 import PrivacyPage from "./components/PrivacyPage";
 import SettingsPage from "./components/SettingsPage";
 import Nav from "./components/Nav";
@@ -352,6 +353,7 @@ export default function App() {
                 <Route path="/wallet" element={<WalletPage />} />
                 <Route path="/advisor" element={<AdvisorPage />} />
                 <Route path="/tax-research" element={<TaxResearcherPage />} />
+                <Route path="/feedback" element={<FeedbackPage />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Routes>

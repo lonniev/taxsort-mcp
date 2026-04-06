@@ -20,6 +20,7 @@ _DOMAIN_TABLES = {
     "tax_verifications": "tax_verifications",
     "tax_unlock_challenges": "tax_unlock_challenges",
     "tax_presence": "tax_presence",
+    "tax_feedback": "tax_feedback",
     "share_tokens": "tax_share_tokens",
 }
 
@@ -128,6 +129,16 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "npub TEXT NOT NULL, "
         "last_seen_at TIMESTAMPTZ DEFAULT NOW(), "
         "PRIMARY KEY (session_id, npub))",
+
+        f"CREATE TABLE IF NOT EXISTS {t('tax_feedback')} ("
+        "id SERIAL PRIMARY KEY, "
+        "npub TEXT NOT NULL, "
+        "github_issue_number INTEGER, "
+        "title TEXT NOT NULL, "
+        "body TEXT, "
+        "category TEXT DEFAULT 'feedback', "
+        "contact TEXT, "
+        "created_at TIMESTAMPTZ DEFAULT NOW())",
     ]
     for stmt in stmts:
         try:

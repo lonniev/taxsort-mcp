@@ -64,6 +64,7 @@ export default function Nav() {
           {link("/wallet", "Wallet", "Check your credit balance, buy more sats via Lightning")}
           {link("/advisor", "Advisor", "Ask the Financial Advisor how to use TaxSort")}
           {link("/tax-research", "Tax Code", "Look up IRS code sections — chapter and verse")}
+          {link("/feedback", "Feedback", "Report bugs, request features, ask questions")}
         </>
       )}
 
