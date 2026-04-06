@@ -293,7 +293,7 @@ export default function TransactionsPage() {
             <label className="text-xs text-stone-400">Group</label>
             <select
               value={groupBy}
-              onChange={e => setGroupBy(e.target.value)}
+              onChange={e => { setGroupBy(e.target.value); setOffset(0); }}
               className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50"
             >
               {GROUP_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -303,7 +303,7 @@ export default function TransactionsPage() {
             <label className="text-xs text-stone-400">Show</label>
             <select
               value={scope}
-              onChange={e => setScope(e.target.value)}
+              onChange={e => { setScope(e.target.value); setOffset(0); }}
               className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50"
             >
               {SCOPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}

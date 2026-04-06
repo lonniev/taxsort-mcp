@@ -108,6 +108,17 @@ export default function SortableTable<T>({
     });
   }
 
+  function collapseAll() {
+    if (groups) setCollapsed(new Set(groups.order));
+  }
+
+  function expandAll() {
+    setCollapsed(new Set());
+  }
+
+  const allCollapsed = groups ? collapsed.size >= groups.order.length : false;
+  const hasGroups = groups && groups.order.length > 0;
+
   function handleDragStart(key: string) {
     setDragCol(key);
   }
@@ -155,6 +166,17 @@ export default function SortableTable<T>({
 
   return (
     <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+      {hasGroups && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-stone-50 border-b border-stone-200 text-xs text-stone-400">
+          <span>{groups!.order.length} groups</span>
+          <button
+            onClick={allCollapsed ? expandAll : collapseAll}
+            className="text-stone-500 hover:text-stone-700 border border-stone-200 px-2 py-0.5 rounded"
+          >
+            {allCollapsed ? "Expand all" : "Collapse all"}
+          </button>
+        </div>
+      )}
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="bg-stone-50 text-xs font-semibold text-stone-400 uppercase tracking-wider">
