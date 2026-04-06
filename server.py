@@ -22,7 +22,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -192,16 +192,53 @@ async def db_diagnostic(npub: NpubField = "") -> dict[str, Any]:
         except Exception as e:
             results.append({"count_sessions_direct": "error", "msg": str(e)[:300]})
 
-        # Try through db/neon.py fetch() path (same as list_sessions uses)
+        # Test exact list_sessions query via vault directly
+        try:
+            q = (
+                f"SELECT s.id, s.label, s.created_at, s.updated_at, "
+                f"COUNT(t.id) as tx_count "
+                f"FROM {t('sessions')} s "
+                f"LEFT JOIN {t('transactions')} t ON t.session_id = s.id "
+                f"WHERE s.owner_npub = $1 "
+                f"GROUP BY s.id, s.label, s.created_at, s.updated_at "
+                f"ORDER BY s.updated_at DESC"
+            )
+            results.append({"list_query": q})
+            r = await v._execute(q, [npub])
+            results.append({"list_sessions_direct": r})
+        except _httpx.HTTPStatusError as e:
+            results.append({"list_sessions_direct": "error", "status": e.response.status_code, "body": e.response.text[:500]})
+        except Exception as e:
+            results.append({"list_sessions_direct": "error", "msg": str(e)[:500]})
+
+        # Test simple SELECT via db/neon.py path
         try:
             from db.neon import fetch as _fetch, _qualify
-            test_query = "SELECT COUNT(*) as n FROM sessions"
-            qualified = _qualify(test_query)
-            results.append({"qualify_test": {"input": test_query, "output": qualified}})
-            r = await _fetch(test_query)
-            results.append({"count_via_neon_fetch": r})
+            simple = "SELECT 1 as ok"
+            results.append({"qualify_simple": _qualify(simple)})
+            r = await _fetch(simple)
+            results.append({"fetch_simple": r})
         except Exception as e:
-            results.append({"count_via_neon_fetch": "error", "msg": str(e)[:500]})
+            results.append({"fetch_simple": "error", "msg": str(e)[:500]})
+
+        # Test list_sessions via db/neon.py path
+        try:
+            from db.neon import fetch as _fetch2
+            q2 = (
+                "SELECT s.id, s.label, s.created_at, s.updated_at, "
+                "COUNT(t.id) as tx_count "
+                "FROM sessions s "
+                "LEFT JOIN transactions t ON t.session_id = s.id "
+                "WHERE s.owner_npub = $1 "
+                "GROUP BY s.id, s.label, s.created_at, s.updated_at "
+                "ORDER BY s.updated_at DESC"
+            )
+            from db.neon import _qualify as _q2
+            results.append({"qualify_list": _q2(q2)})
+            r = await _fetch2(q2, npub)
+            results.append({"list_via_neon": r})
+        except Exception as e:
+            results.append({"list_via_neon": "error", "msg": str(e)[:500]})
 
     except Exception as e:
         results.append({"vault_error": str(e)[:300]})
