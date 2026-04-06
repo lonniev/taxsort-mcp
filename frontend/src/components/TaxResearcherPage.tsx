@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Markdown from "react-markdown";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
 
@@ -23,6 +24,53 @@ const STARTER_PROMPTS = [
   "Can I deduct mileage for driving to client meetings?",
   "What are the rules for depreciating business equipment?",
 ];
+
+const AUSTRIAN_QUOTES = [
+  { text: "There is no means of avoiding the final collapse of a boom brought about by credit expansion.", author: "Ludwig von Mises" },
+  { text: "The first panacea for a mismanaged nation is inflation of the currency; the second is war.", author: "Ernest Hemingway" },
+  { text: "Inflation is taxation without legislation.", author: "Milton Friedman" },
+  { text: "Gold is money. Everything else is credit.", author: "J.P. Morgan" },
+  { text: "The art of taxation consists in so plucking the goose as to obtain the largest amount of feathers with the least possible amount of hissing.", author: "Jean-Baptiste Colbert" },
+  { text: "Government is the great fiction, through which everybody endeavors to live at the expense of everybody else.", author: "Fr\u00e9d\u00e9ric Bastiat" },
+  { text: "The income tax created more criminals than any other single act of government.", author: "Barry Goldwater" },
+  { text: "If you want to know what God thinks of money, just look at the people he gave it to.", author: "Dorothy Parker" },
+  { text: "The way to crush the bourgeoisie is to grind them between the millstones of taxation and inflation.", author: "attributed to V.I. Lenin" },
+  { text: "In the absence of the gold standard, there is no way to protect savings from confiscation through inflation.", author: "Alan Greenspan (1966)" },
+  { text: "The budget should be balanced, the Treasury should be refilled, public debt should be reduced.", author: "attributed to Cicero" },
+  { text: "Central banking is a form of socialism. It is the socialization of money and credit.", author: "Ron Paul" },
+  { text: "Paper money eventually returns to its intrinsic value: zero.", author: "Voltaire" },
+  { text: "The study of money, above all other fields in economics, is one in which complexity is used to disguise truth or to evade truth.", author: "John Kenneth Galbraith" },
+  { text: "Fiat money is the primary cause of all economic crises.", author: "Saifedean Ammous" },
+  { text: "Bitcoin is a technological tour de force.", author: "Bill Gates" },
+  { text: "The root problem with conventional currency is all the trust that\u2019s required to make it work.", author: "Satoshi Nakamoto" },
+  { text: "A government that robs Peter to pay Paul can always depend on the support of Paul.", author: "George Bernard Shaw" },
+];
+
+function ThinkingQuote() {
+  const [quoteIdx, setQuoteIdx] = useState(() => Math.floor(Math.random() * AUSTRIAN_QUOTES.length));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setQuoteIdx(i => (i + 1) % AUSTRIAN_QUOTES.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const q = AUSTRIAN_QUOTES[quoteIdx];
+
+  return (
+    <div className="flex gap-3">
+      <span className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold flex-shrink-0 animate-pulse">TR</span>
+      <div>
+        <span className="text-sm text-green-600 italic">Researching&hellip;</span>
+        <div className="mt-2 bg-green-50 border border-green-100 rounded-lg px-4 py-3 max-w-sm transition-all duration-500">
+          <p className="text-xs text-green-800 italic">&ldquo;{q.text}&rdquo;</p>
+          <p className="text-xs text-green-600 mt-1 text-right">&mdash; {q.author}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function TaxResearcherPage() {
   const { sessionId, npub } = useSession();
@@ -62,7 +110,6 @@ export default function TaxResearcherPage() {
         </div>
       </div>
 
-      {/* Starter prompts */}
       {thread.length === 0 && (
         <div className="mb-6">
           <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
@@ -82,7 +129,6 @@ export default function TaxResearcherPage() {
         </div>
       )}
 
-      {/* Thread */}
       {thread.length > 0 && (
         <div className="space-y-4 mb-6">
           {thread.map((t, i) => (
@@ -92,25 +138,19 @@ export default function TaxResearcherPage() {
               }`}>
                 {t.role === "user" ? "Y" : "TR"}
               </span>
-              <div className={`text-sm leading-relaxed ${
-                t.role === "user" ? "text-stone-600 italic" : "text-stone-800"
-              }`}>
-                {t.text.split("\n").map((line, j) => (
-                  <p key={j} className={j > 0 ? "mt-2" : ""}>{line}</p>
-                ))}
-              </div>
+              {t.role === "user" ? (
+                <div className="text-sm text-stone-600 italic">{t.text}</div>
+              ) : (
+                <div className="text-sm leading-relaxed text-stone-800 prose prose-sm prose-stone max-w-none">
+                  <Markdown>{t.text}</Markdown>
+                </div>
+              )}
             </div>
           ))}
-          {researcherTool.loading && (
-            <div className="flex gap-3">
-              <span className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold flex-shrink-0">TR</span>
-              <span className="text-sm text-stone-400 italic">Researching&hellip;</span>
-            </div>
-          )}
+          {researcherTool.loading && <ThinkingQuote />}
         </div>
       )}
 
-      {/* Input */}
       <div className="sticky bottom-0 bg-stone-50 pt-2 pb-4">
         <div className="flex gap-2">
           <input
