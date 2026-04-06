@@ -216,7 +216,14 @@ export default function FeedbackPage() {
                         </span>
                       ))}
                       {issue.number && (
-                        <span className="text-xs text-stone-400">#{issue.number}</span>
+                        <a
+                          href={issue.url ?? `https://github.com/lonniev/taxsort-mcp/issues/${issue.number}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:text-blue-800 underline"
+                        >
+                          #{issue.number} &rarr; GitHub
+                        </a>
                       )}
                       {issue.local_only && (
                         <span className="text-xs text-stone-400 italic">stored locally</span>
