@@ -5,7 +5,9 @@ import { useToolCall } from "../hooks/useMCP";
 
 interface ImportResult {
   filename: string;
+  format: string;
   parsed: number;
+  deduped: number;
   added: number;
   updated: number;
   preserved_edits: number;
@@ -153,6 +155,9 @@ export default function ImportPage() {
               <span className="font-medium text-stone-700">{r.filename}</span>
               <span className="text-stone-400 ml-2">
                 {r.added} new &middot; {r.updated} updated &middot; {r.preserved_edits} edits kept
+                {r.deduped > 0 && (
+                  <span className="text-blue-600 ml-1">&middot; {r.deduped} duplicates removed</span>
+                )}
                 {r.ambiguous > 0 && (
                   <span className="text-amber-600 ml-1">&middot; {r.ambiguous} ambiguous</span>
                 )}

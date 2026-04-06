@@ -60,8 +60,8 @@ def _content_hash(fmt: str, date: str, desc: str, amount: Decimal) -> str:
 
 # ── Main parser ───────────────────────────────────────────────────────────────
 
-def parse_csv(content: str, filename: str) -> list[dict]:
-    """Parse a CSV string into a list of raw transaction dicts."""
+def parse_csv(content: str, filename: str) -> tuple[list[dict], dict]:
+    """Parse a CSV string into (rows, metadata) where metadata has parse stats."""
     lines = [l for l in content.replace("\r\n", "\n").split("\n") if l.strip()]
     if len(lines) < 2:
         return []
@@ -148,6 +148,15 @@ def parse_csv(content: str, filename: str) -> list[dict]:
             "ambiguous": False,
         })
 
+    # US Bank dedup: checking account debits are duplicated as debit card
+    # transactions with slightly different descriptions. Same date + amount
+    # + account → keep the longer/more descriptive one.
+    deduped = 0
+    if fmt == "usbank":
+        before = len(rows)
+        rows = _dedup_usbank(rows)
+        deduped = before - len(rows)
+
     # Second pass: assign final IDs and flag ambiguous duplicates
     seen: dict[str, int] = {}
     for row in rows:
@@ -157,6 +166,39 @@ def parse_csv(content: str, filename: str) -> list[dict]:
         row["id"] = base if seen[base] == 0 else f"{base}-{seen[base]}"
         row["ambiguous"] = not (base.startswith("src-")) and base_counts[base] > 1
         seen[base] += 1
+
+    meta = {"format": fmt, "deduped": deduped}
+    return rows, meta
+
+
+def _dedup_usbank(rows: list[dict]) -> list[dict]:
+    """Remove US Bank duplicate debit card / checking entries.
+
+    US Bank CSVs contain both a checking account debit and a debit card
+    transaction for the same purchase — same date, same amount, different
+    descriptions. We group by (date, amount) and keep the entry with the
+    longest description (usually more detailed).
+    """
+    from collections import defaultdict
+
+    # Group by (date, amount)
+    groups: dict[str, list[int]] = defaultdict(list)
+    for i, row in enumerate(rows):
+        key = f"{row['date']}|{row['amount']}"
+        groups[key].append(i)
+
+    drop = set()
+    for key, indices in groups.items():
+        if len(indices) < 2:
+            continue
+        # Among entries with same date+amount, keep the longest description
+        best = max(indices, key=lambda i: len(rows[i].get("description", "")))
+        for i in indices:
+            if i != best:
+                drop.add(i)
+
+    if drop:
+        rows = [r for i, r in enumerate(rows) if i not in drop]
 
     return rows
 
@@ -259,7 +301,7 @@ async def import_csv(
     filename: str,
 ) -> dict:
     """Import a CSV file into a session."""
-    rows = parse_csv(content, filename)
+    rows, meta = parse_csv(content, filename)
     if not rows:
         return {
             "error": "No transactions parsed. Check file format.",
@@ -274,7 +316,9 @@ async def import_csv(
 
     return {
         "filename": filename,
+        "format": meta.get("format", ""),
         "parsed": len(rows),
+        "deduped": meta.get("deduped", 0),
         "added": stats["added"],
         "updated": stats["updated"],
         "preserved_edits": stats["preserved"],
