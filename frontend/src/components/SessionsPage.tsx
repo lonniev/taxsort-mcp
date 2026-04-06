@@ -19,11 +19,6 @@ interface CreateResult {
   label: string;
 }
 
-interface LoadResult {
-  session_id?: string;
-  label?: string;
-  error?: string;
-}
 
 export default function SessionsPage() {
   const { sessionId: currentSessionId, sessionLabel: currentLabel, setSession, clearSession, npub } = useSession();
@@ -31,11 +26,9 @@ export default function SessionsPage() {
 
   const listTool = useToolCall<ListResult>("list_sessions");
   const createTool = useToolCall<CreateResult>("create_session");
-  const loadTokenTool = useToolCall<LoadResult>("load_share_token");
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [newLabel, setNewLabel] = useState("");
-  const [shareToken, setShareToken] = useState("");
   const [fetched, setFetched] = useState(false);
 
   async function fetchSessions() {
@@ -58,23 +51,12 @@ export default function SessionsPage() {
     }
   }
 
-  async function handleLoadToken() {
-    if (!shareToken.trim()) return;
-    const data = await loadTokenTool.invoke({ share_token: shareToken.trim(), npub });
-    if (data?.session_id) {
-      setSession(data.session_id, data.label ?? "Shared session");
-      navigate("/transactions");
-    } else {
-      alert(data?.error ?? "Invalid token");
-    }
-  }
-
   function openSession(s: Session) {
     setSession(s.session_id, s.label);
     navigate("/transactions");
   }
 
-  const anyError = listTool.error || createTool.error || loadTokenTool.error;
+  const anyError = listTool.error || createTool.error;
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -175,26 +157,8 @@ export default function SessionsPage() {
         <p className="text-sm text-stone-400 text-center py-8">Loading…</p>
       )}
 
-      {/* Load shared */}
-      <div className="bg-white border border-stone-200 rounded-xl p-5">
-        <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
-          Load shared session
-        </div>
-        <div className="flex gap-2">
-          <input
-            className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm bg-stone-50 focus:outline-none focus:border-stone-400 font-mono"
-            placeholder="Share token"
-            value={shareToken}
-            onChange={e => setShareToken(e.target.value)}
-          />
-          <button
-            onClick={handleLoadToken}
-            disabled={loadTokenTool.loading || !shareToken.trim()}
-            className="bg-green-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-600 disabled:opacity-40 transition-colors"
-          >
-            {loadTokenTool.loading ? "Loading…" : "Load"}
-          </button>
-        </div>
+      <div className="text-xs text-stone-400 text-center mt-4">
+        Share a session by using the same npub from multiple devices.
       </div>
     </div>
   );

@@ -189,7 +189,7 @@ export default function ClassifyPage() {
               Your manual edits are preserved.
             </p>
 
-            {(phase === "idle" || phase === "error") && total > 0 && (
+            {(phase === "idle" || phase === "error" || phase === "complete") && total > 0 && (
               <div className="flex flex-wrap items-center gap-3">
                 {needsReview > 0 && (
                   <button
@@ -209,8 +209,9 @@ export default function ClassifyPage() {
                 <button
                   onClick={() => {
                     if (confirm(
-                      `Reclassify all ${total} transactions? This will overwrite existing classifications ` +
-                      `(manual edits included). Use this when the classifier has been improved.`
+                      `Reclassify all ${total} transactions?\n\n` +
+                      `This re-runs Claude AI on every transaction, including previously classified ` +
+                      `and manually edited ones. Use this when the classifier has been improved.`
                     )) {
                       handleStart(true);
                     }
@@ -248,28 +249,6 @@ export default function ClassifyPage() {
               </div>
             )}
 
-            {phase === "complete" && needsReview > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
-                  <span className="text-sm text-amber-700">{needsReview} still need review</span>
-                </div>
-                <button
-                  onClick={() => handleStart(false)}
-                  disabled={classifyTool.loading}
-                  className="text-xs text-amber-600 hover:text-amber-800 underline"
-                >
-                  Re-run classification
-                </button>
-              </div>
-            )}
-
-            {phase === "complete" && needsReview === 0 && (
-              <div className="flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
-                <span className="text-sm text-green-700">Classification complete</span>
-              </div>
-            )}
           </div>
 
           {/* Right: Update stats */}
