@@ -22,7 +22,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.2.5"
+__version__ = "0.2.6"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -210,6 +210,19 @@ async def db_diagnostic(npub: NpubField = "") -> dict[str, Any]:
             results.append({"list_sessions_direct": "error", "status": e.response.status_code, "body": e.response.text[:500]})
         except Exception as e:
             results.append({"list_sessions_direct": "error", "msg": str(e)[:500]})
+
+        # Check if transactions table exists and its columns
+        try:
+            r = await v._execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = $1 AND table_name = 'transactions' "
+                "ORDER BY ordinal_position",
+                [t('').rstrip('.')]
+            )
+            cols = [row.get("column_name") for row in r.get("rows", [])]
+            results.append({"transactions_columns": cols if cols else "TABLE DOES NOT EXIST"})
+        except Exception as e:
+            results.append({"transactions_columns": "error", "msg": str(e)[:300]})
 
         # Test simple SELECT via db/neon.py path
         try:
