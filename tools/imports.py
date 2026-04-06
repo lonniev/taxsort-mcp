@@ -139,7 +139,7 @@ def parse_csv(content: str, filename: str) -> list[dict]:
             "_occurrence": 0,
             "date": date,
             "description": desc.strip(),
-            "amount": amount,
+            "amount": float(amount),
             "account": effective_acct,
             "format": fmt,
             "hint1": hint1,
