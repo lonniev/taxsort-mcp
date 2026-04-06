@@ -19,6 +19,7 @@ _DOMAIN_TABLES = {
     "rules": "tax_rules",
     "tax_verifications": "tax_verifications",
     "tax_unlock_challenges": "tax_unlock_challenges",
+    "tax_locks": "tax_locks",
     "tax_presence": "tax_presence",
     "tax_feedback": "tax_feedback",
     "share_tokens": "tax_share_tokens",
@@ -121,6 +122,11 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "npub TEXT PRIMARY KEY, "
         "passphrase_hash TEXT NOT NULL, "
         "verified_at TIMESTAMPTZ DEFAULT NOW())",
+
+        f"CREATE TABLE IF NOT EXISTS {t('tax_locks')} ("
+        "npub TEXT PRIMARY KEY, "
+        "locked_at TIMESTAMPTZ DEFAULT NOW(), "
+        "unlocked BOOLEAN DEFAULT FALSE)",
 
         f"CREATE TABLE IF NOT EXISTS {t('tax_unlock_challenges')} ("
         "npub TEXT PRIMARY KEY, "

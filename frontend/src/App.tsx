@@ -283,6 +283,8 @@ export default function App() {
   );
   const [locked, setLocked] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lockTool = useToolCall("lock_session");
+  const lockStatusTool = useToolCall<{ locked: boolean }>("get_lock_status");
 
   function setSession(id: string, label: string) {
     localStorage.setItem("taxsort_session_id", id);
@@ -298,13 +300,22 @@ export default function App() {
     setSessionLabel("");
   }
 
-  // Inactivity timer
+  // Check server-side lock status on load
+  useEffect(() => {
+    if (!npub) return;
+    lockStatusTool.invoke({ npub }).then((data) => {
+      if (data?.locked) setLocked(true);
+    });
+  }, [npub]);
+
+  // Inactivity timer — locks server-side on timeout
   const resetTimer = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     const minutes = parseInt(localStorage.getItem("taxsort_timeout_minutes") ?? "15", 10);
     if (minutes <= 0 || !npub) return;
     timerRef.current = setTimeout(() => {
-      setLocked(true);
+      // Lock server-side, then show lock screen
+      lockTool.invoke({ npub }).then(() => setLocked(true));
     }, minutes * 60 * 1000);
   }, [npub]);
 
