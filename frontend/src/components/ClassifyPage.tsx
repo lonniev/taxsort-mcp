@@ -54,10 +54,10 @@ export default function ClassifyPage() {
   }
 
   useEffect(() => {
-    // Fetch initial status on mount
-    pollStatus();
+    // Fetch initial status on mount and when sessionId changes
+    if (sessionId) pollStatus();
     return () => stopPolling();
-  }, [sessionId]);
+  }, [sessionId, pollStatus]);
 
   async function handleStart() {
     if (!sessionId) return;
