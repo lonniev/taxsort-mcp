@@ -36,13 +36,17 @@ export default function ClassifyPage() {
 
   const pollStatus = useCallback(async () => {
     if (!sessionId) return;
-    const data = await statusTool.invoke({ session_id: sessionId, npub });
-    if (data) {
-      setStatus(data);
-      if (data.needs_review === 0 && data.classified > 0) {
-        setPhase("complete");
-        stopPolling();
+    try {
+      const data = await statusTool.invoke({ session_id: sessionId, npub });
+      if (data) {
+        setStatus(data);
+        if (data.needs_review === 0 && data.classified > 0) {
+          setPhase("complete");
+          stopPolling();
+        }
       }
+    } catch {
+      // Status poll failed — ignore silently, chart just won't update
     }
   }, [sessionId, npub]);
 
@@ -128,6 +132,16 @@ export default function ClassifyPage() {
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-xl font-semibold mb-6 text-stone-800">Classification</h1>
+
+      {statusTool.error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-xs text-red-700">
+          Status: {statusTool.error}
+        </div>
+      )}
+
+      {statusTool.loading && !status && (
+        <div className="text-xs text-stone-400 mb-4">Loading classification status…</div>
+      )}
 
       {/* Status card */}
       <div className="bg-white border border-stone-200 rounded-xl p-6 mb-6">
