@@ -137,101 +137,160 @@ Respond ONLY with a JSON array, no markdown or preamble:
         return []
 
 
+# ── Background classification state ───────────────────────────────────────
+
+import asyncio
+import logging
+
+_log = logging.getLogger(__name__)
+
+# Per-session background job state
+_jobs: dict[str, dict] = {}  # session_id → {status, classified, errors, task}
+
+
+async def _background_classify(session_id: str, owner_npub: str, reclassify: bool) -> None:
+    """Background task: classify all batches, updating Neon as we go."""
+    job = _jobs[session_id]
+    try:
+        api_key = await _get_api_key()
+        if not api_key:
+            job["status"] = "error"
+            job["errors"].append("No Anthropic API key available.")
+            return
+
+        rules_ctx = await _get_rules_context(session_id, owner_npub)
+        where = "session_id=$1 AND (category IS NULL OR category='Needs Review')"
+        if reclassify:
+            where = "session_id=$1"
+
+        while job["status"] == "running":
+            rows = await fetch(
+                f"SELECT id, date, description, amount, account, hint1, hint2 "
+                f"FROM transactions WHERE {where} ORDER BY date LIMIT {BATCH_SIZE}",
+                session_id,
+            )
+            if not rows:
+                job["status"] = "complete"
+                return
+
+            try:
+                results = await _classify_batch(rows, rules_ctx, api_key)
+                updates = []
+                for r in results:
+                    idx = int(r.get("idx", -1))
+                    if 0 <= idx < len(rows):
+                        tx = rows[idx]
+                        updates.append((
+                            str(r.get("category", "")),
+                            str(r.get("subcategory", "")),
+                            str(r.get("confidence", "")),
+                            str(r.get("reason", "")),
+                            str(tx["id"]),
+                            session_id,
+                        ))
+                if updates:
+                    await executemany(
+                        """
+                        UPDATE transactions SET
+                            category=$1, subcategory=$2,
+                            confidence=$3, reason=$4,
+                            updated_at=NOW()
+                        WHERE id=$5 AND session_id=$6
+                        """,
+                        updates,
+                    )
+                    job["classified"] += len(updates)
+            except Exception as e:
+                job["errors"].append(f"Batch error: {e}")
+                _log.error("Classification batch error: %s", e)
+                # Continue to next batch despite errors
+
+            # Yield to event loop so status polls can be served
+            await asyncio.sleep(0.1)
+
+        # If we exited the loop because status changed (paused/stopped)
+        if job["status"] != "running":
+            return
+
+    except Exception as e:
+        job["status"] = "error"
+        job["errors"].append(str(e))
+        _log.error("Background classification failed: %s", e)
+
+
 async def classify_session(
     session_id: str,
     owner_npub: str,
     reclassify_edited: bool = False,
 ) -> dict:
-    """Classify the NEXT BATCH of unclassified transactions.
+    """Start background classification. Returns immediately.
 
-    Processes one batch (up to 30 transactions) per call and returns.
-    The frontend should call this repeatedly until remaining == 0.
-    This avoids MCP timeouts on large sessions.
+    Kicks off an asyncio background task that classifies all batches.
+    Poll check_classification_status for progress. Call again with
+    the same session to get current job state. Calling on an already-
+    running session is a no-op (returns current state).
     """
-    api_key = await _get_api_key()
-    if not api_key:
-        return {"error": "No Anthropic API key available. Deliver credentials via Secure Courier."}
+    existing = _jobs.get(session_id)
 
-    rules_ctx = await _get_rules_context(session_id, owner_npub)
+    # If already running, just report status
+    if existing and existing["status"] == "running":
+        return {
+            "status": "running",
+            "classified_so_far": existing["classified"],
+            "session_id": session_id,
+            "message": "Classification already in progress. Poll check_classification_status for updates.",
+        }
 
+    # Check for unclassified transactions
     where = "session_id=$1 AND (category IS NULL OR category='Needs Review')"
     if reclassify_edited:
         where = "session_id=$1"
 
-    # Fetch only one batch worth
-    rows = await fetch(
-        f"SELECT id, date, description, amount, account, hint1, hint2 "
-        f"FROM transactions WHERE {where} ORDER BY date LIMIT {BATCH_SIZE}",
-        session_id,
-    )
-
-    if not rows:
-        total = await fetchrow(
-            "SELECT COUNT(*) as n FROM transactions WHERE session_id=$1",
-            session_id,
-        )
-        return {
-            "status": "complete",
-            "classified_this_batch": 0,
-            "remaining": 0,
-            "total": int(total["n"]) if total else 0,
-            "session_id": session_id,
-        }
-
-    # Count total remaining for progress
-    remaining_row = await fetchrow(
+    remaining = await fetchrow(
         f"SELECT COUNT(*) as n FROM transactions WHERE {where}",
         session_id,
     )
-    remaining_before = int(remaining_row["n"]) if remaining_row else len(rows)
+    remaining_n = int(remaining["n"]) if remaining else 0
 
-    classified_count = 0
-    errors = []
+    if remaining_n == 0:
+        return {
+            "status": "complete",
+            "classified_so_far": 0,
+            "remaining": 0,
+            "session_id": session_id,
+            "message": "All transactions already classified.",
+        }
 
-    try:
-        results = await _classify_batch(rows, rules_ctx, api_key)
-        updates = []
-        for r in results:
-            idx = int(r.get("idx", -1))
-            if 0 <= idx < len(rows):
-                tx = rows[idx]
-                updates.append((
-                    str(r.get("category", "")),
-                    str(r.get("subcategory", "")),
-                    str(r.get("confidence", "")),
-                    str(r.get("reason", "")),
-                    str(tx["id"]),
-                    session_id,
-                ))
-        if updates:
-            await executemany(
-                """
-                UPDATE transactions SET
-                    category=$1, subcategory=$2,
-                    confidence=$3, reason=$4,
-                    updated_at=NOW()
-                WHERE id=$5 AND session_id=$6
-                """,
-                updates,
-            )
-            classified_count = len(updates)
-    except Exception as e:
-        errors.append(str(e))
-
-    remaining_after = max(0, remaining_before - classified_count)
+    # Start background task
+    job: dict = {"status": "running", "classified": 0, "errors": [], "task": None}
+    _jobs[session_id] = job
+    task = asyncio.create_task(_background_classify(session_id, owner_npub, reclassify_edited))
+    job["task"] = task
 
     return {
-        "status": "complete" if remaining_after == 0 else "in_progress",
-        "classified_this_batch": classified_count,
-        "remaining": remaining_after,
-        "total_remaining_before": remaining_before,
+        "status": "started",
+        "remaining": remaining_n,
         "session_id": session_id,
-        "errors": errors,
-        "message": (
-            f"Classified {classified_count} transactions. "
-            f"{remaining_after} remaining."
-            + (" Call again to continue." if remaining_after > 0 else " Done!")
-        ),
+        "message": f"Classification started for {remaining_n} transactions. Poll check_classification_status for progress.",
+    }
+
+
+async def stop_classification(session_id: str) -> dict:
+    """Stop a running background classification."""
+    job = _jobs.get(session_id)
+    if not job or job["status"] != "running":
+        return {"status": "not_running", "session_id": session_id}
+
+    job["status"] = "paused"
+    task = job.get("task")
+    if task and not task.done():
+        task.cancel()
+
+    return {
+        "status": "paused",
+        "classified_so_far": job["classified"],
+        "session_id": session_id,
+        "message": f"Classification paused after {job['classified']} transactions.",
     }
 
 
@@ -266,14 +325,27 @@ async def check_classification_status(session_id: str) -> dict:
         session_id,
     )
 
-    status = "complete" if needs_review_n == 0 else "in_progress"
+    # Check background job state
+    job = _jobs.get(session_id)
+    if job and job["status"] == "running":
+        job_status = "classifying"
+    elif job and job["status"] == "paused":
+        job_status = "paused"
+    elif job and job["status"] == "error":
+        job_status = "error"
+    elif needs_review_n == 0 and total_n > 0:
+        job_status = "complete"
+    else:
+        job_status = "idle"
 
     return {
         "session_id": session_id,
-        "status": status,
+        "status": job_status,
         "total": total_n,
         "classified": classified_n,
         "needs_review": needs_review_n,
+        "job_classified": job["classified"] if job else 0,
+        "job_errors": job["errors"] if job else [],
         "recent_updates": [
             {
                 "id": str(r["id"]),

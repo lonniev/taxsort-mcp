@@ -17,6 +17,8 @@ interface StatusResult {
   total: number;
   classified: number;
   needs_review: number;
+  job_classified?: number;
+  job_errors?: string[];
   recent_updates: { id: string; category: string; subcategory: string }[];
 }
 
@@ -26,13 +28,13 @@ export default function ClassifyPage() {
   const { sessionId, npub } = useSession();
 
   const classifyTool = useToolCall<ClassifyResult>("classify_session");
+  const stopTool = useToolCall("stop_classification");
   const statusTool = useToolCall<StatusResult>("check_classification_status");
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [status, setStatus] = useState<StatusResult | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const abortRef = useRef(false);
 
   const pollStatus = useCallback(async () => {
     if (!sessionId) return;
@@ -40,15 +42,30 @@ export default function ClassifyPage() {
       const data = await statusTool.invoke({ session_id: sessionId, npub });
       if (data) {
         setStatus(data);
-        if (data.needs_review === 0 && data.classified > 0) {
+        // Sync phase from server job status
+        if (data.status === "classifying") {
+          setPhase("running");
+        } else if (data.status === "complete") {
           setPhase("complete");
+          stopPolling();
+        } else if (data.status === "paused") {
+          setPhase("paused");
+          stopPolling();
+        } else if (data.status === "error") {
+          setPhase("error");
+          if (data.job_errors?.length) setErrors(data.job_errors);
           stopPolling();
         }
       }
     } catch {
-      // Status poll failed — ignore silently, chart just won't update
+      // Ignore poll failures
     }
   }, [sessionId, npub]);
+
+  function startPolling() {
+    stopPolling();
+    pollRef.current = setInterval(pollStatus, 4000);
+  }
 
   function stopPolling() {
     if (pollRef.current) {
@@ -58,55 +75,38 @@ export default function ClassifyPage() {
   }
 
   useEffect(() => {
-    // Fetch initial status on mount and when sessionId changes
     if (sessionId) pollStatus();
     return () => stopPolling();
   }, [sessionId, pollStatus]);
 
   async function handleStart() {
     if (!sessionId) return;
-    abortRef.current = false;
     setPhase("running");
     setErrors([]);
 
-    // Loop: classify one batch at a time, update stats between each
-    let batchNum = 0;
-    while (!abortRef.current) {
-      batchNum++;
-      const result = await classifyTool.invoke({
-        session_id: sessionId,
-        npub,
-      });
+    // Fire and forget — returns immediately
+    const result = await classifyTool.invoke({
+      session_id: sessionId,
+      npub,
+    });
 
-      // Update stats after each batch
+    if (result?.status === "started" || result?.status === "running") {
+      // Start polling for progress
+      startPolling();
+    } else if (result?.status === "complete") {
+      setPhase("complete");
       await pollStatus();
-
-      if (!result) {
-        setErrors(prev => [...prev, `Batch ${batchNum}: no response`]);
-        break;
-      }
-
-      if (result.errors?.length) {
-        setErrors(prev => [...prev, ...result.errors!]);
-      }
-
-      // Done if no remaining or status is complete
-      if (result.status === "complete" || (result.remaining ?? 0) === 0) {
-        setPhase("complete");
-        return;
-      }
-    }
-
-    // If we got here, we were paused
-    if (abortRef.current) {
-      setPhase("paused");
+    } else {
+      // Error or already complete
+      await pollStatus();
     }
   }
 
-  function handlePause() {
-    abortRef.current = true;
-    setPhase("paused");
+  async function handlePause() {
     stopPolling();
+    await stopTool.invoke({ session_id: sessionId, npub });
+    setPhase("paused");
+    await pollStatus();
   }
 
   function handleResume() {

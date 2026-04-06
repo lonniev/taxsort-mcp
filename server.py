@@ -22,7 +22,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -89,7 +89,8 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="delete_rule", category="free", intent="Delete a classification rule"),
     ToolIdentity(capability="apply_rules", category="free", intent="Apply rules to transactions"),
     ToolIdentity(capability="create_share_token", category="free", intent="Create a session share token"),
-    ToolIdentity(capability="classify_session", category="free", intent="AI-classify all transactions"),
+    ToolIdentity(capability="classify_session", category="free", intent="Start background AI classification"),
+    ToolIdentity(capability="stop_classification", category="free", intent="Stop background classification"),
     ToolIdentity(capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
     ToolIdentity(capability="check_unlock", category="free", intent="Check if session unlock was approved"),
     ToolIdentity(capability="ask_advisor", category="free", intent="Ask the Financial Advisor about TaxSort"),
@@ -402,12 +403,27 @@ async def classify_session(
     reclassify_edited: bool = False,
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Classify all unclassified transactions in a session using Claude AI."""
+    """Start background AI classification of all unclassified transactions.
+
+    Returns immediately. Classification runs in the background.
+    Poll check_classification_status for progress.
+    """
     from tools.classify import classify_session as _classify_session
     return await _classify_session(
         session_id=session_id, owner_npub=npub,
         reclassify_edited=reclassify_edited,
     )
+
+
+@tool
+@runtime.paid_tool(capability_uuid("stop_classification"))
+async def stop_classification(
+    session_id: str,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Stop a running background classification."""
+    from tools.classify import stop_classification as _stop
+    return await _stop(session_id=session_id)
 
 
 @tool
