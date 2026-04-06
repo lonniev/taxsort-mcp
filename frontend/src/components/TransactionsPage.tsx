@@ -78,6 +78,8 @@ export default function TransactionsPage() {
   const txTool = useToolCall<TxResult>("get_transactions");
   const overrideTool = useToolCall("override_transaction");
   const revertTool = useToolCall("revert_transaction");
+  const saveRuleTool = useToolCall("save_rule");
+  const applyRulesTool = useToolCall<{ updated: number }>("apply_rules");
 
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
@@ -90,6 +92,13 @@ export default function TransactionsPage() {
   const [editCat, setEditCat] = useState("");
   const [editSub, setEditSub] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [rulePrompt, setRulePrompt] = useState<{
+    keyword: string;
+    category: string;
+    subcategory: string;
+    description: string;
+  } | null>(null);
+  const [ruleApplied, setRuleApplied] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState("none");
   const [scope, setScope] = useState("all");
 
@@ -144,8 +153,56 @@ export default function TransactionsPage() {
       subcategory: editSub,
       npub,
     });
-    setSelected(null);
+
+    // Extract a keyword from the description for the rule suggestion
+    const desc = selected.merchant ?? selected.description;
+    const words = desc.split(/\s+/).filter(w => w.length > 2);
+    const keyword = words.slice(0, 2).join(" ").toLowerCase();
+
+    setRulePrompt({
+      keyword,
+      category: editCat,
+      subcategory: editSub,
+      description: desc,
+    });
+    setRuleApplied(null);
     fetchTxns(filter, subFilter, search, offset);
+  }
+
+  async function handleCreateRule() {
+    if (!rulePrompt || !sessionId) return;
+    const ruleType = rulePrompt.category === "Schedule C" ? "scheduleC"
+      : rulePrompt.category === "Schedule A" ? "scheduleA"
+      : rulePrompt.category === "Internal Transfer" ? "transfer"
+      : "scheduleC"; // default
+
+    await saveRuleTool.invoke({
+      rule_type: ruleType,
+      keyword: rulePrompt.keyword,
+      subcategory: rulePrompt.subcategory,
+      session_id: sessionId,
+      npub,
+    });
+
+    setRuleApplied("saved");
+  }
+
+  async function handleApplyRule() {
+    if (!sessionId) return;
+    const result = await applyRulesTool.invoke({
+      session_id: sessionId,
+      npub,
+    });
+    if (result?.updated !== undefined) {
+      setRuleApplied(`Rule applied — ${result.updated} transactions updated`);
+      fetchTxns(filter, subFilter, search, offset);
+    }
+  }
+
+  function dismissRulePrompt() {
+    setRulePrompt(null);
+    setRuleApplied(null);
+    setSelected(null);
   }
 
   async function revert() {
@@ -445,6 +502,78 @@ export default function TransactionsPage() {
               >
                 Find similar transactions
               </button>
+
+              {/* Rule creation prompt */}
+              {rulePrompt && (
+                <div className="mt-3 pt-3 border-t border-stone-100">
+                  <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">
+                    Create a Rule?
+                  </div>
+                  {!ruleApplied && (
+                    <>
+                      <p className="text-xs text-stone-500 mb-2">
+                        Apply <strong>{rulePrompt.subcategory}</strong> to all
+                        transactions matching:
+                      </p>
+                      <input
+                        className="w-full text-xs font-mono border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 mb-2"
+                        value={rulePrompt.keyword}
+                        onChange={e => setRulePrompt({ ...rulePrompt, keyword: e.target.value })}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleCreateRule}
+                          disabled={saveRuleTool.loading}
+                          className="flex-1 bg-amber-600 text-white text-xs py-1.5 rounded-lg hover:bg-amber-500 disabled:opacity-40"
+                        >
+                          {saveRuleTool.loading ? "Saving\u2026" : "Save Rule"}
+                        </button>
+                        <button
+                          onClick={dismissRulePrompt}
+                          className="text-xs text-stone-400 hover:text-stone-600 border border-stone-200 px-3 py-1.5 rounded-lg"
+                        >
+                          Skip
+                        </button>
+                      </div>
+                    </>
+                  )}
+                  {ruleApplied === "saved" && (
+                    <div className="space-y-2">
+                      <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                        Rule saved: &ldquo;{rulePrompt.keyword}&rdquo; &rarr; {rulePrompt.subcategory}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleApplyRule}
+                          disabled={applyRulesTool.loading}
+                          className="flex-1 bg-stone-900 text-white text-xs py-1.5 rounded-lg hover:bg-stone-700 disabled:opacity-40"
+                        >
+                          {applyRulesTool.loading ? "Applying\u2026" : "Apply to All Matching"}
+                        </button>
+                        <button
+                          onClick={dismissRulePrompt}
+                          className="text-xs text-stone-400 hover:text-stone-600 border border-stone-200 px-3 py-1.5 rounded-lg"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {ruleApplied && ruleApplied !== "saved" && (
+                    <div className="space-y-2">
+                      <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                        {ruleApplied}
+                      </div>
+                      <button
+                        onClick={dismissRulePrompt}
+                        className="w-full text-xs text-stone-400 hover:text-stone-600 border border-stone-200 py-1.5 rounded-lg"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
