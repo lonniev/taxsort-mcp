@@ -13,7 +13,12 @@ logger = logging.getLogger(__name__)
 
 _vault: Any = None
 _schema_done: bool = False
-_DOMAIN_TABLES = ["sessions", "transactions", "rules", "share_tokens"]
+_DOMAIN_TABLES = {
+    "sessions": "tax_sessions",
+    "transactions": "tax_transactions",
+    "rules": "tax_rules",
+    "share_tokens": "tax_share_tokens",
+}
 
 
 async def _get_vault() -> Any:
@@ -34,31 +39,40 @@ async def _get_vault() -> Any:
 
 
 def _qualify(query: str) -> str:
-    """Replace bare domain table names with schema-qualified versions."""
-    if not _vault or not getattr(_vault, "_schema_prefix", ""):
+    """Replace bare domain table names with schema-qualified renamed versions.
+
+    Tool SQL uses 'sessions', 'transactions', etc. These get mapped to
+    'tax_sessions', 'tax_transactions' etc. with operator schema prefix
+    to avoid collisions with tollbooth's own 'transactions' table.
+    """
+    if not _vault:
         return query
-    prefix = _vault._schema_prefix
+    prefix = getattr(_vault, "_schema_prefix", "")
     q = query
-    for tbl in _DOMAIN_TABLES:
-        q = re.sub(rf'(?<![.\w]){tbl}(?=[\s(,;)]|$)', f"{prefix}{tbl}", q)
+    for bare, renamed in _DOMAIN_TABLES.items():
+        q = re.sub(rf'(?<![.\w]){bare}(?=[\s(,;)]|$)', f"{prefix}{renamed}", q)
     return q
 
 
 async def _ensure_domain_schema(vault: Any) -> None:
-    """Create domain tables in the operator's schema."""
+    """Create domain tables in the operator's schema.
+
+    Uses tax_* prefixed names to avoid colliding with tollbooth's own
+    'transactions' table in the same schema.
+    """
     t = vault._t
 
     stmts = [
-        f"CREATE TABLE IF NOT EXISTS {t('sessions')} ("
+        f"CREATE TABLE IF NOT EXISTS {t('tax_sessions')} ("
         "id TEXT PRIMARY KEY, "
         "owner_npub TEXT NOT NULL, "
         "label TEXT, "
         "created_at TIMESTAMPTZ DEFAULT NOW(), "
         "updated_at TIMESTAMPTZ DEFAULT NOW())",
 
-        f"CREATE TABLE IF NOT EXISTS {t('transactions')} ("
+        f"CREATE TABLE IF NOT EXISTS {t('tax_transactions')} ("
         "id TEXT NOT NULL, "
-        f"session_id TEXT NOT NULL REFERENCES {t('sessions')}(id) ON DELETE CASCADE, "
+        f"session_id TEXT NOT NULL REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
         "PRIMARY KEY (id, session_id), "
         "date DATE NOT NULL, "
         "description TEXT NOT NULL, "
@@ -74,22 +88,22 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "imported_at TIMESTAMPTZ DEFAULT NOW(), "
         "updated_at TIMESTAMPTZ DEFAULT NOW())",
 
-        f"CREATE INDEX IF NOT EXISTS idx_ts_session ON {t('transactions')}(session_id)",
-        f"CREATE INDEX IF NOT EXISTS idx_ts_date ON {t('transactions')}(session_id, date)",
-        f"CREATE INDEX IF NOT EXISTS idx_ts_category ON {t('transactions')}(session_id, category)",
+        f"CREATE INDEX IF NOT EXISTS idx_ttx_session ON {t('tax_transactions')}(session_id)",
+        f"CREATE INDEX IF NOT EXISTS idx_ttx_date ON {t('tax_transactions')}(session_id, date)",
+        f"CREATE INDEX IF NOT EXISTS idx_ttx_category ON {t('tax_transactions')}(session_id, category)",
 
-        f"CREATE TABLE IF NOT EXISTS {t('rules')} ("
+        f"CREATE TABLE IF NOT EXISTS {t('tax_rules')} ("
         "id SERIAL PRIMARY KEY, "
-        f"session_id TEXT REFERENCES {t('sessions')}(id) ON DELETE CASCADE, "
+        f"session_id TEXT REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
         "owner_npub TEXT NOT NULL, "
         "rule_type TEXT NOT NULL CHECK (rule_type IN ('scheduleC', 'scheduleA', 'transfer')), "
         "keyword TEXT NOT NULL, subcategory TEXT, note TEXT, "
         "created_at TIMESTAMPTZ DEFAULT NOW(), "
         "UNIQUE (owner_npub, rule_type, keyword))",
 
-        f"CREATE TABLE IF NOT EXISTS {t('share_tokens')} ("
+        f"CREATE TABLE IF NOT EXISTS {t('tax_share_tokens')} ("
         "token TEXT PRIMARY KEY, "
-        f"session_id TEXT NOT NULL REFERENCES {t('sessions')}(id) ON DELETE CASCADE, "
+        f"session_id TEXT NOT NULL REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
         "created_by TEXT NOT NULL, "
         "expires_at TIMESTAMPTZ, "
         "include_key BOOLEAN DEFAULT FALSE, "
