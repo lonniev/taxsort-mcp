@@ -22,7 +22,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -90,6 +90,8 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="apply_rules", category="free", intent="Apply rules to transactions"),
     ToolIdentity(capability="create_share_token", category="free", intent="Create a session share token"),
     ToolIdentity(capability="classify_session", category="free", intent="AI-classify all transactions"),
+    ToolIdentity(capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
+    ToolIdentity(capability="check_unlock", category="free", intent="Check if session unlock was approved"),
 ]
 
 TOOL_REGISTRY: dict[str, ToolIdentity] = {ti.tool_id: ti for ti in _DOMAIN_TOOLS}
@@ -510,6 +512,49 @@ async def load_share_token(
     """Load a shared session via a share token."""
     from tools.share import load_share_token as _load_share_token
     return await _load_share_token(share_token=share_token)
+
+
+# ── Session Lock/Unlock ────────────────────────────────────────────────────
+
+@tool
+@runtime.paid_tool(capability_uuid("request_unlock"))
+async def request_unlock(
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Request a session unlock after timeout.
+
+    Sends a Nostr DM to the patron's npub with an unlock challenge.
+    The patron must reply with 'Approve Unlock' to resume.
+    """
+    from tools.session_lock import request_unlock as _request_unlock
+
+    # Send a Secure Courier DM with the unlock request
+    courier = await runtime.courier()
+    await courier.open_channel(
+        service="taxsort-unlock",
+        greeting=(
+            "Your TaxSort session has timed out. "
+            "Reply with 'Approve Unlock' to resume your session."
+        ),
+        recipient_npub=npub,
+    )
+
+    result = await _request_unlock(npub)
+    return result
+
+
+@tool
+@runtime.paid_tool(capability_uuid("check_unlock"))
+async def check_unlock(
+    response: str,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Check if the unlock response is valid.
+
+    The patron must respond with 'Approve Unlock' (case-insensitive).
+    """
+    from tools.session_lock import check_unlock as _check_unlock
+    return await _check_unlock(npub=npub, response=response)
 
 
 # ---------------------------------------------------------------------------

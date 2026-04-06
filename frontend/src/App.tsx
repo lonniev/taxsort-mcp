@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import SessionsPage from "./components/SessionsPage";
 import ImportPage from "./components/ImportPage";
@@ -7,6 +7,7 @@ import ClassifyPage from "./components/ClassifyPage";
 import SummaryPage from "./components/SummaryPage";
 import SettingsPage from "./components/SettingsPage";
 import Nav from "./components/Nav";
+import LockScreen from "./components/LockScreen";
 import { useToolCall } from "./hooks/useMCP";
 import DebugPanel from "./components/DebugPanel";
 
@@ -271,6 +272,8 @@ export default function App() {
   const [sessionLabel, setSessionLabel] = useState(
     localStorage.getItem("taxsort_session_label") ?? "",
   );
+  const [locked, setLocked] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function setSession(id: string, label: string) {
     localStorage.setItem("taxsort_session_id", id);
@@ -284,6 +287,32 @@ export default function App() {
     localStorage.removeItem("taxsort_session_label");
     setSessionId(null);
     setSessionLabel("");
+  }
+
+  // Inactivity timer
+  const resetTimer = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    const minutes = parseInt(localStorage.getItem("taxsort_timeout_minutes") ?? "15", 10);
+    if (minutes <= 0 || !npub) return;
+    timerRef.current = setTimeout(() => {
+      setLocked(true);
+    }, minutes * 60 * 1000);
+  }, [npub]);
+
+  useEffect(() => {
+    if (!npub) return;
+    const events = ["mousedown", "keydown", "touchstart", "scroll"];
+    const handler = () => resetTimer();
+    events.forEach(e => window.addEventListener(e, handler));
+    resetTimer();
+    return () => {
+      events.forEach(e => window.removeEventListener(e, handler));
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [npub, resetTimer]);
+
+  if (locked && npub) {
+    return <LockScreen npub={npub} onUnlock={() => { setLocked(false); resetTimer(); }} />;
   }
 
   return (

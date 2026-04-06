@@ -18,6 +18,7 @@ _DOMAIN_TABLES = {
     "transactions": "tax_transactions",
     "rules": "tax_rules",
     "tax_verifications": "tax_verifications",
+    "tax_unlock_challenges": "tax_unlock_challenges",
     "share_tokens": "tax_share_tokens",
 }
 
@@ -114,6 +115,12 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "npub TEXT PRIMARY KEY, "
         "passphrase_hash TEXT NOT NULL, "
         "verified_at TIMESTAMPTZ DEFAULT NOW())",
+
+        f"CREATE TABLE IF NOT EXISTS {t('tax_unlock_challenges')} ("
+        "npub TEXT PRIMARY KEY, "
+        "code TEXT NOT NULL, "
+        "used BOOLEAN DEFAULT FALSE, "
+        "created_at TIMESTAMPTZ DEFAULT NOW())",
     ]
     for stmt in stmts:
         try:
