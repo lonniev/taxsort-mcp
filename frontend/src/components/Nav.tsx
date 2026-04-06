@@ -32,6 +32,7 @@ export default function Nav() {
           {link("/classify", "Classify")}
           {link("/transactions", "Transactions")}
           {link("/summary", "Summary")}
+          {link("/wallet", "Wallet")}
           {link("/advisor", "Advisor")}
           {link("/tax-research", "Tax Code")}
         </>

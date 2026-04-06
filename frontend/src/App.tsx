@@ -7,6 +7,7 @@ import ClassifyPage from "./components/ClassifyPage";
 import SummaryPage from "./components/SummaryPage";
 import AdvisorPage from "./components/AdvisorPage";
 import TaxResearcherPage from "./components/TaxResearcherPage";
+import WalletPage from "./components/WalletPage";
 import SettingsPage from "./components/SettingsPage";
 import Nav from "./components/Nav";
 import LockScreen from "./components/LockScreen";
@@ -343,6 +344,7 @@ export default function App() {
                   path="/summary"
                   element={sessionId ? <SummaryPage /> : <Navigate to="/" />}
                 />
+                <Route path="/wallet" element={<WalletPage />} />
                 <Route path="/advisor" element={<AdvisorPage />} />
                 <Route path="/tax-research" element={<TaxResearcherPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
