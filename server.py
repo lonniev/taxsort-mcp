@@ -93,8 +93,7 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="stop_classification", category="free", intent="Stop background classification"),
     ToolIdentity(capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
     ToolIdentity(capability="check_unlock", category="free", intent="Check if session unlock was approved"),
-    ToolIdentity(capability="submit_feedback", category="free", intent="Submit feedback or bug report"),
-    ToolIdentity(capability="list_my_feedback", category="free", intent="List your submitted feedback"),
+    ToolIdentity(capability="get_github_token", category="free", intent="Get GitHub token for issue reporting"),
     ToolIdentity(capability="session_heartbeat", category="free", intent="Presence heartbeat — who's active in this session"),
     ToolIdentity(capability="ask_advisor", category="free", intent="Ask the Financial Advisor about TaxSort"),
     ToolIdentity(capability="ask_tax_researcher", category="free", intent="Ask the Tax Code Researcher about IRS provisions"),
@@ -530,40 +529,30 @@ async def load_share_token(
     return await _load_share_token(share_token=share_token)
 
 
-# ── Feedback ──────────────────────────────────────────────────────────────
+# ── Feedback (GitHub token for frontend) ──────────────────────────────────
 
 @tool
-@runtime.paid_tool(capability_uuid("submit_feedback"))
-async def submit_feedback(
-    title: str,
-    body: str,
-    category: str = "feedback",
-    contact: str = "",
+@runtime.paid_tool(capability_uuid("get_github_token"))
+async def get_github_token(
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Submit feedback, bug report, or feature request.
+    """Get the GitHub token for creating issues in the taxsort-mcp repo.
 
-    Args:
-        title: Short summary of the feedback.
-        body: Detailed description.
-        category: One of: feedback, bug, feature, question.
-        contact: Optional email if you want a response (not required).
+    Returns the operator's GitHub token so the frontend can talk to
+    GitHub's API directly. Token is scoped to issues only.
     """
-    from tools.feedback import create_issue
-    return await create_issue(
-        npub=npub, title=title, body=body,
-        category=category, contact=contact,
-    )
-
-
-@tool
-@runtime.paid_tool(capability_uuid("list_my_feedback"))
-async def list_my_feedback(
-    npub: NpubField = "",
-) -> dict[str, Any]:
-    """List your previously submitted feedback and its status."""
-    from tools.feedback import list_my_issues
-    return await list_my_issues(npub=npub)
+    try:
+        creds = await runtime.load_credentials(["github_token"])
+        token = creds.get("github_token")
+        if token:
+            return {
+                "token": token,
+                "repo": "lonniev/taxsort-mcp",
+                "scope": "issues",
+            }
+        return {"token": None, "message": "No GitHub token configured. Deliver one via Secure Courier."}
+    except Exception as e:
+        return {"token": None, "error": str(e)}
 
 
 # ── Presence ──────────────────────────────────────────────────────────────
