@@ -1,4 +1,5 @@
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const PRIVACY_CONTENT = `
 # TaxSort Privacy Policy
@@ -162,7 +163,7 @@ export default function PrivacyPage() {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="bg-white border border-stone-200 rounded-xl p-8 prose prose-sm prose-stone max-w-none">
-        <Markdown>{PRIVACY_CONTENT}</Markdown>
+        <Markdown remarkPlugins={[remarkGfm]}>{PRIVACY_CONTENT}</Markdown>
       </div>
     </div>
   );

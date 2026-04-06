@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
 
@@ -142,7 +143,7 @@ export default function TaxResearcherPage() {
                 <div className="text-sm text-stone-600 italic">{t.text}</div>
               ) : (
                 <div className="text-sm leading-relaxed text-stone-800 prose prose-sm prose-stone max-w-none">
-                  <Markdown>{t.text}</Markdown>
+                  <Markdown remarkPlugins={[remarkGfm]}>{t.text}</Markdown>
                 </div>
               )}
             </div>
