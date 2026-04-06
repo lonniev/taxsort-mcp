@@ -15,12 +15,6 @@ interface BalanceResult {
   tranches?: { id: string; amount_sats: number; remaining_sats: number; expires_at: string }[];
 }
 
-interface AuthBalanceResult {
-  balance_api_sats?: number;
-  success?: boolean;
-  error?: string;
-}
-
 interface PurchaseResult {
   invoice_id?: string;
   checkout_link?: string;
@@ -48,13 +42,11 @@ export default function WalletPage() {
   const { npub } = useSession();
 
   const balanceTool = useToolCall<BalanceResult>("check_balance");
-  const authBalanceTool = useToolCall<AuthBalanceResult>("check_authority_balance");
   const purchaseTool = useToolCall<PurchaseResult>("purchase_credits");
   const paymentTool = useToolCall<PaymentResult>("check_payment");
   const statementTool = useToolCall<StatementResult>("account_statement");
 
   const [balance, setBalance] = useState<BalanceResult | null>(null);
-  const [authBalance, setAuthBalance] = useState<AuthBalanceResult | null>(null);
   const [statement, setStatement] = useState<StatementResult | null>(null);
   const [purchase, setPurchase] = useState<PurchaseResult | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
@@ -66,11 +58,6 @@ export default function WalletPage() {
     if (data) setBalance(data);
   }
 
-  async function loadAuthBalance() {
-    const data = await authBalanceTool.invoke({});
-    if (data) setAuthBalance(data);
-  }
-
   async function loadStatement() {
     const data = await statementTool.invoke({ npub });
     if (data) setStatement(data);
@@ -79,11 +66,8 @@ export default function WalletPage() {
 
   useEffect(() => {
     loadBalance();
-    loadAuthBalance();
   }, []);
 
-  const operatorCanSell = authBalance && !authBalance.error && (authBalance.balance_api_sats ?? 0) > 0;
-  const authBalSats = authBalance?.balance_api_sats ?? 0;
 
   async function handlePurchase(amount: number) {
     setPurchase(null);
@@ -120,7 +104,7 @@ export default function WalletPage() {
             </div>
           </div>
           <button
-            onClick={() => { loadBalance(); loadAuthBalance(); }}
+            onClick={() => { loadBalance(); ; }}
             disabled={balanceTool.loading}
             className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded"
           >
@@ -167,28 +151,6 @@ export default function WalletPage() {
         <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
           Top Off Credits
         </div>
-
-        {/* Operator Authority status */}
-        {authBalanceTool.loading && (
-          <div className="text-xs text-stone-400 mb-4">Checking operator status&hellip;</div>
-        )}
-        {!authBalanceTool.loading && authBalance && operatorCanSell && (
-          <div className="rounded-lg px-3 py-2 text-xs mb-4 border bg-green-50 border-green-200 text-green-700">
-            Operator has {authBalSats.toLocaleString()} certified sats available for sale.
-          </div>
-        )}
-        {!authBalanceTool.loading && authBalance && !operatorCanSell && (
-          <div className="rounded-lg px-3 py-2 text-xs mb-4 border bg-red-50 border-red-200 text-red-700">
-            <strong>Operator has no certified sats.</strong> Credit purchases will fail
-            until the operator funds their Authority account. This is not your problem &mdash;
-            the operator needs to act.
-          </div>
-        )}
-        {!authBalanceTool.loading && authBalanceTool.error && (
-          <div className="rounded-lg px-3 py-2 text-xs mb-4 border bg-amber-50 border-amber-200 text-amber-700">
-            Could not check operator status: {authBalanceTool.error}. You can still try to purchase.
-          </div>
-        )}
 
         <p className="text-xs text-stone-500 mb-4">
           Purchase credits via Bitcoin Lightning. Credits are used for tool calls.
@@ -301,7 +263,7 @@ export default function WalletPage() {
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-700">
             {purchase.error ?? "Purchase failed. The operator may not have sufficient certified sats."}
             <button
-              onClick={() => { setPurchase(null); loadAuthBalance(); }}
+              onClick={() => { setPurchase(null); ; }}
               className="block mt-2 text-red-500 hover:text-red-700 underline"
             >
               Try again
