@@ -51,6 +51,9 @@ export default function SessionsPage() {
     const data = await createTool.invoke({ label: newLabel.trim(), npub });
     if (data?.session_id) {
       setSession(data.session_id, data.label);
+      setNewLabel("");
+      // Refresh list then navigate
+      await fetchSessions();
       navigate("/import");
     }
   }
@@ -75,7 +78,19 @@ export default function SessionsPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-xl font-semibold mb-6 text-stone-800">Tax sessions</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-stone-800">Tax sessions</h1>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-stone-400 font-mono truncate max-w-48" title={npub}>{npub.slice(0, 20)}…</span>
+          <button
+            onClick={fetchSessions}
+            disabled={listTool.loading}
+            className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded"
+          >
+            {listTool.loading ? "…" : "Refresh"}
+          </button>
+        </div>
+      </div>
 
       {anyError && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-sm text-red-700 break-all">
@@ -106,8 +121,45 @@ export default function SessionsPage() {
         </div>
       </div>
 
+      {/* Existing sessions */}
+      {fetched && sessions.length > 0 && (
+        <div className="mb-6">
+          <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">
+            Your sessions
+          </div>
+          <div className="space-y-2">
+            {sessions.map(s => (
+              <button
+                key={s.session_id}
+                onClick={() => openSession(s)}
+                className="w-full text-left bg-white border border-stone-200 rounded-xl px-5 py-4 hover:border-stone-400 transition-colors flex items-center gap-4"
+              >
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-stone-800">{s.label}</div>
+                  <div className="text-xs text-stone-400 mt-0.5">
+                    {s.tx_count} transactions &middot; updated{" "}
+                    {new Date(s.updated_at).toLocaleDateString()}
+                  </div>
+                </div>
+                <span className="text-stone-300 text-lg">&rarr;</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {fetched && sessions.length === 0 && !listTool.loading && (
+        <p className="text-sm text-stone-400 text-center py-8">
+          No sessions yet. Create one above to get started.
+        </p>
+      )}
+
+      {listTool.loading && !fetched && (
+        <p className="text-sm text-stone-400 text-center py-8">Loading…</p>
+      )}
+
       {/* Load shared */}
-      <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
+      <div className="bg-white border border-stone-200 rounded-xl p-5">
         <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
           Load shared session
         </div>
@@ -127,43 +179,6 @@ export default function SessionsPage() {
           </button>
         </div>
       </div>
-
-      {/* Existing sessions */}
-      {fetched && sessions.length > 0 && (
-        <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">
-            Your sessions
-          </div>
-          <div className="space-y-2">
-            {sessions.map(s => (
-              <button
-                key={s.session_id}
-                onClick={() => openSession(s)}
-                className="w-full text-left bg-white border border-stone-200 rounded-xl px-5 py-4 hover:border-stone-400 transition-colors flex items-center gap-4"
-              >
-                <div className="flex-1">
-                  <div className="text-sm font-medium text-stone-800">{s.label}</div>
-                  <div className="text-xs text-stone-400 mt-0.5">
-                    {s.tx_count} transactions · updated{" "}
-                    {new Date(s.updated_at).toLocaleDateString()}
-                  </div>
-                </div>
-                <span className="text-stone-300 text-lg">&rarr;</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {fetched && sessions.length === 0 && (
-        <p className="text-sm text-stone-400 text-center py-8">
-          No sessions yet. Create one above to get started.
-        </p>
-      )}
-
-      {listTool.loading && !fetched && (
-        <p className="text-sm text-stone-400 text-center py-8">Loading…</p>
-      )}
     </div>
   );
 }
