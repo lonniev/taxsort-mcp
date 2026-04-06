@@ -283,8 +283,6 @@ export default function App() {
   );
   const [locked, setLocked] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lockTool = useToolCall("lock_session");
-  const lockStatusTool = useToolCall<{ locked: boolean }>("get_lock_status");
 
   function setSession(id: string, label: string) {
     localStorage.setItem("taxsort_session_id", id);
@@ -300,23 +298,23 @@ export default function App() {
     setSessionLabel("");
   }
 
-  // Check server-side lock status on load
-  useEffect(() => {
-    if (!npub) return;
-    lockStatusTool.invoke({ npub }).then((data) => {
-      if (data?.locked) setLocked(true);
-    });
-  }, [npub]);
+  function logOut() {
+    localStorage.removeItem("taxsort_npub");
+    localStorage.removeItem("taxsort_verified");
+    localStorage.removeItem("taxsort_session_id");
+    localStorage.removeItem("taxsort_session_label");
+    setNpub("");
+    setSessionId(null);
+    setSessionLabel("");
+    setLocked(false);
+  }
 
-  // Inactivity timer — locks server-side on timeout
+  // Inactivity timer — client-side lock screen
   const resetTimer = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     const minutes = parseInt(localStorage.getItem("taxsort_timeout_minutes") ?? "15", 10);
     if (minutes <= 0 || !npub) return;
-    timerRef.current = setTimeout(() => {
-      // Lock server-side, then show lock screen
-      lockTool.invoke({ npub }).then(() => setLocked(true));
-    }, minutes * 60 * 1000);
+    timerRef.current = setTimeout(() => setLocked(true), minutes * 60 * 1000);
   }, [npub]);
 
   useEffect(() => {
@@ -332,7 +330,13 @@ export default function App() {
   }, [npub, resetTimer]);
 
   if (locked && npub) {
-    return <LockScreen npub={npub} onUnlock={() => { setLocked(false); resetTimer(); }} />;
+    return (
+      <LockScreen
+        npub={npub}
+        onUnlock={() => { setLocked(false); resetTimer(); }}
+        onLogOut={logOut}
+      />
+    );
   }
 
   return (

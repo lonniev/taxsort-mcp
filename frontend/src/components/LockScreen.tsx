@@ -10,9 +10,10 @@ interface UnlockResult {
   dm_error?: string;
 }
 
-export default function LockScreen({ npub, onUnlock }: {
+export default function LockScreen({ npub, onUnlock, onLogOut }: {
   npub: string;
   onUnlock: () => void;
+  onLogOut: () => void;
 }) {
   const requestTool = useToolCall<UnlockResult>("request_unlock");
   const checkTool = useToolCall<UnlockResult>("check_unlock");
@@ -133,6 +134,15 @@ export default function LockScreen({ npub, onUnlock }: {
             {requestTool.error}
           </div>
         )}
+
+        <div className="mt-6 pt-4 border-t border-stone-200 text-center">
+          <button
+            onClick={onLogOut}
+            className="text-xs text-stone-400 hover:text-red-500 transition-colors"
+          >
+            Log out and start fresh
+          </button>
+        </div>
       </div>
     </div>
   );

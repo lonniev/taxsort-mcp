@@ -22,7 +22,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.13.0"
+__version__ = "0.14.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -53,12 +53,6 @@ mcp = FastMCP(
     ),
 )
 tool = make_slug_tool(mcp, "taxsort")
-
-
-async def _check_lock(npub: str) -> dict | None:
-    """Return error dict if npub is locked, else None."""
-    from tools.session_lock import require_unlocked
-    return await require_unlocked(npub)
 
 
 # Shared npub field annotation
@@ -97,8 +91,6 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="create_share_token", category="free", intent="Create a session share token"),
     ToolIdentity(capability="classify_session", category="free", intent="Start background AI classification"),
     ToolIdentity(capability="stop_classification", category="free", intent="Stop background classification"),
-    ToolIdentity(capability="lock_session", category="free", intent="Lock this npub's session (server-enforced)"),
-    ToolIdentity(capability="get_lock_status", category="free", intent="Check if session is locked"),
     ToolIdentity(capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
     ToolIdentity(capability="check_unlock", category="free", intent="Check if session unlock was approved"),
     ToolIdentity(capability="submit_feedback", category="free", intent="Submit feedback or bug report"),
@@ -284,8 +276,6 @@ async def create_session(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """Create a new TaxSort session for a tax year."""
-    locked = await _check_lock(npub)
-    if locked: return locked
     from tools.sessions import create_session as _create_session
     return await _create_session(owner_npub=npub, label=label, tax_year=tax_year)
 
@@ -307,8 +297,6 @@ async def list_sessions(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """List all sessions owned by the current patron."""
-    locked = await _check_lock(npub)
-    if locked: return locked
     from tools.sessions import list_sessions as _list_sessions
     return await _list_sessions(owner_npub=npub)
 
@@ -324,8 +312,6 @@ async def import_csv(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """Import a CSV file into a session. Content is the raw CSV text."""
-    locked = await _check_lock(npub)
-    if locked: return locked
     from tools.imports import import_csv as _import_csv
     return await _import_csv(session_id=session_id, content=content, filename=filename)
 
@@ -357,8 +343,6 @@ async def get_transactions(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """Get transactions for a session with optional filters."""
-    locked = await _check_lock(npub)
-    if locked: return locked
     from tools.transactions import get_transactions as _get_transactions
     return await _get_transactions(
         session_id=session_id, category=category, subcategory=subcategory,
@@ -406,8 +390,6 @@ async def get_summary(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """Get a grouped spending summary for tax reporting."""
-    locked = await _check_lock(npub)
-    if locked: return locked
     from tools.transactions import get_summary as _get_summary
     return await _get_summary(
         session_id=session_id, group_by=group_by, scope=scope, month=month,
@@ -424,8 +406,6 @@ async def classify_session(
     npub: NpubField = "",
 ) -> dict[str, Any]:
     """Start background AI classification. Returns immediately."""
-    locked = await _check_lock(npub)
-    if locked: return locked
     from tools.classify import classify_session as _classify_session
     return await _classify_session(
         session_id=session_id, owner_npub=npub,
@@ -643,27 +623,7 @@ async def ask_tax_researcher(
     return await _ask_tax_researcher(question=question, session_id=session_id, history=h)
 
 
-# ── Session Lock/Unlock ────────────────────────────────────────────────────
-
-@tool
-@runtime.paid_tool(capability_uuid("lock_session"))
-async def lock_session(
-    npub: NpubField = "",
-) -> dict[str, Any]:
-    """Lock this npub's session. All data tools will be rejected until unlocked."""
-    from tools.session_lock import lock_session as _lock
-    return await _lock(npub=npub)
-
-
-@tool
-@runtime.paid_tool(capability_uuid("get_lock_status"))
-async def get_lock_status(
-    npub: NpubField = "",
-) -> dict[str, Any]:
-    """Check if this npub's session is currently locked."""
-    from tools.session_lock import get_lock_status as _status
-    return await _status(npub=npub)
-
+# ── Session Unlock (Nostr DM exchange) ─────────────────────────────────────
 
 @tool
 @runtime.paid_tool(capability_uuid("request_unlock"))
