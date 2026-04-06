@@ -155,14 +155,14 @@ export default function SummaryPage() {
             <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
               <div className="text-xs text-stone-400 mb-1">Schedule C</div>
               <div className="text-xl font-mono font-medium text-amber-700">
-                ${fmt$(summary.rows.filter(r => r.label?.startsWith("Sch C")).reduce((s, r) => s + r.expenses, 0))}
+                ${fmt$(summary.rows.filter(r => r.irs_line?.startsWith("Sch C")).reduce((s, r) => s + r.expenses, 0))}
               </div>
               <div className="text-xs text-stone-400 mt-0.5">business expenses</div>
             </div>
             <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
               <div className="text-xs text-stone-400 mb-1">Schedule A</div>
               <div className="text-xl font-mono font-medium text-green-700">
-                ${fmt$(summary.rows.filter(r => r.label?.startsWith("Sch A")).reduce((s, r) => s + r.expenses, 0))}
+                ${fmt$(summary.rows.filter(r => r.irs_line?.startsWith("Sch A")).reduce((s, r) => s + r.expenses, 0))}
               </div>
               <div className="text-xs text-stone-400 mt-0.5">itemized deductions</div>
             </div>
