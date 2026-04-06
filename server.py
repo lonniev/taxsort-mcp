@@ -22,7 +22,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -93,6 +93,7 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="stop_classification", category="free", intent="Stop background classification"),
     ToolIdentity(capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
     ToolIdentity(capability="check_unlock", category="free", intent="Check if session unlock was approved"),
+    ToolIdentity(capability="session_heartbeat", category="free", intent="Presence heartbeat — who's active in this session"),
     ToolIdentity(capability="ask_advisor", category="free", intent="Ask the Financial Advisor about TaxSort"),
     ToolIdentity(capability="ask_tax_researcher", category="free", intent="Ask the Tax Code Researcher about IRS provisions"),
 ]
@@ -530,6 +531,19 @@ async def load_share_token(
     """Load a shared session via a share token."""
     from tools.share import load_share_token as _load_share_token
     return await _load_share_token(share_token=share_token)
+
+
+# ── Presence ──────────────────────────────────────────────────────────────
+
+@tool
+@runtime.paid_tool(capability_uuid("session_heartbeat"))
+async def session_heartbeat(
+    session_id: str,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Presence heartbeat. Returns who else is active in this session."""
+    from tools.presence import heartbeat as _heartbeat
+    return await _heartbeat(session_id=session_id, npub=npub)
 
 
 # ── AI Advisors ───────────────────────────────────────────────────────────

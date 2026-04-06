@@ -19,6 +19,7 @@ _DOMAIN_TABLES = {
     "rules": "tax_rules",
     "tax_verifications": "tax_verifications",
     "tax_unlock_challenges": "tax_unlock_challenges",
+    "tax_presence": "tax_presence",
     "share_tokens": "tax_share_tokens",
 }
 
@@ -121,6 +122,12 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "code TEXT NOT NULL, "
         "used BOOLEAN DEFAULT FALSE, "
         "created_at TIMESTAMPTZ DEFAULT NOW())",
+
+        f"CREATE TABLE IF NOT EXISTS {t('tax_presence')} ("
+        "session_id TEXT NOT NULL, "
+        "npub TEXT NOT NULL, "
+        "last_seen_at TIMESTAMPTZ DEFAULT NOW(), "
+        "PRIMARY KEY (session_id, npub))",
     ]
     for stmt in stmts:
         try:
