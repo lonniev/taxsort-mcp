@@ -6,6 +6,8 @@ interface UnlockResult {
   error?: string;
   status?: string;
   message?: string;
+  dm_sent?: boolean;
+  dm_error?: string;
 }
 
 export default function LockScreen({ npub, onUnlock }: {
@@ -15,21 +17,31 @@ export default function LockScreen({ npub, onUnlock }: {
   const requestTool = useToolCall<UnlockResult>("request_unlock");
   const checkTool = useToolCall<UnlockResult>("check_unlock");
 
-  const [phase, setPhase] = useState<"locked" | "waiting" | "checking">("locked");
-  const [response, setResponse] = useState("Approve Unlock");
+  const [phase, setPhase] = useState<"locked" | "sent" | "checking">("locked");
+  const [checkError, setCheckError] = useState<string | null>(null);
+  const [dmStatus, setDmStatus] = useState<string | null>(null);
 
   async function handleRequestUnlock() {
-    setPhase("waiting");
-    await requestTool.invoke({ npub });
+    setPhase("sent");
+    setCheckError(null);
+    setDmStatus(null);
+    const result = await requestTool.invoke({ npub });
+    if (result?.dm_sent) {
+      setDmStatus("sent");
+    } else if (result?.dm_error) {
+      setDmStatus(`DM failed: ${result.dm_error}`);
+    }
   }
 
   async function handleCheckUnlock() {
     setPhase("checking");
-    const result = await checkTool.invoke({ npub, response: response.trim() });
+    setCheckError(null);
+    const result = await checkTool.invoke({ npub, response: "Approve Unlock" });
     if (result?.unlocked) {
       onUnlock();
     } else {
-      setPhase("waiting");
+      setCheckError(result?.error ?? "No reply received yet. Check your Nostr client.");
+      setPhase("sent");
     }
   }
 
@@ -37,7 +49,7 @@ export default function LockScreen({ npub, onUnlock }: {
     <div className="min-h-screen bg-stone-900 flex items-center justify-center">
       <div className="bg-white border border-stone-200 rounded-xl p-8 max-w-md w-full shadow-lg">
         <div className="flex items-center gap-2 mb-4">
-          <span className="w-3 h-3 rounded-full bg-red-500" />
+          <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
           <h1 className="text-lg font-semibold text-stone-800">Session Locked</h1>
         </div>
 
@@ -47,59 +59,79 @@ export default function LockScreen({ npub, onUnlock }: {
           <>
             <p className="text-sm text-stone-500 mb-5">
               Your session timed out due to inactivity.
-              To resume, we&apos;ll send a Nostr DM to verify you&apos;re still here.
+              To resume, we need to verify you&apos;re still here.
+            </p>
+            <p className="text-xs text-stone-400 mb-5">
+              We&apos;ll send a Nostr DM to your npub. You&apos;ll need to
+              open your Nostr client and reply to prove it&apos;s you.
             </p>
             <button
               onClick={handleRequestUnlock}
               disabled={requestTool.loading}
               className="w-full bg-amber-600 text-white text-sm py-2.5 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors"
             >
-              {requestTool.loading ? "Sending\u2026" : "Send Unlock Request"}
+              {requestTool.loading ? "Sending\u2026" : "Send Unlock Request to My Nostr"}
             </button>
           </>
         )}
 
-        {phase === "waiting" && (
+        {phase === "sent" && (
           <>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-5">
-              <p className="text-sm text-amber-800 mb-2">
-                Check your Nostr client for a DM from TaxSort.
-              </p>
-              <p className="text-xs text-amber-600">
-                Reply with &ldquo;Approve Unlock&rdquo; to resume your session.
-              </p>
-            </div>
+            {dmStatus && dmStatus !== "sent" && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-xs text-red-700">
+                {dmStatus}
+              </div>
+            )}
 
-            <div className="mb-3">
-              <label className="text-xs text-stone-400 block mb-1">Your response</label>
-              <input
-                className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm bg-stone-50 focus:outline-none focus:border-stone-400"
-                value={response}
-                onChange={e => setResponse(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleCheckUnlock()}
-              />
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+              <p className="text-sm font-medium text-amber-800 mb-2">
+                {dmStatus === "sent" ? "Nostr DM sent!" : "Unlock request created"}
+              </p>
+              <p className="text-xs text-amber-700 mb-3">
+                Now do these steps:
+              </p>
+              <ol className="text-xs text-amber-700 space-y-2 ml-4 list-decimal">
+                <li>Open your <strong>Nostr client</strong> (Damus, Primal, Amethyst, etc.)</li>
+                <li>Find the DM from <strong>TaxSort</strong></li>
+                <li>Reply with the exact words: <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono">Approve Unlock</code></li>
+                <li>Come back here and tap the button below</li>
+              </ol>
             </div>
 
             <button
               onClick={handleCheckUnlock}
-              disabled={checkTool.loading || !response.trim()}
-              className="w-full bg-stone-900 text-white text-sm py-2.5 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
+              disabled={checkTool.loading}
+              className="w-full bg-stone-900 text-white text-sm py-2.5 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors mb-3"
             >
-              {checkTool.loading ? "Checking\u2026" : "Verify & Unlock"}
+              {checkTool.loading ? "Checking\u2026" : "I\u2019ve Replied in Nostr \u2014 Check Now"}
             </button>
 
-            {checkTool.error && (
-              <p className="text-xs text-red-500 mt-2">{checkTool.error}</p>
+            <button
+              onClick={handleRequestUnlock}
+              disabled={requestTool.loading}
+              className="w-full text-xs text-stone-400 hover:text-stone-600 py-1"
+            >
+              Didn&apos;t get the DM? Send again
+            </button>
+
+            {checkError && (
+              <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+                {checkError}
+              </div>
             )}
           </>
         )}
 
         {phase === "checking" && checkTool.loading && (
-          <p className="text-sm text-stone-400 text-center py-4">Checking\u2026</p>
+          <div className="text-sm text-stone-400 text-center py-6">
+            Checking your Nostr reply&hellip;
+          </div>
         )}
 
         {requestTool.error && (
-          <p className="text-xs text-red-500 mt-2">{requestTool.error}</p>
+          <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+            {requestTool.error}
+          </div>
         )}
       </div>
     </div>

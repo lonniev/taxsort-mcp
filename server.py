@@ -641,23 +641,34 @@ async def request_unlock(
 ) -> dict[str, Any]:
     """Request a session unlock after timeout.
 
-    Sends a Nostr DM to the patron's npub with an unlock challenge.
-    The patron must reply with 'Approve Unlock' to resume.
+    Sends a Nostr DM to the patron's npub asking them to reply
+    'Approve Unlock'. The patron replies via their Nostr client.
     """
     from tools.session_lock import request_unlock as _request_unlock
 
-    # Send a Secure Courier DM with the unlock request
-    courier = await runtime.courier()
-    await courier.open_channel(
-        service="taxsort-unlock",
-        greeting=(
-            "Your TaxSort session has timed out. "
-            "Reply with 'Approve Unlock' to resume your session."
-        ),
-        recipient_npub=npub,
-    )
+    dm_sent = False
+    dm_error = None
+
+    # Try to send a Nostr DM via Secure Courier
+    try:
+        courier = await runtime.courier()
+        await courier.open_channel(
+            service="taxsort-patron",
+            greeting=(
+                "Your TaxSort session has timed out. "
+                "Reply with the exact words: Approve Unlock"
+            ),
+            recipient_npub=npub,
+        )
+        dm_sent = True
+    except Exception as e:
+        dm_error = str(e)
+        logger.warning("Failed to send unlock DM to %s: %s", npub[:20], e)
 
     result = await _request_unlock(npub)
+    result["dm_sent"] = dm_sent
+    if dm_error:
+        result["dm_error"] = dm_error
     return result
 
 
