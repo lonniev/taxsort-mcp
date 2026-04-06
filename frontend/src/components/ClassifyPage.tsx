@@ -80,15 +80,15 @@ export default function ClassifyPage() {
     return () => stopPolling();
   }, [sessionId, pollStatus]);
 
-  async function handleStart() {
+  async function handleStart(reclassifyAll = false) {
     if (!sessionId) return;
     setPhase("running");
     setErrors([]);
 
-    // Fire and forget — returns immediately
     const result = await classifyTool.invoke({
       session_id: sessionId,
       npub,
+      ...(reclassifyAll ? { reclassify_edited: true } : {}),
     });
 
     if (result?.status === "started" || result?.status === "running") {
@@ -111,7 +111,7 @@ export default function ClassifyPage() {
   }
 
   function handleResume() {
-    handleStart();
+    handleStart(false);
   }
 
   // Derived values
@@ -189,20 +189,37 @@ export default function ClassifyPage() {
               Your manual edits are preserved.
             </p>
 
-            {(phase === "idle" || phase === "error") && total > 0 && needsReview > 0 && (
-              <button
-                onClick={handleStart}
-                disabled={classifyTool.loading}
-                className="bg-amber-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors"
-              >
-                {classifyTool.loading ? "Starting\u2026" : `Classify ${needsReview} Unreviewed`}
-              </button>
-            )}
-
-            {(phase === "idle" || phase === "error") && total > 0 && needsReview === 0 && (
-              <div className="flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
-                <span className="text-sm text-green-700">All transactions classified</span>
+            {(phase === "idle" || phase === "error") && total > 0 && (
+              <div className="flex flex-wrap items-center gap-3">
+                {needsReview > 0 && (
+                  <button
+                    onClick={() => handleStart(false)}
+                    disabled={classifyTool.loading}
+                    className="bg-amber-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors"
+                  >
+                    {classifyTool.loading ? "Starting\u2026" : `Classify ${needsReview} Unreviewed`}
+                  </button>
+                )}
+                {needsReview === 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                    <span className="text-sm text-green-700">All classified</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    if (confirm(
+                      `Reclassify all ${total} transactions? This will overwrite existing classifications ` +
+                      `(manual edits included). Use this when the classifier has been improved.`
+                    )) {
+                      handleStart(true);
+                    }
+                  }}
+                  disabled={classifyTool.loading}
+                  className="text-xs border border-amber-300 text-amber-700 px-4 py-2 rounded-lg hover:bg-amber-50 disabled:opacity-40 transition-colors"
+                >
+                  Reclassify All ({total})
+                </button>
               </div>
             )}
 
@@ -238,7 +255,7 @@ export default function ClassifyPage() {
                   <span className="text-sm text-amber-700">{needsReview} still need review</span>
                 </div>
                 <button
-                  onClick={handleStart}
+                  onClick={() => handleStart(false)}
                   disabled={classifyTool.loading}
                   className="text-xs text-amber-600 hover:text-amber-800 underline"
                 >
