@@ -83,7 +83,6 @@ export default function WalletPage() {
   }, []);
 
   const operatorCanSell = authBalance && !authBalance.error && (authBalance.balance_api_sats ?? 0) > 0;
-  const authError = authBalance?.error;
   const authBalSats = authBalance?.balance_api_sats ?? 0;
 
   async function handlePurchase(amount: number) {
@@ -170,28 +169,25 @@ export default function WalletPage() {
         </div>
 
         {/* Operator Authority status */}
-        {authBalance && !authBalanceTool.loading && (
-          <div className={`rounded-lg px-3 py-2 text-xs mb-4 border ${
-            operatorCanSell
-              ? "bg-green-50 border-green-200 text-green-700"
-              : "bg-red-50 border-red-200 text-red-700"
-          }`}>
-            {operatorCanSell ? (
-              <>Operator has {authBalSats.toLocaleString()} certified sats available for sale.</>
-            ) : authError ? (
-              <>Operator status: {authError}</>
-            ) : (
-              <>
-                <strong>Operator has no certified sats.</strong> Credit purchases are unavailable
-                until the operator tops off their Authority account. This is not your problem &mdash;
-                the operator needs to fund their position with the Authority.
-              </>
-            )}
-          </div>
-        )}
-
         {authBalanceTool.loading && (
           <div className="text-xs text-stone-400 mb-4">Checking operator status&hellip;</div>
+        )}
+        {!authBalanceTool.loading && authBalance && operatorCanSell && (
+          <div className="rounded-lg px-3 py-2 text-xs mb-4 border bg-green-50 border-green-200 text-green-700">
+            Operator has {authBalSats.toLocaleString()} certified sats available for sale.
+          </div>
+        )}
+        {!authBalanceTool.loading && authBalance && !operatorCanSell && (
+          <div className="rounded-lg px-3 py-2 text-xs mb-4 border bg-red-50 border-red-200 text-red-700">
+            <strong>Operator has no certified sats.</strong> Credit purchases will fail
+            until the operator funds their Authority account. This is not your problem &mdash;
+            the operator needs to act.
+          </div>
+        )}
+        {!authBalanceTool.loading && authBalanceTool.error && (
+          <div className="rounded-lg px-3 py-2 text-xs mb-4 border bg-amber-50 border-amber-200 text-amber-700">
+            Could not check operator status: {authBalanceTool.error}. You can still try to purchase.
+          </div>
         )}
 
         <p className="text-xs text-stone-500 mb-4">
@@ -205,7 +201,7 @@ export default function WalletPage() {
                 <button
                   key={amt}
                   onClick={() => handlePurchase(amt)}
-                  disabled={purchaseTool.loading || !operatorCanSell}
+                  disabled={purchaseTool.loading}
                   className="bg-stone-900 text-white text-xs px-4 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
                 >
                   {amt.toLocaleString()} sats
@@ -219,13 +215,13 @@ export default function WalletPage() {
                 value={customAmount}
                 onChange={e => setCustomAmount(e.target.value.replace(/\D/g, ""))}
                 onKeyDown={e => {
-                  if (e.key === "Enter" && customAmount && operatorCanSell) handlePurchase(parseInt(customAmount, 10));
+                  if (e.key === "Enter" && customAmount) handlePurchase(parseInt(customAmount, 10));
                 }}
               />
               {customAmount && (
                 <button
                   onClick={() => handlePurchase(parseInt(customAmount, 10))}
-                  disabled={purchaseTool.loading || !operatorCanSell}
+                  disabled={purchaseTool.loading}
                   className="bg-amber-600 text-white text-xs px-4 py-1.5 rounded-lg hover:bg-amber-500 disabled:opacity-40"
                 >
                   Purchase
