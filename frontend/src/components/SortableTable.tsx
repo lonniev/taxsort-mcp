@@ -177,9 +177,9 @@ export default function SortableTable<T>({
                 >
                   <span className="inline-flex items-center gap-1">
                     {col.label}
-                    {sortable && active && sortDir === "asc" && <span className="text-amber-600">&uarr;</span>}
-                    {sortable && active && sortDir === "desc" && <span className="text-amber-600">&darr;</span>}
-                    {sortable && !active && <span className="text-stone-300">&updownarrow;</span>}
+                    {sortable && active && sortDir === "asc" && <span className="text-amber-600">{"\u2191"}</span>}
+                    {sortable && active && sortDir === "desc" && <span className="text-amber-600">{"\u2193"}</span>}
+                    {sortable && !active && <span className="text-stone-300">{"\u21C5"}</span>}
                   </span>
                 </th>
               );
