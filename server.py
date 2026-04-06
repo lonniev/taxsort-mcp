@@ -22,7 +22,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -71,7 +71,7 @@ NpubField = Annotated[
 # ---------------------------------------------------------------------------
 
 _DOMAIN_TOOLS = [
-    # Free
+    # All free for smoke testing — will set real tiers + prices later
     ToolIdentity(capability="create_session", category="free", intent="Create a tax session"),
     ToolIdentity(capability="get_session", category="free", intent="Get session details"),
     ToolIdentity(capability="list_sessions", category="free", intent="List patron sessions"),
@@ -79,20 +79,17 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="get_import_stats", category="free", intent="Get import statistics"),
     ToolIdentity(capability="load_share_token", category="free", intent="Load a shared session"),
     ToolIdentity(capability="check_classification_status", category="free", intent="Poll classification progress"),
-    # Read
-    ToolIdentity(capability="get_transactions", category="read", intent="Get transactions with filters"),
-    ToolIdentity(capability="get_summary", category="read", intent="Get grouped tax summary"),
-    ToolIdentity(capability="detect_subscriptions", category="read", intent="Detect recurring subscriptions"),
-    # Write
-    ToolIdentity(capability="import_csv", category="write", intent="Import CSV transactions"),
-    ToolIdentity(capability="override_transaction", category="write", intent="Override transaction classification"),
-    ToolIdentity(capability="revert_transaction", category="write", intent="Revert to original classification"),
-    ToolIdentity(capability="save_rule", category="write", intent="Save a classification rule"),
-    ToolIdentity(capability="delete_rule", category="write", intent="Delete a classification rule"),
-    ToolIdentity(capability="apply_rules", category="write", intent="Apply rules to transactions"),
-    ToolIdentity(capability="create_share_token", category="write", intent="Create a session share token"),
-    # Heavy
-    ToolIdentity(capability="classify_session", category="heavy", intent="AI-classify all transactions"),
+    ToolIdentity(capability="get_transactions", category="free", intent="Get transactions with filters"),
+    ToolIdentity(capability="get_summary", category="free", intent="Get grouped tax summary"),
+    ToolIdentity(capability="detect_subscriptions", category="free", intent="Detect recurring subscriptions"),
+    ToolIdentity(capability="import_csv", category="free", intent="Import CSV transactions"),
+    ToolIdentity(capability="override_transaction", category="free", intent="Override transaction classification"),
+    ToolIdentity(capability="revert_transaction", category="free", intent="Revert to original classification"),
+    ToolIdentity(capability="save_rule", category="free", intent="Save a classification rule"),
+    ToolIdentity(capability="delete_rule", category="free", intent="Delete a classification rule"),
+    ToolIdentity(capability="apply_rules", category="free", intent="Apply rules to transactions"),
+    ToolIdentity(capability="create_share_token", category="free", intent="Create a session share token"),
+    ToolIdentity(capability="classify_session", category="free", intent="AI-classify all transactions"),
 ]
 
 TOOL_REGISTRY: dict[str, ToolIdentity] = {ti.tool_id: ti for ti in _DOMAIN_TOOLS}
