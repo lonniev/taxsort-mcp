@@ -180,52 +180,102 @@ export default function ClassifyPage() {
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center gap-3 mb-6">
-        {(phase === "idle" || phase === "error") && total > 0 && (
-          <button
-            onClick={handleStart}
-            disabled={classifyTool.loading}
-            className="bg-amber-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors"
-          >
-            {classifyTool.loading ? "Starting\u2026" : "Classify All"}
-          </button>
-        )}
+      {/* Actions */}
+      <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
+        <div className="flex items-start gap-6">
+          {/* Left: Classification action */}
+          <div className="flex-1">
+            <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">
+              Run Claude AI Classification
+            </div>
+            <p className="text-xs text-stone-500 mb-3">
+              Sends unclassified transactions to Claude for categorization.
+              Your manual edits are preserved.
+            </p>
 
-        {phase === "running" && (
-          <button
-            onClick={handlePause}
-            className="bg-stone-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-stone-500 transition-colors"
-          >
-            Pause
-          </button>
-        )}
+            {(phase === "idle" || phase === "error") && total > 0 && needsReview > 0 && (
+              <button
+                onClick={handleStart}
+                disabled={classifyTool.loading}
+                className="bg-amber-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors"
+              >
+                {classifyTool.loading ? "Starting\u2026" : `Classify ${needsReview} Unreviewed`}
+              </button>
+            )}
 
-        {phase === "paused" && (
-          <>
-            <button
-              onClick={handleResume}
-              className="bg-amber-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-amber-500 transition-colors"
-            >
-              Resume
-            </button>
-            <span className="text-xs text-stone-400">Classification paused at {pct}%</span>
-          </>
-        )}
+            {(phase === "idle" || phase === "error") && total > 0 && needsReview === 0 && (
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                <span className="text-sm text-green-700">All transactions classified</span>
+              </div>
+            )}
 
-        {phase === "complete" && (
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
-            <span className="text-sm text-green-700">Classification complete</span>
+            {(phase === "idle" || phase === "error") && total === 0 && (
+              <span className="text-xs text-stone-400">Import transactions first.</span>
+            )}
+
+            {phase === "running" && (
+              <button
+                onClick={handlePause}
+                className="bg-stone-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-stone-500 transition-colors"
+              >
+                Pause Classification
+              </button>
+            )}
+
+            {phase === "paused" && (
+              <div className="space-y-2">
+                <button
+                  onClick={handleResume}
+                  className="bg-amber-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-amber-500 transition-colors"
+                >
+                  Resume Classification
+                </button>
+                <div className="text-xs text-stone-400">Paused at {pct}%</div>
+              </div>
+            )}
+
+            {phase === "complete" && needsReview > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
+                  <span className="text-sm text-amber-700">{needsReview} still need review</span>
+                </div>
+                <button
+                  onClick={handleStart}
+                  disabled={classifyTool.loading}
+                  className="text-xs text-amber-600 hover:text-amber-800 underline"
+                >
+                  Re-run classification
+                </button>
+              </div>
+            )}
+
+            {phase === "complete" && needsReview === 0 && (
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                <span className="text-sm text-green-700">Classification complete</span>
+              </div>
+            )}
           </div>
-        )}
 
-        <button
-          onClick={pollStatus}
-          className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded ml-auto"
-        >
-          Refresh
-        </button>
+          {/* Right: Update stats */}
+          <div className="border-l border-stone-100 pl-6">
+            <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">
+              Update Stats
+            </div>
+            <p className="text-xs text-stone-500 mb-3">
+              Refresh the counts and chart above.
+            </p>
+            <button
+              onClick={pollStatus}
+              disabled={statusTool.loading}
+              className="text-xs text-stone-500 hover:text-stone-700 border border-stone-200 px-3 py-1.5 rounded-lg"
+            >
+              {statusTool.loading ? "Updating\u2026" : "Update Stats"}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Errors */}
