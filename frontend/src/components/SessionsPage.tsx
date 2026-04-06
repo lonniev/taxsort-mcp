@@ -26,7 +26,7 @@ interface LoadResult {
 }
 
 export default function SessionsPage() {
-  const { setSession, npub } = useSession();
+  const { sessionId: currentSessionId, sessionLabel: currentLabel, setSession, clearSession, npub } = useSession();
   const navigate = useNavigate();
 
   const listTool = useToolCall<ListResult>("list_sessions");
@@ -91,6 +91,23 @@ export default function SessionsPage() {
           </button>
         </div>
       </div>
+
+      {/* Current session */}
+      {currentSessionId && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 mb-4 flex items-center gap-3">
+          <span className="w-2 h-2 rounded-full bg-amber-500" />
+          <div className="flex-1">
+            <span className="text-sm font-medium text-amber-800">{currentLabel}</span>
+            <span className="text-xs text-amber-500 font-mono ml-2">{currentSessionId.slice(0, 8)}&hellip;</span>
+          </div>
+          <button
+            onClick={clearSession}
+            className="text-xs text-amber-600 hover:text-red-600 border border-amber-300 px-3 py-1 rounded-lg hover:border-red-300 transition-colors"
+          >
+            Close Session
+          </button>
+        </div>
+      )}
 
       {anyError && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-sm text-red-700 break-all">
