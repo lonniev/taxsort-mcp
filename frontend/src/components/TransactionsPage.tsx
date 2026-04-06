@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "../App";
-import { useToolCall, useToolPoll } from "../hooks/useMCP";
+import { useToolCall } from "../hooks/useMCP";
 
 interface Transaction {
   id: string;
@@ -25,14 +25,6 @@ interface Transaction {
 interface TxResult {
   total: number;
   transactions: Transaction[];
-}
-
-interface ClassifyStatus {
-  status: string;
-  total: number;
-  classified: number;
-  needs_review: number;
-  recent_updates: { id: string; category: string; subcategory: string }[];
 }
 
 const CATEGORIES = [
@@ -68,7 +60,6 @@ export default function TransactionsPage() {
   const txTool = useToolCall<TxResult>("get_transactions");
   const overrideTool = useToolCall("override_transaction");
   const revertTool = useToolCall("revert_transaction");
-  const statusPoll = useToolPoll<ClassifyStatus>("check_classification_status", 4000);
 
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
@@ -77,57 +68,38 @@ export default function TransactionsPage() {
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [editCat, setEditCat] = useState("");
   const [editSub, setEditSub] = useState("");
-  const [recentlyUpdated, setRecentlyUpdated] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
 
   const LIMIT = 100;
 
   const fetchTxns = useCallback(async (cat: string, off: number) => {
     if (!sessionId) return;
-    const args: Record<string, unknown> = {
-      session_id: sessionId,
-      limit: LIMIT,
-      offset: off,
-      npub,
-    };
-    if (cat === "Needs Review") {
-      args.needs_review_only = true;
-    } else if (cat !== "all") {
-      args.category = cat;
+    setError(null);
+    try {
+      const args: Record<string, unknown> = {
+        session_id: sessionId,
+        limit: LIMIT,
+        offset: off,
+        npub,
+      };
+      if (cat === "Needs Review") {
+        args.needs_review_only = true;
+      } else if (cat !== "all") {
+        args.category = cat;
+      }
+      const data = await txTool.invoke(args);
+      if (data) {
+        setTxns(data.transactions ?? []);
+        setTotal(data.total ?? 0);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load transactions");
     }
-    const data = await txTool.invoke(args);
-    if (data) {
-      setTxns(data.transactions);
-      setTotal(data.total);
-    }
-  }, [sessionId]);
+  }, [sessionId, npub]);
 
   useEffect(() => {
     fetchTxns(filter, offset);
   }, [sessionId, filter, offset, fetchTxns]);
-
-  // Start polling for classification status if there are unclassified transactions
-  useEffect(() => {
-    if (sessionId && statusPoll.data?.status !== "complete") {
-      statusPoll.start({ session_id: sessionId, npub });
-    }
-    return () => statusPoll.stop();
-  }, [sessionId]);
-
-  // When classification status updates, refresh the transaction list and highlight changes
-  useEffect(() => {
-    if (!statusPoll.data) return;
-    const updates = statusPoll.data.recent_updates ?? [];
-    if (updates.length > 0) {
-      const ids = new Set(updates.map(u => u.id));
-      setRecentlyUpdated(ids);
-      fetchTxns(filter, offset);
-      // Clear highlights after 3 seconds
-      setTimeout(() => setRecentlyUpdated(new Set()), 3000);
-    }
-    if (statusPoll.data.status === "complete") {
-      statusPoll.stop();
-    }
-  }, [statusPoll.data]);
 
   function openEdit(t: Transaction) {
     setSelected(t);
@@ -161,25 +133,20 @@ export default function TransactionsPage() {
   }
 
   const filters = ["all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Needs Review"];
-  const classifyProgress = statusPoll.data;
 
   return (
     <div className="flex gap-4">
       {/* Main table */}
       <div className="flex-1 min-w-0">
-        {/* Classification progress bar */}
-        {classifyProgress && classifyProgress.status === "in_progress" && (
-          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3">
-            <div className="flex items-center justify-between text-xs text-amber-700 mb-1">
-              <span>Classifying transactions…</span>
-              <span>{classifyProgress.classified}/{classifyProgress.total}</span>
-            </div>
-            <div className="w-full bg-amber-100 rounded-full h-1.5">
-              <div
-                className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${classifyProgress.total > 0 ? (classifyProgress.classified / classifyProgress.total) * 100 : 0}%` }}
-              />
-            </div>
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-sm text-red-700 break-all">
+            {error}
+          </div>
+        )}
+
+        {txTool.error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-sm text-red-700 break-all">
+            {txTool.error}
           </div>
         )}
 
@@ -193,6 +160,12 @@ export default function TransactionsPage() {
               {f === "all" ? "All" : f}
             </button>
           ))}
+          <button
+            onClick={() => fetchTxns(filter, offset)}
+            className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded ml-1"
+          >
+            Refresh
+          </button>
           <span className="ml-auto text-xs text-stone-400">{total} transactions</span>
         </div>
 
@@ -211,7 +184,7 @@ export default function TransactionsPage() {
                 <tr
                   key={t.id}
                   onClick={() => openEdit(t)}
-                  className={`border-t border-stone-100 hover:bg-stone-50 cursor-pointer transition-all duration-500 ${recentlyUpdated.has(t.id) ? "bg-amber-50" : ""}`}
+                  className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer transition-colors"
                 >
                   <td className="px-4 py-2.5 font-mono text-xs text-stone-400 whitespace-nowrap">{t.date}</td>
                   <td className="px-4 py-2.5 max-w-xs">
@@ -225,7 +198,7 @@ export default function TransactionsPage() {
                   </td>
                   <td className="px-4 py-2.5">
                     <span className={`text-xs font-medium ${CAT_COLOR[t.category ?? "Needs Review"] ?? "text-stone-400"}`}>
-                      {t.category ?? "—"}
+                      {t.category ?? "\u2014"}
                     </span>
                     {t.subcategory && t.subcategory !== t.category && (
                       <div className="text-xs text-stone-400 truncate max-w-32">{t.subcategory}</div>
@@ -242,7 +215,7 @@ export default function TransactionsPage() {
           {total > LIMIT && (
             <div className="flex items-center justify-between px-4 py-2.5 border-t border-stone-100 bg-stone-50 text-xs text-stone-400">
               <button onClick={() => setOffset(Math.max(0, offset - LIMIT))} disabled={offset === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
-              <span>{offset + 1}–{Math.min(offset + LIMIT, total)} of {total}</span>
+              <span>{offset + 1}&ndash;{Math.min(offset + LIMIT, total)} of {total}</span>
               <button onClick={() => setOffset(offset + LIMIT)} disabled={offset + LIMIT >= total} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
             </div>
           )}
@@ -289,7 +262,7 @@ export default function TransactionsPage() {
                   disabled={overrideTool.loading}
                   className="flex-1 bg-stone-900 text-white text-xs py-1.5 rounded-lg hover:bg-stone-700 disabled:opacity-40"
                 >
-                  {overrideTool.loading ? "Saving…" : "Save"}
+                  {overrideTool.loading ? "Saving\u2026" : "Save"}
                 </button>
                 {selected.can_revert && (
                   <button onClick={revert} className="text-xs border border-stone-200 px-3 py-1.5 rounded-lg text-stone-400 hover:text-red-500 hover:border-red-200">&larrhk;</button>
