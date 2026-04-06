@@ -142,9 +142,11 @@ async def classify_session(
     owner_npub: str,
     reclassify_edited: bool = False,
 ) -> dict:
-    """Kick off classification of all unclassified transactions in a session.
+    """Classify the NEXT BATCH of unclassified transactions.
 
-    Returns immediately with status. Use check_classification_status to poll.
+    Processes one batch (up to 30 transactions) per call and returns.
+    The frontend should call this repeatedly until remaining == 0.
+    This avoids MCP timeouts on large sessions.
     """
     api_key = await _get_api_key()
     if not api_key:
@@ -156,61 +158,80 @@ async def classify_session(
     if reclassify_edited:
         where = "session_id=$1"
 
+    # Fetch only one batch worth
     rows = await fetch(
-        f"SELECT id, date, description, amount, account, hint1, hint2 FROM transactions WHERE {where} ORDER BY date",
+        f"SELECT id, date, description, amount, account, hint1, hint2 "
+        f"FROM transactions WHERE {where} ORDER BY date LIMIT {BATCH_SIZE}",
         session_id,
     )
 
     if not rows:
-        return {"status": "complete", "classified": 0, "total": 0, "message": "All transactions already classified."}
+        total = await fetchrow(
+            "SELECT COUNT(*) as n FROM transactions WHERE session_id=$1",
+            session_id,
+        )
+        return {
+            "status": "complete",
+            "classified_this_batch": 0,
+            "remaining": 0,
+            "total": int(total["n"]) if total else 0,
+            "session_id": session_id,
+        }
 
-    # Mark session as classifying
-    await execute(
-        "UPDATE sessions SET updated_at=NOW() WHERE id=$1",
+    # Count total remaining for progress
+    remaining_row = await fetchrow(
+        f"SELECT COUNT(*) as n FROM transactions WHERE {where}",
         session_id,
     )
+    remaining_before = int(remaining_row["n"]) if remaining_row else len(rows)
 
     classified_count = 0
     errors = []
 
-    for batch_start in range(0, len(rows), BATCH_SIZE):
-        batch = rows[batch_start:batch_start + BATCH_SIZE]
-        try:
-            results = await _classify_batch(batch, rules_ctx, api_key)
-            updates = []
-            for r in results:
-                idx = int(r.get("idx", -1))
-                if 0 <= idx < len(batch):
-                    tx = batch[idx]
-                    updates.append((
-                        str(r.get("category", "")),
-                        str(r.get("subcategory", "")),
-                        str(r.get("confidence", "")),
-                        str(r.get("reason", "")),
-                        str(tx["id"]),
-                        session_id,
-                    ))
-            if updates:
-                await executemany(
-                    """
-                    UPDATE transactions SET
-                        category=$1, subcategory=$2,
-                        confidence=$3, reason=$4,
-                        updated_at=NOW()
-                    WHERE id=$5 AND session_id=$6
-                    """,
-                    updates,
-                )
-                classified_count += len(updates)
-        except Exception as e:
-            errors.append(f"Batch {batch_start}-{batch_start+len(batch)}: {e}")
+    try:
+        results = await _classify_batch(rows, rules_ctx, api_key)
+        updates = []
+        for r in results:
+            idx = int(r.get("idx", -1))
+            if 0 <= idx < len(rows):
+                tx = rows[idx]
+                updates.append((
+                    str(r.get("category", "")),
+                    str(r.get("subcategory", "")),
+                    str(r.get("confidence", "")),
+                    str(r.get("reason", "")),
+                    str(tx["id"]),
+                    session_id,
+                ))
+        if updates:
+            await executemany(
+                """
+                UPDATE transactions SET
+                    category=$1, subcategory=$2,
+                    confidence=$3, reason=$4,
+                    updated_at=NOW()
+                WHERE id=$5 AND session_id=$6
+                """,
+                updates,
+            )
+            classified_count = len(updates)
+    except Exception as e:
+        errors.append(str(e))
+
+    remaining_after = max(0, remaining_before - classified_count)
 
     return {
-        "status": "complete",
-        "classified": classified_count,
-        "total": len(rows),
-        "errors": errors,
+        "status": "complete" if remaining_after == 0 else "in_progress",
+        "classified_this_batch": classified_count,
+        "remaining": remaining_after,
+        "total_remaining_before": remaining_before,
         "session_id": session_id,
+        "errors": errors,
+        "message": (
+            f"Classified {classified_count} transactions. "
+            f"{remaining_after} remaining."
+            + (" Call again to continue." if remaining_after > 0 else " Done!")
+        ),
     }
 
 

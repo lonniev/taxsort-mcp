@@ -4,9 +4,11 @@ import { useToolCall } from "../hooks/useMCP";
 
 interface ClassifyResult {
   status: string;
-  classified: number;
-  total: number;
+  classified_this_batch?: number;
+  remaining?: number;
+  total_remaining_before?: number;
   errors?: string[];
+  message?: string;
 }
 
 interface StatusResult {
@@ -44,12 +46,6 @@ export default function ClassifyPage() {
     }
   }, [sessionId, npub]);
 
-  function startPolling() {
-    stopPolling();
-    pollStatus();
-    pollRef.current = setInterval(pollStatus, 3000);
-  }
-
   function stopPolling() {
     if (pollRef.current) {
       clearInterval(pollRef.current);
@@ -68,23 +64,38 @@ export default function ClassifyPage() {
     abortRef.current = false;
     setPhase("running");
     setErrors([]);
-    startPolling();
 
-    const result = await classifyTool.invoke({
-      session_id: sessionId,
-      npub,
-    });
+    // Loop: classify one batch at a time, update stats between each
+    let batchNum = 0;
+    while (!abortRef.current) {
+      batchNum++;
+      const result = await classifyTool.invoke({
+        session_id: sessionId,
+        npub,
+      });
 
-    stopPolling();
-    await pollStatus(); // Final status fetch
+      // Update stats after each batch
+      await pollStatus();
 
-    if (result?.errors?.length) {
-      setErrors(result.errors);
+      if (!result) {
+        setErrors(prev => [...prev, `Batch ${batchNum}: no response`]);
+        break;
+      }
+
+      if (result.errors?.length) {
+        setErrors(prev => [...prev, ...result.errors!]);
+      }
+
+      // Done if no remaining or status is complete
+      if (result.status === "complete" || (result.remaining ?? 0) === 0) {
+        setPhase("complete");
+        return;
+      }
     }
+
+    // If we got here, we were paused
     if (abortRef.current) {
       setPhase("paused");
-    } else {
-      setPhase("complete");
     }
   }
 

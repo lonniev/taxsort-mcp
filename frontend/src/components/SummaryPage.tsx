@@ -44,8 +44,10 @@ export default function SummaryPage() {
   const { sessionId, npub } = useSession();
   const navigate = useNavigate();
   const summaryTool = useToolCall<Summary>("get_summary");
+  const statusTool = useToolCall<{ total: number; classified: number; needs_review: number }>("check_classification_status");
 
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [classifyStatus, setClassifyStatus] = useState<{ total: number; classified: number; needs_review: number } | null>(null);
   const [groupBy, setGroupBy] = useState("taxline");
   const [scope, setScope] = useState("tax");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -60,8 +62,17 @@ export default function SummaryPage() {
     if (data) setSummary(data);
   }
 
+  async function fetchStatus() {
+    if (!sessionId) return;
+    const data = await statusTool.invoke({ session_id: sessionId, npub });
+    if (data) setClassifyStatus(data);
+  }
+
   useEffect(() => {
-    if (sessionId) fetchSummary();
+    if (sessionId) {
+      fetchSummary();
+      fetchStatus();
+    }
   }, [sessionId, groupBy, scope]);
 
   function toggleExpand(label: string) {
@@ -109,26 +120,83 @@ export default function SummaryPage() {
       </div>
 
       {summary && (
-        <div className="grid grid-cols-3 gap-3 mb-5">
-          <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
-            <div className="text-xs text-stone-400 mb-1">Total expenses</div>
-            <div className="text-xl font-mono font-medium text-amber-700">${fmt$(summary.totals.expenses)}</div>
-            <div className="text-xs text-stone-400 mt-0.5">{summary.totals.transactions} transactions</div>
-          </div>
-          <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
-            <div className="text-xs text-stone-400 mb-1">Schedule C</div>
-            <div className="text-xl font-mono font-medium text-amber-700">
-              ${fmt$(summary.rows.filter(r => r.label?.startsWith("Sch C")).reduce((s, r) => s + r.expenses, 0))}
+        <div className="flex gap-3 mb-5">
+          {/* Metric cards */}
+          <div className="flex-1 grid grid-cols-3 gap-3">
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
+              <div className="text-xs text-stone-400 mb-1">Total expenses</div>
+              <div className="text-xl font-mono font-medium text-amber-700">${fmt$(summary.totals.expenses)}</div>
+              <div className="text-xs text-stone-400 mt-0.5">{summary.totals.transactions} transactions</div>
             </div>
-            <div className="text-xs text-stone-400 mt-0.5">business expenses</div>
-          </div>
-          <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
-            <div className="text-xs text-stone-400 mb-1">Schedule A</div>
-            <div className="text-xl font-mono font-medium text-green-700">
-              ${fmt$(summary.rows.filter(r => r.label?.startsWith("Sch A")).reduce((s, r) => s + r.expenses, 0))}
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
+              <div className="text-xs text-stone-400 mb-1">Schedule C</div>
+              <div className="text-xl font-mono font-medium text-amber-700">
+                ${fmt$(summary.rows.filter(r => r.label?.startsWith("Sch C")).reduce((s, r) => s + r.expenses, 0))}
+              </div>
+              <div className="text-xs text-stone-400 mt-0.5">business expenses</div>
             </div>
-            <div className="text-xs text-stone-400 mt-0.5">itemized deductions</div>
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
+              <div className="text-xs text-stone-400 mb-1">Schedule A</div>
+              <div className="text-xl font-mono font-medium text-green-700">
+                ${fmt$(summary.rows.filter(r => r.label?.startsWith("Sch A")).reduce((s, r) => s + r.expenses, 0))}
+              </div>
+              <div className="text-xs text-stone-400 mt-0.5">itemized deductions</div>
+            </div>
           </div>
+
+          {/* Classification pie chart */}
+          {classifyStatus && classifyStatus.total > 0 && (() => {
+            const { total: t, classified: c, needs_review: nr } = classifyStatus;
+            const other = Math.max(0, t - c - nr);
+            const slices = [
+              { label: "Classified", count: c, color: "#d97706" },
+              { label: "Needs Review", count: nr, color: "#ef4444" },
+              { label: "Other", count: other, color: "#d6d3d1" },
+            ].filter(s => s.count > 0);
+
+            let cumAngle = 0;
+            const paths = slices.map(s => {
+              const angle = (s.count / t) * 360;
+              const startAngle = cumAngle;
+              cumAngle += angle;
+              const rad = (deg: number) => ((deg - 90) * Math.PI) / 180;
+              const x1 = 50 + 35 * Math.cos(rad(startAngle));
+              const y1 = 50 + 35 * Math.sin(rad(startAngle));
+              const x2 = 50 + 35 * Math.cos(rad(startAngle + angle));
+              const y2 = 50 + 35 * Math.sin(rad(startAngle + angle));
+              const large = angle > 180 ? 1 : 0;
+              const d = angle >= 359.9
+                ? `M50,15 A35,35 0 1,1 49.99,15 Z`
+                : `M50,50 L${x1.toFixed(2)},${y1.toFixed(2)} A35,35 0 ${large},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z`;
+              return { d, color: s.color };
+            });
+
+            return (
+              <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 w-44 flex-shrink-0">
+                <div className="text-xs text-stone-400 mb-2 text-center">Classification</div>
+                <div className="relative w-20 h-20 mx-auto mb-2">
+                  <svg viewBox="0 0 100 100" className="w-full h-full">
+                    {paths.map((p, i) => (
+                      <path key={i} d={p.d} fill={p.color} opacity="0.85" />
+                    ))}
+                    <circle cx="50" cy="50" r="18" fill="white" />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xs font-bold text-stone-700">{t}</span>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  {slices.map(s => (
+                    <div key={s.label} className="flex items-center gap-1.5 text-xs">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                      <span className="text-stone-500">{s.label}</span>
+                      <span className="ml-auto font-mono text-stone-600">{s.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
