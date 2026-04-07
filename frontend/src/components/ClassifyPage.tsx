@@ -1,138 +1,24 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useEffect } from "react";
 import { useSession } from "../App";
-import { useToolCall } from "../hooks/useMCP";
+import { useClassify } from "../hooks/useClassify";
 import DonutChart from "./DonutChart";
-
-interface ClassifyResult {
-  status: string;
-  classified_this_batch?: number;
-  remaining?: number;
-  total_remaining_before?: number;
-  errors?: string[];
-  message?: string;
-}
-
-interface StatusResult {
-  session_id: string;
-  status: string;
-  total: number;
-  classified: number;
-  needs_review: number;
-  job_classified?: number;
-  job_errors?: string[];
-  recent_updates: { id: string; category: string; subcategory: string }[];
-}
-
-type Phase = "idle" | "running" | "paused" | "complete" | "error";
 
 export default function ClassifyPage() {
   const { sessionId, npub } = useSession();
+  const { state, classify, pause, resume, refreshCounts } = useClassify(sessionId, npub);
 
-  const classifyTool = useToolCall<ClassifyResult>("classify_session");
-  const stopTool = useToolCall("stop_classification");
-  const statusTool = useToolCall<StatusResult>("check_classification_status");
-
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [status, setStatus] = useState<StatusResult | null>(null);
-  const [errors, setErrors] = useState<string[]>([]);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const pollStatus = useCallback(async () => {
-    if (!sessionId) return;
-    try {
-      const data = await statusTool.invoke({ session_id: sessionId, npub });
-      if (data) {
-        setStatus(data);
-        // Sync phase from server job status
-        if (data.status === "classifying") {
-          setPhase("running");
-        } else if (data.status === "complete") {
-          setPhase("complete");
-          stopPolling();
-        } else if (data.status === "paused") {
-          setPhase("paused");
-          stopPolling();
-        } else if (data.status === "error") {
-          setPhase("error");
-          if (data.job_errors?.length) setErrors(data.job_errors);
-          stopPolling();
-        }
-      }
-    } catch {
-      // Ignore poll failures
-    }
-  }, [sessionId, npub]);
-
-  function startPolling() {
-    stopPolling();
-    pollRef.current = setInterval(pollStatus, 4000);
-  }
-
-  function stopPolling() {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }
-
-  useEffect(() => {
-    if (sessionId) pollStatus();
-    return () => stopPolling();
-  }, [sessionId, pollStatus]);
-
-  async function handleStart(reclassifyAll = false) {
-    if (!sessionId) return;
-    setPhase("running");
-    setErrors([]);
-
-    const result = await classifyTool.invoke({
-      session_id: sessionId,
-      npub,
-      ...(reclassifyAll ? { reclassify_edited: true } : {}),
-    });
-
-    if (result?.status === "started" || result?.status === "running") {
-      // Start polling for progress
-      startPolling();
-    } else if (result?.status === "complete") {
-      setPhase("complete");
-      await pollStatus();
-    } else {
-      // Error or already complete
-      await pollStatus();
-    }
-  }
-
-  async function handlePause() {
-    stopPolling();
-    await stopTool.invoke({ session_id: sessionId, npub });
-    setPhase("paused");
-    await pollStatus();
-  }
-
-  function handleResume() {
-    handleStart(false);
-  }
-
-  // Derived values
-  const total = status?.total ?? 0;
-  const classified = status?.classified ?? 0;
-  const needsReview = status?.needs_review ?? 0;
+  const { phase, total, classified, errors, recentUpdates } = state;
+  const needsReview = Math.max(0, total - classified);
   const pct = total > 0 ? Math.round((classified / total) * 100) : 0;
+
+  // Fetch counts on mount
+  useEffect(() => {
+    if (sessionId) refreshCounts();
+  }, [sessionId, refreshCounts]);
 
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-xl font-semibold mb-6 text-stone-800">Classification</h1>
-
-      {statusTool.error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-xs text-red-700">
-          Status: {statusTool.error}
-        </div>
-      )}
-
-      {statusTool.loading && !status && (
-        <div className="text-xs text-stone-400 mb-4">Loading classification status…</div>
-      )}
 
       {/* Status card */}
       <div className="bg-white border border-stone-200 rounded-xl p-6 mb-6">
@@ -151,7 +37,7 @@ export default function ClassifyPage() {
                 <div className="text-lg font-mono font-semibold text-amber-700">{classified}</div>
               </div>
               <div>
-                <div className="text-xs text-stone-400">Needs Review</div>
+                <div className="text-xs text-stone-400">Unclassified</div>
                 <div className="text-lg font-mono font-semibold text-red-500">{needsReview}</div>
               </div>
             </div>
@@ -185,7 +71,7 @@ export default function ClassifyPage() {
               Run Claude AI Classification
             </div>
             <p className="text-xs text-stone-500 mb-3">
-              Sends unclassified transactions to Claude for categorization.
+              Classifies unclassified transactions using Claude directly from your browser.
               Your manual edits are preserved.
             </p>
 
@@ -193,11 +79,10 @@ export default function ClassifyPage() {
               <div className="flex flex-wrap items-center gap-3">
                 {needsReview > 0 && (
                   <button
-                    onClick={() => handleStart(false)}
-                    disabled={classifyTool.loading}
-                    className="bg-amber-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors"
+                    onClick={() => classify(false)}
+                    className="bg-amber-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-amber-500 transition-colors"
                   >
-                    {classifyTool.loading ? "Starting\u2026" : `Classify ${needsReview} Unreviewed`}
+                    Classify {needsReview} Unclassified
                   </button>
                 )}
                 {needsReview === 0 && (
@@ -213,11 +98,10 @@ export default function ClassifyPage() {
                       `This re-runs Claude AI on every transaction, including previously classified ` +
                       `and manually edited ones. Use this when the classifier has been improved.`
                     )) {
-                      handleStart(true);
+                      classify(true);
                     }
                   }}
-                  disabled={classifyTool.loading}
-                  className="text-xs border border-amber-300 text-amber-700 px-4 py-2 rounded-lg hover:bg-amber-50 disabled:opacity-40 transition-colors"
+                  className="text-xs border border-amber-300 text-amber-700 px-4 py-2 rounded-lg hover:bg-amber-50 transition-colors"
                 >
                   Reclassify All ({total})
                 </button>
@@ -230,7 +114,7 @@ export default function ClassifyPage() {
 
             {phase === "running" && (
               <button
-                onClick={handlePause}
+                onClick={pause}
                 className="bg-stone-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-stone-500 transition-colors"
               >
                 Pause Classification
@@ -240,7 +124,7 @@ export default function ClassifyPage() {
             {phase === "paused" && (
               <div className="space-y-2">
                 <button
-                  onClick={handleResume}
+                  onClick={resume}
                   className="bg-amber-600 text-white text-sm px-6 py-2.5 rounded-lg hover:bg-amber-500 transition-colors"
                 >
                   Resume Classification
@@ -248,23 +132,21 @@ export default function ClassifyPage() {
                 <div className="text-xs text-stone-400">Paused at {pct}%</div>
               </div>
             )}
-
           </div>
 
-          {/* Right: Update stats */}
+          {/* Right: Refresh stats */}
           <div className="border-l border-stone-100 pl-6">
             <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">
-              Update Stats
+              Refresh Stats
             </div>
             <p className="text-xs text-stone-500 mb-3">
               Refresh the counts and chart above.
             </p>
             <button
-              onClick={pollStatus}
-              disabled={statusTool.loading}
+              onClick={refreshCounts}
               className="text-xs text-stone-500 hover:text-stone-700 border border-stone-200 px-3 py-1.5 rounded-lg"
             >
-              {statusTool.loading ? "Updating\u2026" : "Update Stats"}
+              Refresh Stats
             </button>
           </div>
         </div>
@@ -283,15 +165,15 @@ export default function ClassifyPage() {
       )}
 
       {/* Recent updates */}
-      {status?.recent_updates && status.recent_updates.length > 0 && (
+      {recentUpdates.length > 0 && (
         <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 bg-stone-50 text-xs font-semibold text-stone-400 uppercase tracking-wider">
             Recently classified
           </div>
           <div className="divide-y divide-stone-100">
-            {status.recent_updates.slice(0, 20).map((u) => (
+            {recentUpdates.slice(0, 20).map((u) => (
               <div key={u.id} className="px-4 py-2 flex items-center gap-3 text-xs">
-                <span className="font-mono text-stone-400 truncate max-w-32">{u.id}</span>
+                <span className="font-mono text-stone-400 truncate max-w-32">{u.merchant || u.id}</span>
                 <span className="text-amber-700 font-medium">{u.category}</span>
                 {u.subcategory && u.subcategory !== u.category && (
                   <span className="text-stone-400">{u.subcategory}</span>
@@ -299,12 +181,6 @@ export default function ClassifyPage() {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {classifyTool.error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mt-4 text-sm text-red-700 break-all">
-          {classifyTool.error}
         </div>
       )}
     </div>

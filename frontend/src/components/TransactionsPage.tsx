@@ -9,6 +9,7 @@ interface Transaction {
   id: string;
   date: string;
   description: string;
+  raw_description: string;
   amount: number;
   account: string;
   format: string;
@@ -20,9 +21,8 @@ interface Transaction {
   confidence: string | null;
   reason: string | null;
   merchant: string | null;
-  edited: boolean;
-  can_revert: boolean;
-  paired_id: string | null;
+  classified_by: string | null;
+  classified: boolean;
   irs_line: string | null;
 }
 
@@ -32,7 +32,7 @@ interface TxResult {
 }
 
 const CATEGORIES = [
-  "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Needs Review",
+  "Schedule C", "Schedule A", "Internal Transfer", "Personal",
 ];
 const SCHED_C_SUBS = [
   "Advertising & Marketing", "Business Meals (50%)", "Business Software & Subscriptions",
@@ -62,14 +62,13 @@ const CAT_SUBS: Record<string, string[]> = {
   "Schedule A": SCHED_A_SUBS,
   "Internal Transfer": TRANSFER_SUBS,
   "Personal": PERSONAL_SUBS,
-  "Needs Review": ["Needs Review"],
 };
 const CAT_COLOR: Record<string, string> = {
   "Schedule C": "text-amber-700",
   "Schedule A": "text-green-700",
   "Internal Transfer": "text-blue-600",
   "Personal": "text-stone-400",
-  "Needs Review": "text-red-500",
+  "Unclassified": "text-red-500",
 };
 
 export default function TransactionsPage() {
@@ -77,8 +76,8 @@ export default function TransactionsPage() {
   const [searchParams] = useSearchParams();
 
   const txTool = useToolCall<TxResult>("get_transactions");
-  const overrideTool = useToolCall("override_transaction");
-  const revertTool = useToolCall("revert_transaction");
+  const saveClassTool = useToolCall<{ saved: number }>("save_classifications");
+  const deleteClassTool = useToolCall("delete_classification");
   const saveRuleTool = useToolCall("save_rule");
   const applyRulesTool = useToolCall<{ updated: number }>("apply_rules");
 
@@ -118,8 +117,8 @@ export default function TransactionsPage() {
         offset: isGrouped ? 0 : off,
         npub,
       };
-      if (cat === "Needs Review") {
-        args.needs_review_only = true;
+      if (cat === "Unclassified") {
+        args.unclassified_only = true;
       } else if (cat !== "all") {
         args.category = cat;
       }
@@ -141,27 +140,30 @@ export default function TransactionsPage() {
 
   function openEdit(t: Transaction) {
     setSelected(t);
-    setEditCat(t.category ?? "Needs Review");
+    setEditCat(t.category ?? "Personal");
     setEditSub(t.subcategory ?? "");
   }
 
   async function saveOverride() {
     if (!selected || !sessionId) return;
-    await overrideTool.invoke({
+    await saveClassTool.invoke({
       session_id: sessionId,
-      transaction_id: selected.id,
-      category: editCat,
-      subcategory: editSub,
+      classifications: JSON.stringify([{
+        id: selected.id,
+        category: editCat,
+        subcategory: editSub,
+        classified_by: "manual",
+      }]),
       npub,
     });
 
-    // Extract a keyword from the description for the rule suggestion
-    const desc = selected.merchant ?? selected.description;
+    // Build a regex pattern from the description for the rule suggestion
+    const desc = selected.merchant ?? selected.raw_description ?? selected.description;
     const words = desc.split(/\s+/).filter(w => w.length > 2);
-    const keyword = words.slice(0, 2).join(" ").toLowerCase();
+    const pattern = words.slice(0, 2).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
 
     setRulePrompt({
-      keyword,
+      keyword: pattern,
       category: editCat,
       subcategory: editSub,
       description: desc,
@@ -172,14 +174,10 @@ export default function TransactionsPage() {
 
   async function handleCreateRule() {
     if (!rulePrompt || !sessionId) return;
-    const ruleType = rulePrompt.category === "Schedule C" ? "scheduleC"
-      : rulePrompt.category === "Schedule A" ? "scheduleA"
-      : rulePrompt.category === "Internal Transfer" ? "transfer"
-      : "scheduleC"; // default
 
     await saveRuleTool.invoke({
-      rule_type: ruleType,
-      keyword: rulePrompt.keyword,
+      description_pattern: rulePrompt.keyword,
+      category: rulePrompt.category,
       subcategory: rulePrompt.subcategory,
       session_id: sessionId,
       npub,
@@ -208,8 +206,8 @@ export default function TransactionsPage() {
 
   async function revert() {
     if (!selected || !sessionId) return;
-    if (!confirm("Revert to original classification?")) return;
-    await revertTool.invoke({
+    if (!confirm("Remove classification? Transaction will become unclassified.")) return;
+    await deleteClassTool.invoke({
       session_id: sessionId,
       transaction_id: selected.id,
       npub,
@@ -310,19 +308,20 @@ export default function TransactionsPage() {
       sortValue: t => t.category ?? "zzz",
       render: t => (
         <>
-          <span className={`text-xs font-medium ${CAT_COLOR[t.category ?? "Needs Review"] ?? "text-stone-400"}`}>
+          <span className={`text-xs font-medium ${CAT_COLOR[t.category ?? "Unclassified"] ?? "text-stone-400"}`}>
             {t.category ?? "\u2014"}
           </span>
           {t.subcategory && t.subcategory !== t.category && (
             <div className="text-xs text-stone-400 truncate max-w-32">{t.subcategory}</div>
           )}
-          {t.edited && <span className="text-xs text-blue-400 ml-1">edited</span>}
+          {t.classified_by === "manual" && <span className="text-xs text-blue-400 ml-1">manual</span>}
+          {t.classified_by === "rule" && <span className="text-xs text-purple-400 ml-1">rule</span>}
         </>
       ),
     },
   ], []);
 
-  const filters = ["all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Needs Review"];
+  const filters = ["all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Unclassified"];
 
   return (
     <div className="flex gap-4">
@@ -479,13 +478,13 @@ export default function TransactionsPage() {
               <div className="flex gap-2">
                 <button
                   onClick={saveOverride}
-                  disabled={overrideTool.loading}
+                  disabled={saveClassTool.loading}
                   className="flex-1 bg-stone-900 text-white text-xs py-1.5 rounded-lg hover:bg-stone-700 disabled:opacity-40"
                 >
-                  {overrideTool.loading ? "Saving\u2026" : "Save"}
+                  {saveClassTool.loading ? "Saving\u2026" : "Save"}
                 </button>
-                {selected.can_revert && (
-                  <button onClick={revert} className="text-xs border border-stone-200 px-3 py-1.5 rounded-lg text-stone-400 hover:text-red-500 hover:border-red-200">&larrhk;</button>
+                {selected.classified && (
+                  <button onClick={revert} className="text-xs border border-stone-200 px-3 py-1.5 rounded-lg text-stone-400 hover:text-red-500 hover:border-red-200" title="Remove classification">&larrhk;</button>
                 )}
               </div>
               <button
@@ -513,8 +512,8 @@ export default function TransactionsPage() {
                   {!ruleApplied && (
                     <>
                       <p className="text-xs text-stone-500 mb-2">
-                        Apply <strong>{rulePrompt.subcategory}</strong> to all
-                        transactions matching:
+                        Apply <strong>{rulePrompt.category} / {rulePrompt.subcategory}</strong> to
+                        transactions matching regex:
                       </p>
                       <input
                         className="w-full text-xs font-mono border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 mb-2"
@@ -541,7 +540,7 @@ export default function TransactionsPage() {
                   {ruleApplied === "saved" && (
                     <div className="space-y-2">
                       <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                        Rule saved: &ldquo;{rulePrompt.keyword}&rdquo; &rarr; {rulePrompt.subcategory}
+                        Rule saved: <span className="font-mono">/{rulePrompt.keyword}/</span> &rarr; {rulePrompt.category} / {rulePrompt.subcategory}
                       </div>
                       <div className="flex gap-2">
                         <button
