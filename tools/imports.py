@@ -172,16 +172,9 @@ def parse_csv(content: str, filename: str) -> tuple[list[dict], dict]:
 
 
 def _dedup_usbank(rows: list[dict]) -> list[dict]:
-    """Remove US Bank duplicate debit card / checking entries.
-
-    US Bank CSVs contain both a checking account debit and a debit card
-    transaction for the same purchase — same date, same amount, different
-    descriptions. We group by (date, amount) and keep the entry with the
-    longest description (usually more detailed).
-    """
+    """Remove US Bank duplicate debit card / checking entries."""
     from collections import defaultdict
 
-    # Group by (date, amount)
     groups: dict[str, list[int]] = defaultdict(list)
     for i, row in enumerate(rows):
         key = f"{row['date']}|{row['amount']}"
@@ -191,7 +184,6 @@ def _dedup_usbank(rows: list[dict]) -> list[dict]:
     for key, indices in groups.items():
         if len(indices) < 2:
             continue
-        # Among entries with same date+amount, keep the longest description
         best = max(indices, key=lambda i: len(rows[i].get("description", "")))
         for i in indices:
             if i != best:
@@ -205,48 +197,27 @@ def _dedup_usbank(rows: list[dict]) -> list[dict]:
 
 # ── Merge into Neon ───────────────────────────────────────────────────────────
 
-async def _merge_transactions(session_id: str, incoming: list[dict]) -> dict:
-    """Merge parsed transactions into the DB."""
+async def _merge_raw_transactions(session_id: str, incoming: list[dict]) -> dict:
+    """Merge parsed transactions into raw_transactions (upsert source data)."""
     if not incoming:
-        return {"added": 0, "updated": 0, "preserved": 0}
+        return {"added": 0, "skipped": 0}
 
     ids = [r["id"] for r in incoming]
     existing_rows = await fetch(
-        """
-        SELECT id, edited, category, subcategory, confidence, reason
-        FROM transactions WHERE session_id = $1 AND id = ANY($2)
-        """,
+        "SELECT id FROM raw_transactions WHERE session_id = $1 AND id = ANY($2)",
         session_id, ids,
     )
-    existing = {r["id"]: r for r in existing_rows}
+    existing_ids = {r["id"] for r in existing_rows}
 
-    to_insert, to_update_full, to_update_original = [], [], []
-    stats = {"added": 0, "updated": 0, "preserved": 0}
-
-    for row in incoming:
-        ex = existing.get(row["id"])
-        if ex is None:
-            to_insert.append(row)
-            stats["added"] += 1
-        elif ex.get("edited"):
-            to_update_original.append(row)
-            stats["preserved"] += 1
-        else:
-            to_update_full.append(row)
-            stats["updated"] += 1
+    to_insert = [r for r in incoming if r["id"] not in existing_ids]
 
     if to_insert:
         await executemany(
             """
-            INSERT INTO transactions (
+            INSERT INTO raw_transactions (
                 id, session_id, date, description, amount, account, format,
-                hint1, hint2, src_id, ambiguous,
-                original_category, original_subcategory,
-                original_confidence, original_reason
-            ) VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
-                NULL,NULL,NULL,NULL
-            )
+                hint1, hint2, src_id, ambiguous
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
             ON CONFLICT (id, session_id) DO NOTHING
             """,
             [
@@ -259,38 +230,7 @@ async def _merge_transactions(session_id: str, incoming: list[dict]) -> dict:
             ],
         )
 
-    if to_update_full:
-        await executemany(
-            """
-            UPDATE transactions SET
-                date=$3, description=$4, amount=$5, account=$6,
-                format=$7, hint1=$8, hint2=$9, src_id=$10,
-                ambiguous=$11, updated_at=NOW()
-            WHERE id=$1 AND session_id=$2
-            """,
-            [
-                (
-                    r["id"], session_id, r["date"], r["description"],
-                    r["amount"], r["account"], r["format"],
-                    r["hint1"], r["hint2"], r["src_id"], r["ambiguous"],
-                )
-                for r in to_update_full
-            ],
-        )
-
-    if to_update_original:
-        await executemany(
-            """
-            UPDATE transactions SET
-                original_category=NULL, original_subcategory=NULL,
-                original_confidence=NULL, original_reason=NULL,
-                updated_at=NOW()
-            WHERE id=$1 AND session_id=$2
-            """,
-            [(r["id"], session_id) for r in to_update_original],
-        )
-
-    return stats
+    return {"added": len(to_insert), "skipped": len(existing_ids)}
 
 
 # ── MCP tool implementations ─────────────────────────────────────────────────
@@ -308,10 +248,10 @@ async def import_csv(
             "filename": filename,
         }
 
-    stats = await _merge_transactions(session_id, rows)
+    stats = await _merge_raw_transactions(session_id, rows)
 
     total = await fetchrow(
-        "SELECT COUNT(*) as n FROM transactions WHERE session_id=$1", session_id
+        "SELECT COUNT(*) as n FROM raw_transactions WHERE session_id=$1", session_id
     )
 
     return {
@@ -320,8 +260,7 @@ async def import_csv(
         "parsed": len(rows),
         "deduped": meta.get("deduped", 0),
         "added": stats["added"],
-        "updated": stats["updated"],
-        "preserved_edits": stats["preserved"],
+        "skipped": stats["skipped"],
         "ambiguous": sum(1 for r in rows if r["ambiguous"]),
         "total_in_session": int(total["n"]) if total else 0,
     }
@@ -336,7 +275,7 @@ async def get_import_stats(session_id: str) -> dict:
                MIN(date) as earliest,
                MAX(date) as latest,
                SUM(CASE WHEN ambiguous THEN 1 ELSE 0 END) as ambiguous_count
-        FROM transactions WHERE session_id=$1
+        FROM raw_transactions WHERE session_id=$1
         GROUP BY format, account
         ORDER BY format, account
         """,

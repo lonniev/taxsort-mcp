@@ -34,18 +34,25 @@ async def get_session(session_id: str) -> dict:
 
     counts = await fetch(
         """
-        SELECT category, COUNT(*) as n,
-               SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses,
-               SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) as income
-        FROM transactions
-        WHERE session_id = $1
-        GROUP BY category
+        SELECT c.category, COUNT(*) as n,
+               SUM(CASE WHEN r.amount < 0 THEN ABS(r.amount) ELSE 0 END) as expenses,
+               SUM(CASE WHEN r.amount >= 0 THEN r.amount ELSE 0 END) as income
+        FROM raw_transactions r
+        JOIN classifications c
+          ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
+        WHERE r.session_id = $1
+        GROUP BY c.category
         """,
         session_id,
     )
 
     total = await fetchrow(
-        "SELECT COUNT(*) as n FROM transactions WHERE session_id = $1",
+        "SELECT COUNT(*) as n FROM raw_transactions WHERE session_id = $1",
+        session_id,
+    )
+
+    classified = await fetchrow(
+        "SELECT COUNT(*) as n FROM classifications WHERE session_id = $1",
         session_id,
     )
 
@@ -56,6 +63,7 @@ async def get_session(session_id: str) -> dict:
         "created_at": str(row.get("created_at", "")),
         "updated_at": str(row.get("updated_at", "")),
         "total_transactions": int(total["n"]) if total else 0,
+        "classified": int(classified["n"]) if classified else 0,
         "by_category": [
             {
                 "category": str(r.get("category") or "Unclassified"),
@@ -73,9 +81,9 @@ async def list_sessions(owner_npub: str) -> dict:
     rows = await fetch(
         """
         SELECT s.id, s.label, s.created_at, s.updated_at,
-               COUNT(t.id) as tx_count
+               COUNT(r.id) as tx_count
         FROM sessions s
-        LEFT JOIN transactions t ON t.session_id = s.id
+        LEFT JOIN raw_transactions r ON r.session_id = s.id
         WHERE s.owner_npub = $1
         GROUP BY s.id, s.label, s.created_at, s.updated_at
         ORDER BY s.updated_at DESC

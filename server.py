@@ -1,9 +1,11 @@
 """taxsort-mcp — TaxSort Tollbooth MCP Server.
 
-A monetized MCP server for personal tax transaction classification.
-Standard DPYC tools (check_balance, purchase_credits, Secure Courier,
-Oracle, pricing, constraints) are provided by ``register_standard_tools``
-from the tollbooth-dpyc wheel. Only domain-specific tools are defined here.
+A monetized MCP server for personal tax transaction storage.
+The BE manages raw source data and classifications; AI processing
+happens client-side. Standard DPYC tools (check_balance,
+purchase_credits, Secure Courier, Oracle, pricing, constraints)
+are provided by ``register_standard_tools`` from the tollbooth-dpyc
+wheel. Only domain-specific tools are defined here.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.14.0"
+__version__ = "0.15.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -31,7 +33,7 @@ __version__ = "0.14.0"
 mcp = FastMCP(
     "taxsort-mcp",
     instructions=(
-        "TaxSort MCP — Personal tax transaction classifier, monetized "
+        "TaxSort MCP — Personal tax transaction storage, monetized "
         "via Tollbooth DPYC Bitcoin Lightning micropayments.\n\n"
         "## Onboarding\n"
         "1. Call taxsort_verify_npub(npub=...) to start identity verification\n"
@@ -39,14 +41,13 @@ mcp = FastMCP(
         "3. Call taxsort_check_verification(npub=...) to complete verification\n\n"
         "## Workflow\n"
         "1. taxsort_create_session() → get a session_id\n"
-        "2. taxsort_import_csv(session_id, content, filename) → parse and store\n"
-        "3. taxsort_classify_session(session_id) → AI classifies transactions\n"
-        "4. taxsort_check_classification_status(session_id) → poll progress\n"
-        "5. taxsort_get_transactions(session_id) → review results\n"
-        "6. taxsort_override_transaction() → correct misclassifications\n"
-        "7. taxsort_get_summary(session_id, group_by='taxline') → IRS line totals\n"
-        "8. taxsort_detect_subscriptions(session_id) → find recurring charges\n"
-        "9. taxsort_create_share_token(session_id) → share with spouse\n\n"
+        "2. taxsort_import_csv(session_id, content, filename) → parse and store raw transactions\n"
+        "3. taxsort_get_transactions(session_id, unclassified_only=true) → fetch pages for FE classification\n"
+        "4. taxsort_save_classifications(session_id, classifications=[...]) → write back AI/manual results\n"
+        "5. taxsort_get_transactions(session_id) → review classified results\n"
+        "6. taxsort_get_summary(session_id, group_by='taxline') → IRS line totals\n"
+        "7. taxsort_detect_subscriptions(session_id) → find recurring charges\n"
+        "8. taxsort_create_share_token(session_id) → share with spouse\n\n"
         "## Pricing\n"
         "Tool prices are set dynamically by the operator's pricing model. "
         "Use `taxsort_check_price` to preview costs."
@@ -69,7 +70,6 @@ NpubField = Annotated[
 # ---------------------------------------------------------------------------
 
 _DOMAIN_TOOLS = [
-    # All free for smoke testing — will set real tiers + prices later
     ToolIdentity(capability="verify_npub", category="free", intent="Start npub verification via Secure Courier"),
     ToolIdentity(capability="check_verification", category="free", intent="Check if npub verification completed"),
     ToolIdentity(capability="create_session", category="free", intent="Create a tax session"),
@@ -78,19 +78,16 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="get_rules", category="free", intent="Get classification rules"),
     ToolIdentity(capability="get_import_stats", category="free", intent="Get import statistics"),
     ToolIdentity(capability="load_share_token", category="free", intent="Load a shared session"),
-    ToolIdentity(capability="check_classification_status", category="free", intent="Poll classification progress"),
     ToolIdentity(capability="get_transactions", category="free", intent="Get transactions with filters"),
     ToolIdentity(capability="get_summary", category="free", intent="Get grouped tax summary"),
     ToolIdentity(capability="detect_subscriptions", category="free", intent="Detect recurring subscriptions"),
     ToolIdentity(capability="import_csv", category="free", intent="Import CSV transactions"),
-    ToolIdentity(capability="override_transaction", category="free", intent="Override transaction classification"),
-    ToolIdentity(capability="revert_transaction", category="free", intent="Revert to original classification"),
+    ToolIdentity(capability="save_classifications", category="free", intent="Bulk write classifications from FE"),
+    ToolIdentity(capability="delete_classification", category="free", intent="Remove a classification (revert to unclassified)"),
     ToolIdentity(capability="save_rule", category="free", intent="Save a classification rule"),
     ToolIdentity(capability="delete_rule", category="free", intent="Delete a classification rule"),
-    ToolIdentity(capability="apply_rules", category="free", intent="Apply rules to transactions"),
+    ToolIdentity(capability="apply_rules", category="free", intent="Apply rules to unclassified transactions"),
     ToolIdentity(capability="create_share_token", category="free", intent="Create a session share token"),
-    ToolIdentity(capability="classify_session", category="free", intent="Start background AI classification"),
-    ToolIdentity(capability="stop_classification", category="free", intent="Stop background classification"),
     ToolIdentity(capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
     ToolIdentity(capability="check_unlock", category="free", intent="Check if session unlock was approved"),
     ToolIdentity(capability="get_github_token", category="free", intent="Get GitHub token for issue reporting"),
@@ -193,7 +190,6 @@ async def verify_npub(
     The patron replies with any passphrase via their Nostr client.
     Then call check_verification to complete.
     """
-    # Use the standard Secure Courier to send the patron credential request
     courier = await runtime.courier()
     result = await courier.open_channel(
         service="taxsort-patron",
@@ -221,19 +217,13 @@ async def verify_npub(
 async def check_verification(
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Check if npub verification completed.
-
-    Picks up the signed Nostr DM reply and stores the proof.
-    The passphrase protects the patron's tax data.
-    """
+    """Check if npub verification completed."""
     from tools.verification import get_verification_status, store_verification
 
-    # Check if already verified
     existing = await get_verification_status(npub)
     if existing.get("verified"):
         return {**existing, "message": "Already verified."}
 
-    # Try to receive the patron's credential (passphrase)
     courier = await runtime.courier()
     result = await courier.receive(
         sender_npub=npub,
@@ -250,8 +240,6 @@ async def check_verification(
             ),
         }
 
-    # The patron replied — the signed DM proves npub ownership.
-    # Store verification. The passphrase is in the credential vault.
     try:
         creds = await runtime.load_patron_session(npub, service="taxsort-patron")
         passphrase = creds.get("passphrase", "") if creds else ""
@@ -336,47 +324,60 @@ async def get_transactions(
     subcategory: str = "",
     month: str = "",
     search: str = "",
-    needs_review_only: bool = False,
+    unclassified_only: bool = False,
     limit: int = 200,
     offset: int = 0,
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Get transactions for a session with optional filters."""
+    """Get transactions for a session with optional filters.
+
+    Returns raw transactions LEFT JOINed with their classifications.
+    Use unclassified_only=true to fetch pages of transactions needing
+    classification by the FE.
+    """
     from tools.transactions import get_transactions as _get_transactions
     return await _get_transactions(
         session_id=session_id, category=category, subcategory=subcategory,
         month=month, search=search,
-        needs_review_only=needs_review_only, limit=limit, offset=offset,
+        unclassified_only=unclassified_only, limit=limit, offset=offset,
     )
 
 
 @tool
-@runtime.paid_tool(capability_uuid("override_transaction"))
-async def override_transaction(
+@runtime.paid_tool(capability_uuid("save_classifications"))
+async def save_classifications(
     session_id: str,
-    transaction_id: str,
-    category: str,
-    subcategory: str,
+    classifications: str = "[]",
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Manually override a transaction's classification."""
-    from tools.transactions import override_transaction as _override_transaction
-    return await _override_transaction(
-        session_id=session_id, transaction_id=transaction_id,
-        category=category, subcategory=subcategory,
-    )
+    """Bulk write classifications from the FE.
+
+    classifications is a JSON array of objects, each with:
+      - id: raw_transaction_id
+      - category, subcategory (required)
+      - confidence, reason, merchant, description_override (optional)
+      - classified_by: 'ai' | 'rule' | 'manual' (default 'ai')
+    """
+    import json as _json
+    try:
+        items = _json.loads(classifications) if isinstance(classifications, str) else classifications
+    except _json.JSONDecodeError:
+        return {"error": "Invalid JSON in classifications parameter"}
+
+    from tools.transactions import save_classifications as _save
+    return await _save(session_id=session_id, classifications=items)
 
 
 @tool
-@runtime.paid_tool(capability_uuid("revert_transaction"))
-async def revert_transaction(
+@runtime.paid_tool(capability_uuid("delete_classification"))
+async def delete_classification(
     session_id: str,
     transaction_id: str,
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Revert a transaction to its original classification."""
-    from tools.transactions import revert_transaction as _revert_transaction
-    return await _revert_transaction(session_id=session_id, transaction_id=transaction_id)
+    """Remove a classification, reverting the transaction to unclassified."""
+    from tools.transactions import delete_classification as _delete
+    return await _delete(session_id=session_id, transaction_id=transaction_id)
 
 
 @tool
@@ -393,45 +394,6 @@ async def get_summary(
     return await _get_summary(
         session_id=session_id, group_by=group_by, scope=scope, month=month,
     )
-
-
-# ── Classification ────────────────────────────────────────────────────────
-
-@tool
-@runtime.paid_tool(capability_uuid("classify_session"))
-async def classify_session(
-    session_id: str,
-    reclassify_edited: bool = False,
-    npub: NpubField = "",
-) -> dict[str, Any]:
-    """Start background AI classification. Returns immediately."""
-    from tools.classify import classify_session as _classify_session
-    return await _classify_session(
-        session_id=session_id, owner_npub=npub,
-        reclassify_edited=reclassify_edited,
-    )
-
-
-@tool
-@runtime.paid_tool(capability_uuid("stop_classification"))
-async def stop_classification(
-    session_id: str,
-    npub: NpubField = "",
-) -> dict[str, Any]:
-    """Stop a running background classification."""
-    from tools.classify import stop_classification as _stop
-    return await _stop(session_id=session_id)
-
-
-@tool
-@runtime.paid_tool(capability_uuid("check_classification_status"))
-async def check_classification_status(
-    session_id: str,
-    npub: NpubField = "",
-) -> dict[str, Any]:
-    """Check classification progress for a session."""
-    from tools.classify import check_classification_status as _check_status
-    return await _check_status(session_id=session_id)
 
 
 # ── Subscriptions ─────────────────────────────────────────────────────────
@@ -463,28 +425,22 @@ async def get_rules(
 @tool
 @runtime.paid_tool(capability_uuid("save_rule"))
 async def save_rule(
-    description_pattern: str = "",
-    category: str = "",
-    subcategory: str = "",
+    description_pattern: str,
+    category: str,
+    subcategory: str,
     new_description: str = "",
     amount_operator: str = "",
     amount_value: float | None = None,
-    rule_type: str = "",
-    keyword: str = "",
-    note: str = "",
     session_id: str = "",
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Create or update a classification rule.
+    """Create a classification rule.
 
-    Enhanced rules (recommended): provide description_pattern (regex matched
-    case-insensitively against the transaction description), category, and
-    subcategory. Optionally add amount_operator (lt, lte, gt, gte, eq, neq)
-    and amount_value to filter by amount. When the compound constraint matches,
-    category, subcategory, and optionally description are overwritten.
-
-    Legacy rules: provide rule_type (scheduleC, scheduleA, transfer) and
-    keyword for simple substring matching.
+    Provide description_pattern (regex matched case-insensitively against
+    the transaction description), category, and subcategory. Optionally add
+    amount_operator (lt, lte, gt, gte, eq, neq) and amount_value to filter
+    by amount. When the compound constraint matches, category, subcategory,
+    and optionally description (new_description) are written.
     """
     from tools.rules import save_rule as _save_rule
     return await _save_rule(
@@ -496,9 +452,6 @@ async def save_rule(
         amount_operator=amount_operator,
         amount_value=amount_value,
         session_id=session_id,
-        rule_type=rule_type,
-        keyword=keyword,
-        note=note,
     )
 
 
@@ -519,7 +472,7 @@ async def apply_rules(
     session_id: str,
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Re-apply all rules to transactions in a session."""
+    """Apply rules to unclassified transactions in a session."""
     from tools.rules import apply_rules as _apply_rules
     return await _apply_rules(owner_npub=npub, session_id=session_id)
 
@@ -559,11 +512,7 @@ async def load_share_token(
 async def get_github_token(
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Get the GitHub token for creating issues in the taxsort-mcp repo.
-
-    Returns the operator's GitHub token so the frontend can talk to
-    GitHub's API directly. Token is scoped to issues only.
-    """
+    """Get the GitHub token for creating issues in the taxsort-mcp repo."""
     try:
         creds = await runtime.load_credentials(["github_token"])
         token = creds.get("github_token")
@@ -601,13 +550,7 @@ async def ask_advisor(
     history: str = "",
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Ask the Financial Advisor about using TaxSort.
-
-    Args:
-        question: Your question in natural language.
-        session_id: Current session for context (optional).
-        history: JSON array of previous turns [{role, text}, ...] (optional).
-    """
+    """Ask the Financial Advisor about using TaxSort."""
     import json as _json
     from tools.advisors import ask_advisor as _ask_advisor
     h = _json.loads(history) if history else []
@@ -622,13 +565,7 @@ async def ask_tax_researcher(
     history: str = "",
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Ask the Tax Code Researcher about IRS provisions.
-
-    Args:
-        question: Your tax code question (e.g. "Can I deduct home office internet?").
-        session_id: Current session for context (optional).
-        history: JSON array of previous turns [{role, text}, ...] (optional).
-    """
+    """Ask the Tax Code Researcher about IRS provisions."""
     import json as _json
     from tools.advisors import ask_tax_researcher as _ask_tax_researcher
     h = _json.loads(history) if history else []
@@ -642,17 +579,12 @@ async def ask_tax_researcher(
 async def request_unlock(
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Request a session unlock after timeout.
-
-    Sends a Nostr DM to the patron's npub asking them to reply
-    'Approve Unlock'. The patron replies via their Nostr client.
-    """
+    """Request a session unlock after timeout."""
     from tools.session_lock import request_unlock as _request_unlock
 
     dm_sent = False
     dm_error = None
 
-    # Try to send a Nostr DM via Secure Courier
     try:
         courier = await runtime.courier()
         await courier.open_channel(
@@ -681,10 +613,7 @@ async def check_unlock(
     response: str,
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Check if the unlock response is valid.
-
-    The patron must respond with 'Approve Unlock' (case-insensitive).
-    """
+    """Check if the unlock response is valid."""
     from tools.session_lock import check_unlock as _check_unlock
     return await _check_unlock(npub=npub, response=response)
 

@@ -22,10 +22,12 @@ async def _get_session_context(session_id: str) -> str:
         return "No session loaded."
 
     rows = await fetch(
-        "SELECT category, subcategory, COUNT(*) as n, "
-        "SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses "
-        "FROM transactions WHERE session_id = $1 AND category IS NOT NULL "
-        "GROUP BY category, subcategory ORDER BY expenses DESC LIMIT 20",
+        "SELECT c.category, c.subcategory, COUNT(*) as n, "
+        "SUM(CASE WHEN r.amount < 0 THEN ABS(r.amount) ELSE 0 END) as expenses "
+        "FROM raw_transactions r "
+        "JOIN classifications c ON c.raw_transaction_id = r.id AND c.session_id = r.session_id "
+        "WHERE r.session_id = $1 "
+        "GROUP BY c.category, c.subcategory ORDER BY expenses DESC LIMIT 20",
         session_id,
     )
     if not rows:

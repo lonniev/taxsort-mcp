@@ -10,12 +10,13 @@ CREATE TABLE IF NOT EXISTS sessions (
     updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS transactions (
+-- Immutable source data from CSV imports
+CREATE TABLE IF NOT EXISTS raw_transactions (
     id          TEXT NOT NULL,              -- stable content hash from CSV
     session_id  TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     PRIMARY KEY (id, session_id),
 
-    -- Core fields
+    -- Core fields (immutable after import)
     date        DATE NOT NULL,
     description TEXT NOT NULL,
     amount      NUMERIC(12,2) NOT NULL,
@@ -27,49 +28,50 @@ CREATE TABLE IF NOT EXISTS transactions (
     hint2       TEXT,                      -- bank detailed category
     src_id      TEXT,                      -- source-native transaction ID (e.g. PayPal TX ID)
 
-    -- Classification
-    category    TEXT,                      -- Schedule C / Schedule A / Internal Transfer / Personal / Needs Review
-    subcategory TEXT,
-    confidence  TEXT,                      -- high / medium / low
-    reason      TEXT,                      -- AI short reason
-    edited      BOOLEAN DEFAULT FALSE,     -- user manually overrode classification
     ambiguous   BOOLEAN DEFAULT FALSE,     -- indistinguishable duplicate in source CSV
-
-    -- Original CSV snapshot (for revert)
-    original_category    TEXT,
-    original_subcategory TEXT,
-    original_confidence  TEXT,
-    original_reason      TEXT,
-
-    -- Transfer pairing
-    paired_id   TEXT,                      -- id of the matching transfer leg
-
-    imported_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ DEFAULT NOW()
+    imported_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_transactions_session   ON transactions(session_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_date      ON transactions(session_id, date);
-CREATE INDEX IF NOT EXISTS idx_transactions_category  ON transactions(session_id, category);
-CREATE INDEX IF NOT EXISTS idx_transactions_needs_review ON transactions(session_id) WHERE category = 'Needs Review';
+CREATE INDEX IF NOT EXISTS idx_raw_tx_session ON raw_transactions(session_id);
+CREATE INDEX IF NOT EXISTS idx_raw_tx_date    ON raw_transactions(session_id, date);
 
+-- Mutable classification layer (written by FE or rules engine)
+CREATE TABLE IF NOT EXISTS classifications (
+    raw_transaction_id TEXT NOT NULL,
+    session_id         TEXT NOT NULL,
+    FOREIGN KEY (raw_transaction_id, session_id)
+        REFERENCES raw_transactions(id, session_id) ON DELETE CASCADE,
+    PRIMARY KEY (raw_transaction_id, session_id),
+
+    category            TEXT NOT NULL,       -- Schedule C / Schedule A / Internal Transfer / Personal
+    subcategory         TEXT NOT NULL,
+    confidence          TEXT,                -- high / medium / low
+    reason              TEXT,                -- short reason (max 8 words)
+    merchant            TEXT,                -- resolved merchant name
+    description_override TEXT,               -- cleaned-up description (NULL = use raw)
+
+    classified_by       TEXT NOT NULL DEFAULT 'ai',  -- ai / rule / manual
+    classified_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cls_session  ON classifications(session_id);
+CREATE INDEX IF NOT EXISTS idx_cls_category ON classifications(session_id, category);
+
+-- Classification rules (enhanced only — regex + amount filters)
 CREATE TABLE IF NOT EXISTS rules (
     id                  SERIAL PRIMARY KEY,
-    session_id          TEXT REFERENCES sessions(id) ON DELETE CASCADE,  -- NULL = global / all sessions
+    session_id          TEXT REFERENCES sessions(id) ON DELETE CASCADE,  -- NULL = global
     owner_npub          TEXT NOT NULL,
-    rule_type           TEXT,                       -- legacy: 'scheduleC', 'scheduleA', 'transfer'; NULL for enhanced rules
-    keyword             TEXT NOT NULL DEFAULT '',    -- legacy plain keyword match
-    subcategory         TEXT,
-    note                TEXT,
 
-    -- Enhanced rule fields (v2)
-    description_pattern TEXT,                       -- regex matched against description (case-insensitive)
-    amount_operator     TEXT,                       -- lt, lte, gt, gte, eq, neq
-    amount_value        NUMERIC(12,2),              -- amount threshold for comparison
-    category            TEXT,                       -- target category (Schedule C, Schedule A, Personal, Internal Transfer)
-    new_description     TEXT,                       -- replacement description when rule fires
+    description_pattern TEXT NOT NULL,       -- regex matched against description (case-insensitive)
+    amount_operator     TEXT,                -- lt, lte, gt, gte, eq, neq
+    amount_value        NUMERIC(12,2),       -- amount threshold
 
-    created_at  TIMESTAMPTZ DEFAULT NOW()
+    category            TEXT NOT NULL,       -- target category
+    subcategory         TEXT NOT NULL,       -- target subcategory
+    new_description     TEXT,                -- replacement description (NULL = keep original)
+
+    created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS share_tokens (
