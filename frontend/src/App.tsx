@@ -13,6 +13,8 @@ import FeedbackPage from "./components/FeedbackPage";
 import PrivacyPage from "./components/PrivacyPage";
 import SettingsPage from "./components/SettingsPage";
 import Nav from "./components/Nav";
+
+const APP_VERSION = __APP_VERSION__;
 import LockScreen from "./components/LockScreen";
 import { useToolCall } from "./hooks/useMCP";
 import DebugPanel from "./components/DebugPanel";
@@ -87,6 +89,7 @@ function StatusBanner() {
         <span>
           Connected to <strong>{status.service}</strong> v{status.version}
           {" "}&middot; tollbooth-dpyc v{status.tollbooth_dpyc_version}
+          {" "}&middot; FE v{APP_VERSION}
           {status.vault_configured === false && (
             <span className="text-amber-600 ml-2">(vault not yet configured)</span>
           )}
