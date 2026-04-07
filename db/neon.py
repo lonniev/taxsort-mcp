@@ -15,7 +15,8 @@ _vault: Any = None
 _schema_done: bool = False
 _DOMAIN_TABLES = {
     "sessions": "tax_sessions",
-    "transactions": "tax_transactions",
+    "raw_transactions": "tax_raw_transactions",
+    "classifications": "tax_classifications",
     "rules": "tax_rules",
     "tax_verifications": "tax_verifications",
     "tax_unlock_challenges": "tax_unlock_challenges",
@@ -44,12 +45,7 @@ async def _get_vault() -> Any:
 
 
 def _qualify(query: str) -> str:
-    """Replace bare domain table names with schema-qualified renamed versions.
-
-    Tool SQL uses 'sessions', 'transactions', etc. These get mapped to
-    'tax_sessions', 'tax_transactions' etc. with operator schema prefix
-    to avoid collisions with tollbooth's own 'transactions' table.
-    """
+    """Replace bare domain table names with schema-qualified renamed versions."""
     if not _vault:
         return query
     prefix = getattr(_vault, "_schema_prefix", "")
@@ -60,11 +56,7 @@ def _qualify(query: str) -> str:
 
 
 async def _ensure_domain_schema(vault: Any) -> None:
-    """Create domain tables in the operator's schema.
-
-    Uses tax_* prefixed names to avoid colliding with tollbooth's own
-    'transactions' table in the same schema.
-    """
+    """Create domain tables in the operator's schema."""
     t = vault._t
 
     stmts = [
@@ -75,7 +67,7 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "created_at TIMESTAMPTZ DEFAULT NOW(), "
         "updated_at TIMESTAMPTZ DEFAULT NOW())",
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_transactions')} ("
+        f"CREATE TABLE IF NOT EXISTS {t('tax_raw_transactions')} ("
         "id TEXT NOT NULL, "
         f"session_id TEXT NOT NULL REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
         "PRIMARY KEY (id, session_id), "
@@ -85,30 +77,41 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "account TEXT NOT NULL, "
         "format TEXT NOT NULL, "
         "hint1 TEXT, hint2 TEXT, src_id TEXT, "
-        "category TEXT, subcategory TEXT, confidence TEXT, reason TEXT, merchant TEXT, "
-        "edited BOOLEAN DEFAULT FALSE, ambiguous BOOLEAN DEFAULT FALSE, "
-        "original_category TEXT, original_subcategory TEXT, "
-        "original_confidence TEXT, original_reason TEXT, "
-        "paired_id TEXT, "
-        "imported_at TIMESTAMPTZ DEFAULT NOW(), "
-        "updated_at TIMESTAMPTZ DEFAULT NOW())",
+        "ambiguous BOOLEAN DEFAULT FALSE, "
+        "imported_at TIMESTAMPTZ DEFAULT NOW())",
 
-        f"CREATE INDEX IF NOT EXISTS idx_ttx_session ON {t('tax_transactions')}(session_id)",
-        f"CREATE INDEX IF NOT EXISTS idx_ttx_date ON {t('tax_transactions')}(session_id, date)",
-        f"CREATE INDEX IF NOT EXISTS idx_ttx_category ON {t('tax_transactions')}(session_id, category)",
-        f"CREATE INDEX IF NOT EXISTS idx_ttx_subcategory ON {t('tax_transactions')}(session_id, subcategory)",
+        f"CREATE INDEX IF NOT EXISTS idx_raw_tx_session ON {t('tax_raw_transactions')}(session_id)",
+        f"CREATE INDEX IF NOT EXISTS idx_raw_tx_date ON {t('tax_raw_transactions')}(session_id, date)",
 
-        # Migration: add merchant column if missing
-        f"ALTER TABLE {t('tax_transactions')} ADD COLUMN IF NOT EXISTS merchant TEXT",
+        f"CREATE TABLE IF NOT EXISTS {t('tax_classifications')} ("
+        "raw_transaction_id TEXT NOT NULL, "
+        "session_id TEXT NOT NULL, "
+        f"FOREIGN KEY (raw_transaction_id, session_id) "
+        f"REFERENCES {t('tax_raw_transactions')}(id, session_id) ON DELETE CASCADE, "
+        "PRIMARY KEY (raw_transaction_id, session_id), "
+        "category TEXT NOT NULL, "
+        "subcategory TEXT NOT NULL, "
+        "confidence TEXT, "
+        "reason TEXT, "
+        "merchant TEXT, "
+        "description_override TEXT, "
+        "classified_by TEXT NOT NULL DEFAULT 'ai', "
+        "classified_at TIMESTAMPTZ DEFAULT NOW())",
+
+        f"CREATE INDEX IF NOT EXISTS idx_cls_session ON {t('tax_classifications')}(session_id)",
+        f"CREATE INDEX IF NOT EXISTS idx_cls_category ON {t('tax_classifications')}(session_id, category)",
 
         f"CREATE TABLE IF NOT EXISTS {t('tax_rules')} ("
         "id SERIAL PRIMARY KEY, "
         f"session_id TEXT REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
         "owner_npub TEXT NOT NULL, "
-        "rule_type TEXT NOT NULL CHECK (rule_type IN ('scheduleC', 'scheduleA', 'transfer')), "
-        "keyword TEXT NOT NULL, subcategory TEXT, note TEXT, "
-        "created_at TIMESTAMPTZ DEFAULT NOW(), "
-        "UNIQUE (owner_npub, rule_type, keyword))",
+        "description_pattern TEXT NOT NULL, "
+        "amount_operator TEXT, "
+        "amount_value NUMERIC(12,2), "
+        "category TEXT NOT NULL, "
+        "subcategory TEXT NOT NULL, "
+        "new_description TEXT, "
+        "created_at TIMESTAMPTZ DEFAULT NOW())",
 
         f"CREATE TABLE IF NOT EXISTS {t('tax_share_tokens')} ("
         "token TEXT PRIMARY KEY, "

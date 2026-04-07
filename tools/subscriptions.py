@@ -67,10 +67,12 @@ async def detect_subscriptions(session_id: str, enrich: bool = True) -> dict:
     """
     rows = await fetch(
         """
-        SELECT date, description, merchant, amount, account, subcategory
-        FROM transactions
-        WHERE session_id=$1 AND amount < 0
-        ORDER BY date
+        SELECT r.date, r.description, c.merchant, r.amount, r.account, c.subcategory
+        FROM raw_transactions r
+        LEFT JOIN classifications c
+          ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
+        WHERE r.session_id=$1 AND r.amount < 0
+        ORDER BY r.date
         """,
         session_id,
     )

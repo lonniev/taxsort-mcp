@@ -1,54 +1,120 @@
-"""Classification rules — CRUD and bulk apply."""
+"""Classification rules — CRUD and bulk apply.
 
-from db.neon import fetch, execute, fetchrow, executemany
+Rules use a regex on the description + an optional amount filter.
+When the compound constraint matches, category, subcategory, and
+optionally description are written to the classifications table.
+"""
+
+import re
+from db.neon import fetch, execute, executemany
+
+VALID_AMOUNT_OPS = {"lt", "lte", "gt", "gte", "eq", "neq"}
+
+
+def _amount_matches(tx_amount: float, operator: str, threshold: float) -> bool:
+    """Evaluate an amount filter condition."""
+    if operator == "lt":
+        return tx_amount < threshold
+    if operator == "lte":
+        return tx_amount <= threshold
+    if operator == "gt":
+        return tx_amount > threshold
+    if operator == "gte":
+        return tx_amount >= threshold
+    if operator == "eq":
+        return tx_amount == threshold
+    if operator == "neq":
+        return tx_amount != threshold
+    return False
 
 
 async def get_rules(owner_npub: str, session_id: str = "") -> dict:
     """Get all rules for the current patron (global + session-specific)."""
     rows = await fetch(
         """
-        SELECT id, rule_type, keyword, subcategory, note, session_id
+        SELECT id, session_id, description_pattern, amount_operator,
+               amount_value, category, subcategory, new_description
         FROM rules
         WHERE owner_npub=$1 AND (session_id=$2 OR session_id IS NULL OR $2='')
-        ORDER BY rule_type, keyword
+        ORDER BY id
         """,
         owner_npub, session_id or "",
     )
+
     return {
-        "scheduleC": [
-            {"id": r["id"], "keyword": r["keyword"], "subcategory": r["subcategory"]}
-            for r in rows if r.get("rule_type") == "scheduleC"
-        ],
-        "scheduleA": [
-            {"id": r["id"], "keyword": r["keyword"], "subcategory": r["subcategory"]}
-            for r in rows if r.get("rule_type") == "scheduleA"
-        ],
-        "transfers": [
-            {"id": r["id"], "keyword": r["keyword"], "note": r.get("note")}
-            for r in rows if r.get("rule_type") == "transfer"
+        "rules": [
+            {
+                "id": r["id"],
+                "description_pattern": r["description_pattern"],
+                "amount_operator": r.get("amount_operator"),
+                "amount_value": float(r["amount_value"]) if r.get("amount_value") is not None else None,
+                "category": r["category"],
+                "subcategory": r["subcategory"],
+                "new_description": r.get("new_description"),
+                "session_id": r.get("session_id"),
+            }
+            for r in rows
         ],
     }
 
 
 async def save_rule(
     owner_npub: str,
-    rule_type: str,
-    keyword: str,
-    subcategory: str = "",
-    note: str = "",
+    description_pattern: str,
+    category: str,
+    subcategory: str,
+    new_description: str = "",
+    amount_operator: str = "",
+    amount_value: float | None = None,
     session_id: str = "",
 ) -> dict:
-    """Create or update a classification rule."""
+    """Create a classification rule."""
+    if not description_pattern:
+        return {"error": "description_pattern is required"}
+
+    try:
+        re.compile(description_pattern)
+    except re.error as e:
+        return {"error": f"Invalid regex pattern: {e}"}
+
+    if not category:
+        return {"error": "category is required"}
+    if not subcategory:
+        return {"error": "subcategory is required"}
+
+    if amount_operator and amount_operator not in VALID_AMOUNT_OPS:
+        return {"error": f"Invalid amount_operator. Must be one of: {', '.join(sorted(VALID_AMOUNT_OPS))}"}
+
+    if amount_operator and amount_value is None:
+        return {"error": "amount_value is required when amount_operator is set"}
+
     await execute(
         """
-        INSERT INTO rules (owner_npub, rule_type, keyword, subcategory, note, session_id)
-        VALUES ($1, $2, $3, $4, $5, NULLIF($6,''))
-        ON CONFLICT (owner_npub, rule_type, keyword)
-        DO UPDATE SET subcategory=$4, note=$5, session_id=NULLIF($6,'')
+        INSERT INTO rules (owner_npub, description_pattern,
+                           amount_operator, amount_value,
+                           category, subcategory, new_description,
+                           session_id)
+        VALUES ($1, $2, NULLIF($3,''), $4, $5, $6, NULLIF($7,''), NULLIF($8,''))
         """,
-        owner_npub, rule_type, keyword.lower(), subcategory, note, session_id,
+        owner_npub,
+        description_pattern,
+        amount_operator or "",
+        amount_value,
+        category,
+        subcategory,
+        new_description or "",
+        session_id,
     )
-    return {"saved": True, "rule_type": rule_type, "keyword": keyword, "subcategory": subcategory}
+
+    return {
+        "saved": True,
+        "description_pattern": description_pattern,
+        "category": category,
+        "subcategory": subcategory,
+        "new_description": new_description or None,
+        "amount_operator": amount_operator or None,
+        "amount_value": amount_value,
+    }
 
 
 async def delete_rule(owner_npub: str, rule_id: int) -> dict:
@@ -62,56 +128,82 @@ async def delete_rule(owner_npub: str, rule_id: int) -> dict:
 
 
 async def apply_rules(owner_npub: str, session_id: str) -> dict:
-    """Re-apply all rules to loaded transactions in a session."""
+    """Apply all rules to unclassified transactions in a session.
+
+    Writes matching results to the classifications table. Only processes
+    transactions that don't already have a classification.
+    """
     rules = await fetch(
         """
-        SELECT rule_type, keyword, subcategory
+        SELECT description_pattern, amount_operator, amount_value,
+               category, subcategory, new_description
         FROM rules
         WHERE owner_npub=$1 AND (session_id=$2 OR session_id IS NULL)
-        ORDER BY rule_type, keyword
+        ORDER BY id
         """,
         owner_npub, session_id,
     )
     if not rules:
         return {"updated": 0, "message": "No rules defined."}
 
+    compiled = []
+    for r in rules:
+        try:
+            pat = re.compile(r["description_pattern"], re.IGNORECASE)
+        except re.error:
+            continue
+        compiled.append({
+            "pattern": pat,
+            "amount_op": r.get("amount_operator"),
+            "amount_val": float(r["amount_value"]) if r.get("amount_value") is not None else None,
+            "category": r["category"],
+            "subcategory": r["subcategory"],
+            "new_description": r.get("new_description"),
+        })
+
+    # Fetch unclassified transactions
     txns = await fetch(
-        "SELECT id, description FROM transactions WHERE session_id=$1 AND edited=FALSE",
+        """
+        SELECT r.id, r.description, r.amount
+        FROM raw_transactions r
+        LEFT JOIN classifications c
+          ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
+        WHERE r.session_id=$1 AND c.raw_transaction_id IS NULL
+        """,
         session_id,
     )
 
-    c_rules = [(r["keyword"], r["subcategory"]) for r in rules if r.get("rule_type") == "scheduleC"]
-    a_rules = [(r["keyword"], r["subcategory"]) for r in rules if r.get("rule_type") == "scheduleA"]
-    t_rules = [r["keyword"] for r in rules if r.get("rule_type") == "transfer"]
-
-    updates = []
+    inserts = []
     for tx in txns:
-        dl = str(tx["description"]).lower()
-        matched_cat = matched_sub = None
-        for kw, sub in c_rules:
-            if kw in dl:
-                matched_cat, matched_sub = "Schedule C", sub
-                break
-        if not matched_cat:
-            for kw, sub in a_rules:
-                if kw in dl:
-                    matched_cat, matched_sub = "Schedule A", sub
-                    break
-        if not matched_cat:
-            for kw in t_rules:
-                if kw in dl:
-                    matched_cat, matched_sub = "Internal Transfer", "Internal Transfer"
-                    break
-        if matched_cat:
-            updates.append((matched_cat, matched_sub, tx["id"], session_id))
+        desc = str(tx["description"])
+        amount = float(tx["amount"])
 
-    if updates:
+        for rule in compiled:
+            if not rule["pattern"].search(desc):
+                continue
+            if rule["amount_op"] and rule["amount_val"] is not None:
+                if not _amount_matches(amount, rule["amount_op"], rule["amount_val"]):
+                    continue
+            inserts.append((
+                tx["id"],
+                session_id,
+                rule["category"],
+                rule["subcategory"],
+                rule.get("new_description"),
+            ))
+            break
+
+    if inserts:
         await executemany(
             """
-            UPDATE transactions SET category=$1, subcategory=$2, updated_at=NOW()
-            WHERE id=$3 AND session_id=$4
+            INSERT INTO classifications (
+                raw_transaction_id, session_id,
+                category, subcategory, description_override,
+                classified_by, classified_at
+            ) VALUES ($1, $2, $3, $4, $5, 'rule', NOW())
+            ON CONFLICT (raw_transaction_id, session_id) DO NOTHING
             """,
-            updates,
+            inserts,
         )
 
-    return {"updated": len(updates), "session_id": session_id}
+    return {"updated": len(inserts), "session_id": session_id}

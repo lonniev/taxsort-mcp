@@ -1,6 +1,6 @@
-"""Transaction retrieval, override, revert, and summary tools."""
+"""Transaction retrieval, classification writes, and summary tools."""
 
-from db.neon import fetch, execute, fetchrow
+from db.neon import fetch, execute, fetchrow, executemany
 
 IRS_MAP = {
     "Advertising & Marketing":          "Sch C · Line 8 — Advertising",
@@ -28,54 +28,63 @@ async def get_transactions(
     subcategory: str = "",
     month: str = "",
     search: str = "",
-    needs_review_only: bool = False,
+    unclassified_only: bool = False,
     limit: int = 200,
     offset: int = 0,
 ) -> dict:
-    """Get transactions for a session with optional filters."""
-    where = ["session_id = $1"]
+    """Get transactions for a session with optional filters.
+
+    Returns raw_transactions LEFT JOINed with classifications.
+    """
+    where = ["r.session_id = $1"]
     params: list = [session_id]
     idx = 2
 
-    if needs_review_only:
-        where.append("(category IS NULL OR category = 'Needs Review')")
+    if unclassified_only:
+        where.append("c.category IS NULL")
     elif category:
-        where.append(f"category = ${idx}")
+        where.append(f"c.category = ${idx}")
         params.append(category)
         idx += 1
 
     if subcategory:
-        where.append(f"subcategory = ${idx}")
+        where.append(f"c.subcategory = ${idx}")
         params.append(subcategory)
         idx += 1
 
     if month:
-        where.append(f"TO_CHAR(date, 'YYYY-MM') = ${idx}")
+        where.append(f"TO_CHAR(r.date, 'YYYY-MM') = ${idx}")
         params.append(month)
         idx += 1
 
     if search:
-        where.append(f"description ~* ${idx}")
+        where.append(f"r.description ~* ${idx}")
         params.append(search)
         idx += 1
 
     where_clause = " AND ".join(where)
 
     total_row = await fetchrow(
-        f"SELECT COUNT(*) as n FROM transactions WHERE {where_clause}",
+        f"""SELECT COUNT(*) as n
+            FROM raw_transactions r
+            LEFT JOIN classifications c
+              ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
+            WHERE {where_clause}""",
         *params,
     )
 
     rows = await fetch(
         f"""
-        SELECT id, date, description, amount, account, format,
-               hint1, hint2, src_id, ambiguous,
-               category, subcategory, confidence, reason, merchant, edited,
-               original_category, original_subcategory,
-               paired_id, imported_at, updated_at
-        FROM transactions
+        SELECT r.id, r.date, r.description, r.amount, r.account, r.format,
+               r.hint1, r.hint2, r.src_id, r.ambiguous,
+               c.category, c.subcategory, c.confidence, c.reason,
+               c.merchant, c.description_override, c.classified_by,
+               c.classified_at
+        FROM raw_transactions r
+        LEFT JOIN classifications c
+          ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
         WHERE {where_clause}
-        ORDER BY date DESC, description
+        ORDER BY r.date DESC, r.description
         LIMIT ${idx} OFFSET ${idx+1}
         """,
         *params, limit, offset,
@@ -89,7 +98,8 @@ async def get_transactions(
             {
                 "id": str(r["id"]),
                 "date": str(r["date"]),
-                "description": str(r["description"]),
+                "description": str(r.get("description_override") or r["description"]),
+                "raw_description": str(r["description"]),
                 "amount": float(r["amount"]),
                 "account": str(r["account"]),
                 "format": str(r["format"]),
@@ -102,9 +112,8 @@ async def get_transactions(
                 "confidence": r.get("confidence"),
                 "reason": r.get("reason"),
                 "merchant": r.get("merchant"),
-                "edited": bool(r.get("edited")),
-                "can_revert": bool(r.get("edited")) and r.get("original_category") is not None,
-                "paired_id": r.get("paired_id"),
+                "classified_by": r.get("classified_by"),
+                "classified": r.get("category") is not None,
                 "irs_line": IRS_MAP.get(str(r.get("subcategory") or ""), None),
             }
             for r in rows
@@ -112,89 +121,65 @@ async def get_transactions(
     }
 
 
-async def override_transaction(
+async def save_classifications(
+    session_id: str,
+    classifications: list[dict],
+) -> dict:
+    """Bulk upsert classifications from the FE.
+
+    Each item in classifications should have:
+      - id: raw_transaction_id
+      - category, subcategory (required)
+      - confidence, reason, merchant, description_override (optional)
+      - classified_by: 'ai' | 'rule' | 'manual' (default 'ai')
+    """
+    if not classifications:
+        return {"saved": 0}
+
+    await executemany(
+        """
+        INSERT INTO classifications (
+            raw_transaction_id, session_id,
+            category, subcategory, confidence, reason,
+            merchant, description_override, classified_by, classified_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+        ON CONFLICT (raw_transaction_id, session_id)
+        DO UPDATE SET
+            category = $3, subcategory = $4,
+            confidence = $5, reason = $6,
+            merchant = $7, description_override = $8,
+            classified_by = $9, classified_at = NOW()
+        """,
+        [
+            (
+                str(c["id"]),
+                session_id,
+                str(c["category"]),
+                str(c["subcategory"]),
+                c.get("confidence"),
+                c.get("reason"),
+                c.get("merchant"),
+                c.get("description_override"),
+                c.get("classified_by", "ai"),
+            )
+            for c in classifications
+        ],
+    )
+
+    return {"saved": len(classifications), "session_id": session_id}
+
+
+async def delete_classification(
     session_id: str,
     transaction_id: str,
-    category: str,
-    subcategory: str,
 ) -> dict:
-    """Manually override the classification of a transaction."""
-    current = await fetchrow(
-        """
-        SELECT category, subcategory, confidence, reason, edited
-        FROM transactions WHERE id=$1 AND session_id=$2
-        """,
+    """Remove a classification (revert to unclassified)."""
+    result = await execute(
+        "DELETE FROM classifications WHERE raw_transaction_id=$1 AND session_id=$2",
         transaction_id, session_id,
     )
-    if not current:
-        return {"error": f"Transaction {transaction_id} not found in session {session_id}"}
-
-    save_original = not current.get("edited")
-
-    await execute(
-        f"""
-        UPDATE transactions SET
-            category=$3,
-            subcategory=$4,
-            edited=TRUE,
-            {"original_category=category, original_subcategory=subcategory,"
-             " original_confidence=confidence, original_reason=reason," if save_original else ""}
-            updated_at=NOW()
-        WHERE id=$1 AND session_id=$2
-        """,
-        transaction_id, session_id, category, subcategory,
-    )
-
-    return {
-        "transaction_id": transaction_id,
-        "category": category,
-        "subcategory": subcategory,
-        "irs_line": IRS_MAP.get(subcategory, None),
-        "can_revert": True,
-    }
-
-
-async def revert_transaction(
-    session_id: str,
-    transaction_id: str,
-) -> dict:
-    """Revert a transaction to its original classification."""
-    current = await fetchrow(
-        """
-        SELECT edited, original_category, original_subcategory,
-               original_confidence, original_reason
-        FROM transactions WHERE id=$1 AND session_id=$2
-        """,
-        transaction_id, session_id,
-    )
-    if not current:
-        return {"error": f"Transaction {transaction_id} not found"}
-    if not current.get("edited"):
-        return {"error": "Transaction has not been edited — nothing to revert"}
-    if current.get("original_category") is None:
-        return {"error": "No original state stored — cannot revert"}
-
-    await execute(
-        """
-        UPDATE transactions SET
-            category=original_category,
-            subcategory=original_subcategory,
-            confidence=original_confidence,
-            reason=original_reason,
-            edited=FALSE,
-            updated_at=NOW()
-        WHERE id=$1 AND session_id=$2
-        """,
-        transaction_id, session_id,
-    )
-
-    return {
-        "transaction_id": transaction_id,
-        "reverted_to": {
-            "category": current.get("original_category"),
-            "subcategory": current.get("original_subcategory"),
-        },
-    }
+    deleted = str(result).split()[-1] != "0" if result else False
+    return {"deleted": deleted, "transaction_id": transaction_id}
 
 
 async def get_summary(
@@ -206,24 +191,24 @@ async def get_summary(
     """Get a grouped spending summary for tax reporting."""
     scope_where = ""
     if scope == "tax":
-        scope_where = "AND category IN ('Schedule C', 'Schedule A')"
+        scope_where = "AND c.category IN ('Schedule C', 'Schedule A')"
     elif scope in ("Schedule C", "Schedule A"):
-        scope_where = f"AND category = '{scope}'"
+        scope_where = f"AND c.category = '{scope}'"
 
     month_where = ""
     if month:
-        month_where = f"AND TO_CHAR(date, 'YYYY-MM') = '{month}'"
+        month_where = f"AND TO_CHAR(r.date, 'YYYY-MM') = '{month}'"
 
     def _group_sql(dim: str) -> str:
         if dim == "taxline":
-            return "subcategory"
+            return "c.subcategory"
         if dim == "month":
-            return "TO_CHAR(date, 'YYYY-MM')"
+            return "TO_CHAR(r.date, 'YYYY-MM')"
         if dim == "category":
-            return "category"
+            return "c.category"
         if dim == "account":
-            return "account"
-        return "category"
+            return "r.account"
+        return "c.category"
 
     parts = group_by.split("+")
     g1 = _group_sql(parts[0])
@@ -236,11 +221,12 @@ async def get_summary(
         f"""
         SELECT {select_cols},
                COUNT(*) as n,
-               SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses,
-               SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) as income
-        FROM transactions
-        WHERE session_id=$1
-          AND category IS NOT NULL
+               SUM(CASE WHEN r.amount < 0 THEN ABS(r.amount) ELSE 0 END) as expenses,
+               SUM(CASE WHEN r.amount >= 0 THEN r.amount ELSE 0 END) as income
+        FROM raw_transactions r
+        JOIN classifications c
+          ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
+        WHERE r.session_id=$1
           {scope_where}
           {month_where}
         GROUP BY {group_cols}
@@ -252,10 +238,12 @@ async def get_summary(
     totals = await fetchrow(
         f"""
         SELECT COUNT(*) as n,
-               SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as total_expenses,
-               SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) as total_income
-        FROM transactions
-        WHERE session_id=$1 AND category IS NOT NULL {scope_where} {month_where}
+               SUM(CASE WHEN r.amount < 0 THEN ABS(r.amount) ELSE 0 END) as total_expenses,
+               SUM(CASE WHEN r.amount >= 0 THEN r.amount ELSE 0 END) as total_income
+        FROM raw_transactions r
+        JOIN classifications c
+          ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
+        WHERE r.session_id=$1 {scope_where} {month_where}
         """,
         session_id,
     )
