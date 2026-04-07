@@ -463,19 +463,42 @@ async def get_rules(
 @tool
 @runtime.paid_tool(capability_uuid("save_rule"))
 async def save_rule(
-    rule_type: str,
-    keyword: str,
+    description_pattern: str = "",
+    category: str = "",
     subcategory: str = "",
+    new_description: str = "",
+    amount_operator: str = "",
+    amount_value: float | None = None,
+    rule_type: str = "",
+    keyword: str = "",
     note: str = "",
     session_id: str = "",
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Create or update a classification rule."""
+    """Create or update a classification rule.
+
+    Enhanced rules (recommended): provide description_pattern (regex matched
+    case-insensitively against the transaction description), category, and
+    subcategory. Optionally add amount_operator (lt, lte, gt, gte, eq, neq)
+    and amount_value to filter by amount. When the compound constraint matches,
+    category, subcategory, and optionally description are overwritten.
+
+    Legacy rules: provide rule_type (scheduleC, scheduleA, transfer) and
+    keyword for simple substring matching.
+    """
     from tools.rules import save_rule as _save_rule
     return await _save_rule(
-        owner_npub=npub, rule_type=rule_type,
-        keyword=keyword, subcategory=subcategory, note=note,
+        owner_npub=npub,
+        description_pattern=description_pattern,
+        category=category,
+        subcategory=subcategory,
+        new_description=new_description,
+        amount_operator=amount_operator,
+        amount_value=amount_value,
         session_id=session_id,
+        rule_type=rule_type,
+        keyword=keyword,
+        note=note,
     )
 
 

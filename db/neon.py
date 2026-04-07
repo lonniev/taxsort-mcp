@@ -105,10 +105,21 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "id SERIAL PRIMARY KEY, "
         f"session_id TEXT REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
         "owner_npub TEXT NOT NULL, "
-        "rule_type TEXT NOT NULL CHECK (rule_type IN ('scheduleC', 'scheduleA', 'transfer')), "
+        "rule_type TEXT DEFAULT '', "
         "keyword TEXT NOT NULL, subcategory TEXT, note TEXT, "
         "created_at TIMESTAMPTZ DEFAULT NOW(), "
         "UNIQUE (owner_npub, rule_type, keyword))",
+
+        # Migration: enhanced rules — regex pattern, amount filter, explicit category, new description
+        f"ALTER TABLE {t('tax_rules')} ADD COLUMN IF NOT EXISTS description_pattern TEXT",
+        f"ALTER TABLE {t('tax_rules')} ADD COLUMN IF NOT EXISTS amount_operator TEXT",
+        f"ALTER TABLE {t('tax_rules')} ADD COLUMN IF NOT EXISTS amount_value NUMERIC(12,2)",
+        f"ALTER TABLE {t('tax_rules')} ADD COLUMN IF NOT EXISTS category TEXT",
+        f"ALTER TABLE {t('tax_rules')} ADD COLUMN IF NOT EXISTS new_description TEXT",
+        # Relax rule_type to allow empty string for enhanced rules
+        f"ALTER TABLE {t('tax_rules')} ALTER COLUMN rule_type DROP NOT NULL",
+        # Make keyword optional for enhanced rules (has DEFAULT '' in new schema)
+        f"ALTER TABLE {t('tax_rules')} ALTER COLUMN keyword SET DEFAULT ''",
 
         f"CREATE TABLE IF NOT EXISTS {t('tax_share_tokens')} ("
         "token TEXT PRIMARY KEY, "

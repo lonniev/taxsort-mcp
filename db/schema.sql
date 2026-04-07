@@ -54,15 +54,22 @@ CREATE INDEX IF NOT EXISTS idx_transactions_category  ON transactions(session_id
 CREATE INDEX IF NOT EXISTS idx_transactions_needs_review ON transactions(session_id) WHERE category = 'Needs Review';
 
 CREATE TABLE IF NOT EXISTS rules (
-    id          SERIAL PRIMARY KEY,
-    session_id  TEXT REFERENCES sessions(id) ON DELETE CASCADE,  -- NULL = global / all sessions
-    owner_npub  TEXT NOT NULL,
-    rule_type   TEXT NOT NULL CHECK (rule_type IN ('scheduleC', 'scheduleA', 'transfer')),
-    keyword     TEXT NOT NULL,
-    subcategory TEXT,                      -- NULL for transfer rules
-    note        TEXT,                      -- for transfer rules
-    created_at  TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE (owner_npub, rule_type, keyword)
+    id                  SERIAL PRIMARY KEY,
+    session_id          TEXT REFERENCES sessions(id) ON DELETE CASCADE,  -- NULL = global / all sessions
+    owner_npub          TEXT NOT NULL,
+    rule_type           TEXT,                       -- legacy: 'scheduleC', 'scheduleA', 'transfer'; NULL for enhanced rules
+    keyword             TEXT NOT NULL DEFAULT '',    -- legacy plain keyword match
+    subcategory         TEXT,
+    note                TEXT,
+
+    -- Enhanced rule fields (v2)
+    description_pattern TEXT,                       -- regex matched against description (case-insensitive)
+    amount_operator     TEXT,                       -- lt, lte, gt, gte, eq, neq
+    amount_value        NUMERIC(12,2),              -- amount threshold for comparison
+    category            TEXT,                       -- target category (Schedule C, Schedule A, Personal, Internal Transfer)
+    new_description     TEXT,                       -- replacement description when rule fires
+
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS share_tokens (

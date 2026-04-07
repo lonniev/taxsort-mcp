@@ -46,18 +46,35 @@ async def _get_rules_context(session_id: str, owner_npub: str) -> str:
     """Build rules context string for the classification prompt."""
     rows = await fetch(
         """
-        SELECT rule_type, keyword, subcategory
+        SELECT rule_type, keyword, subcategory,
+               description_pattern, amount_operator, amount_value,
+               category, new_description
         FROM rules
         WHERE owner_npub=$1 AND (session_id=$2 OR session_id IS NULL)
-        ORDER BY rule_type, keyword
+        ORDER BY id
         """,
         owner_npub, session_id,
     )
+
+    # Separate enhanced vs legacy
+    enhanced = [r for r in rows if r.get("description_pattern")]
     c_rules = [r for r in rows if r.get("rule_type") == "scheduleC"]
     a_rules = [r for r in rows if r.get("rule_type") == "scheduleA"]
     t_rules = [r for r in rows if r.get("rule_type") == "transfer"]
 
     lines = []
+
+    if enhanced:
+        lines.append("User-defined classification rules (apply these when the pattern matches):")
+        for r in enhanced:
+            parts = [f'  description matches /{r["description_pattern"]}/i']
+            if r.get("amount_operator") and r.get("amount_value") is not None:
+                parts.append(f' AND amount {r["amount_operator"]} {r["amount_value"]}')
+            arrow = f' → {r["category"]} / {r["subcategory"]}'
+            if r.get("new_description"):
+                arrow += f' (rename to "{r["new_description"]}")'
+            lines.append("".join(parts) + arrow)
+
     if c_rules:
         lines.append("Schedule C keyword rules:")
         lines.extend(f'  "{r["keyword"]}" → {r["subcategory"]}' for r in c_rules)
