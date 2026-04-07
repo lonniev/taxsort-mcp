@@ -91,6 +91,7 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
     ToolIdentity(capability="check_unlock", category="free", intent="Check if session unlock was approved"),
     ToolIdentity(capability="get_github_token", category="free", intent="Get GitHub token for issue reporting"),
+    ToolIdentity(capability="get_anthropic_key", category="free", intent="Get Anthropic API key for FE classification"),
     ToolIdentity(capability="session_heartbeat", category="free", intent="Presence heartbeat — who's active in this session"),
     ToolIdentity(capability="ask_advisor", category="free", intent="Ask the Financial Advisor about TaxSort"),
     ToolIdentity(capability="ask_tax_researcher", category="free", intent="Ask the Tax Code Researcher about IRS provisions"),
@@ -525,6 +526,22 @@ async def get_github_token(
         return {"token": None, "message": "No GitHub token configured. Deliver one via Secure Courier."}
     except Exception as e:
         return {"token": None, "error": str(e)}
+
+
+@tool
+@runtime.paid_tool(capability_uuid("get_anthropic_key"))
+async def get_anthropic_key(
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Get the Anthropic API key for FE-driven classification."""
+    try:
+        creds = await runtime.load_credentials(["anthropic_api_key"])
+        key = creds.get("anthropic_api_key")
+        if key:
+            return {"key": key}
+        return {"key": None, "message": "No Anthropic API key configured. Deliver one via Secure Courier."}
+    except Exception as e:
+        return {"key": None, "error": str(e)}
 
 
 # ── Presence ──────────────────────────────────────────────────────────────

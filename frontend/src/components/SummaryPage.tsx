@@ -47,7 +47,7 @@ export default function SummaryPage() {
   const { sessionId, npub } = useSession();
   const navigate = useNavigate();
   const summaryTool = useToolCall<Summary>("get_summary");
-  const statusTool = useToolCall<{ total: number; classified: number; needs_review: number }>("check_classification_status");
+  const txTool = useToolCall<{ total: number }>("get_transactions");
 
   const [summary, setSummary] = useState<Summary | null>(null);
   const [classifyStatus, setClassifyStatus] = useState<{ total: number; classified: number; needs_review: number } | null>(null);
@@ -65,8 +65,11 @@ export default function SummaryPage() {
 
   async function fetchStatus() {
     if (!sessionId) return;
-    const data = await statusTool.invoke({ session_id: sessionId, npub });
-    if (data) setClassifyStatus(data);
+    const all = await txTool.invoke({ session_id: sessionId, npub, limit: 1, offset: 0 });
+    const unclassified = await txTool.invoke({ session_id: sessionId, npub, limit: 1, offset: 0, unclassified_only: true });
+    const totalN = all?.total ?? 0;
+    const unclassifiedN = unclassified?.total ?? 0;
+    setClassifyStatus({ total: totalN, classified: totalN - unclassifiedN, needs_review: unclassifiedN });
   }
 
   useEffect(() => {
