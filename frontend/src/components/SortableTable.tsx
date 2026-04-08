@@ -16,6 +16,7 @@ interface SortableTableProps<T> {
   rows: T[];
   rowKey: (row: T, index: number) => string;
   onRowClick?: (row: T) => void;
+  renderAfterRow?: (row: T) => React.ReactNode | null;
   groupBy?: (row: T) => string;
   groupLabel?: (key: string, rows: T[]) => React.ReactNode;
   emptyMessage?: string;
@@ -30,6 +31,7 @@ export default function SortableTable<T>({
   rows,
   rowKey,
   onRowClick,
+  renderAfterRow,
   groupBy,
   groupLabel,
   emptyMessage = "No data.",
@@ -210,7 +212,9 @@ export default function SortableTable<T>({
         </thead>
         <tbody>
           {/* Ungrouped rows */}
-          {!groupBy && displayRows.map(row => renderRow(row))}
+          {!groupBy && displayRows.map(row => (
+            <>{renderRow(row)}{renderAfterRow?.(row)}</>
+          ))}
 
           {/* Grouped rows */}
           {groups && groups.order.map(gk => {
@@ -232,7 +236,7 @@ export default function SortableTable<T>({
                   )}
                 </td>
               </tr>,
-              ...(!isCollapsed ? groupRows.map(row => renderRow(row)) : []),
+              ...(!isCollapsed ? groupRows.flatMap(row => [renderRow(row), renderAfterRow?.(row)]) : []),
             ];
           })}
 

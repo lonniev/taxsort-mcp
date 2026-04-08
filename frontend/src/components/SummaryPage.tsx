@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import { useSession } from "../App";
 import SortableTable from "./SortableTable";
 import type { Column } from "./SortableTable";
@@ -39,20 +38,38 @@ const SCOPE_OPTIONS = [
   ["Schedule A", "Schedule A only"],
 ];
 
+interface Transaction {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  account: string;
+  merchant: string | null;
+  subcategory: string | null;
+  confidence: string | null;
+}
+
+interface TxResult {
+  total: number;
+  transactions: Transaction[];
+}
+
 function fmt$(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export default function SummaryPage() {
   const { sessionId, npub } = useSession();
-  const navigate = useNavigate();
   const summaryTool = useToolCall<Summary>("get_summary");
-  const txTool = useToolCall<{ total: number }>("get_transactions");
+  const txTool = useToolCall<TxResult>("get_transactions");
 
   const [summary, setSummary] = useState<Summary | null>(null);
   const [classifyStatus, setClassifyStatus] = useState<{ total: number; classified: number; needs_review: number } | null>(null);
   const [groupBy, setGroupBy] = useState("taxline");
   const [scope, setScope] = useState("tax");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expandedTxns, setExpandedTxns] = useState<Transaction[]>([]);
+  const [expandLoading, setExpandLoading] = useState(false);
   async function fetchSummary() {
     const data = await summaryTool.invoke({
       session_id: sessionId,
@@ -121,7 +138,7 @@ export default function SummaryPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="text-xl font-semibold mb-5 text-stone-800">Summary</h1>
+      <h1 className="text-xl font-semibold mb-5 text-stone-800">Categorized</h1>
 
       <div className="bg-white border border-stone-200 rounded-xl px-5 py-4 mb-5 flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
@@ -187,14 +204,67 @@ export default function SummaryPage() {
             columns={summaryColumns}
             rows={summary.rows}
             rowKey={(r, i) => `${r.label}-${r.sublabel}-${i}`}
-            onRowClick={(row) => {
-              const params = new URLSearchParams();
-              if (groupBy === "taxline" || groupBy === "category") {
-                params.set("subcategory", row.label);
-              } else {
-                params.set("subcategory", row.label);
+            onRowClick={async (row) => {
+              const key = `${row.label}|${row.sublabel}`;
+              if (expanded === key) {
+                setExpanded(null);
+                setExpandedTxns([]);
+                return;
               }
-              navigate(`/transactions?${params.toString()}`);
+              setExpanded(key);
+              setExpandedTxns([]);
+              setExpandLoading(true);
+              const data = await txTool.invoke({
+                session_id: sessionId,
+                subcategory: row.label,
+                limit: 500,
+                offset: 0,
+                npub,
+              });
+              setExpandedTxns(data?.transactions ?? []);
+              setExpandLoading(false);
+            }}
+            renderAfterRow={(row) => {
+              const key = `${row.label}|${row.sublabel}`;
+              if (expanded !== key) return null;
+              return (
+                <tr>
+                  <td colSpan={4} className="px-0 py-0">
+                    <div className="bg-stone-50 border-t border-b border-stone-200 px-4 py-3">
+                      {expandLoading && (
+                        <div className="text-xs text-stone-400 py-2">Loading transactions&hellip;</div>
+                      )}
+                      {!expandLoading && expandedTxns.length === 0 && (
+                        <div className="text-xs text-stone-400 py-2">No transactions found.</div>
+                      )}
+                      {!expandLoading && expandedTxns.length > 0 && (
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-stone-400 uppercase tracking-wider">
+                              <th className="text-left py-1 pr-3">Date</th>
+                              <th className="text-left py-1 pr-3">Description</th>
+                              <th className="text-left py-1 pr-3">Account</th>
+                              <th className="text-right py-1">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {expandedTxns.map(t => (
+                              <tr key={t.id} className="border-t border-stone-100">
+                                <td className="py-1.5 pr-3 text-stone-500 font-mono whitespace-nowrap">{t.date}</td>
+                                <td className="py-1.5 pr-3 text-stone-700">{t.merchant || t.description}</td>
+                                <td className="py-1.5 pr-3 text-stone-400">{t.account}</td>
+                                <td className="py-1.5 text-right font-mono text-stone-700">
+                                  {t.amount < 0 ? "-" : ""}${fmt$(Math.abs(t.amount))}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
             }}
             groupBy={isNested ? (r) => r.label : undefined}
             groupLabel={(gk, rows) => {

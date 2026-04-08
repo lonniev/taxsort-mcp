@@ -64,7 +64,7 @@ export default function Nav() {
             {link("/accounts", "Accounts", "Tag account types and detect cross-account transfers")}
             {link("/classify", "Classify", "Run Claude AI to categorize your transactions")}
             {link("/transactions", "Transactions", "Browse, search, filter, and edit classifications")}
-            {link("/summary", "Summary", "View tax totals by IRS line, category, month, or account")}
+            {link("/summary", "Categorized", "View classified totals by IRS line, category, month, or account")}
             {link("/subscriptions", "Subscriptions", "Find recurring charges, forgotten money leaks, cancel URLs")}
           {link("/wallet", "Wallet", "Check your credit balance, buy more sats via Lightning")}
             {link("/advisor", "Advisor", "Ask the Financial Advisor how to use TaxSort")}
