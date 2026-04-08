@@ -24,7 +24,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.15.0"
+__version__ = "0.16.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -85,6 +85,9 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="save_classifications", category="free", intent="Bulk write classifications from FE"),
     ToolIdentity(capability="delete_classification", category="free", intent="Remove a classification (revert to unclassified)"),
     ToolIdentity(capability="clear_transactions", category="free", intent="Delete all transactions and classifications for a session"),
+    ToolIdentity(capability="get_accounts", category="free", intent="List accounts in session with their types"),
+    ToolIdentity(capability="set_account_type", category="free", intent="Set account type (bank, card, investment, loan)"),
+    ToolIdentity(capability="detect_transfers", category="free", intent="Auto-detect and classify cross-account transfers"),
     ToolIdentity(capability="save_rule", category="free", intent="Save a classification rule"),
     ToolIdentity(capability="delete_rule", category="free", intent="Delete a classification rule"),
     ToolIdentity(capability="apply_rules", category="free", intent="Apply rules to unclassified transactions"),
@@ -391,6 +394,42 @@ async def clear_transactions(
     """Delete all transactions and classifications for a session, so CSVs can be re-imported."""
     from tools.transactions import clear_transactions as _clear
     return await _clear(session_id=session_id)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("get_accounts"))
+async def get_accounts(
+    session_id: str,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """List all accounts in this session with their types and transaction counts."""
+    from tools.accounts import get_accounts as _get
+    return await _get(session_id=session_id)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("set_account_type"))
+async def set_account_type(
+    session_id: str,
+    account_name: str,
+    account_type: str,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Set an account's type: bank (checking/savings), card (credit/debit), investment, or loan."""
+    from tools.accounts import set_account_type as _set
+    return await _set(session_id=session_id, account_name=account_name, account_type=account_type)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("detect_transfers"))
+async def detect_transfers(
+    session_id: str,
+    date_tolerance: int = 3,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Auto-detect cross-account transfers and classify them as Internal Transfer."""
+    from tools.accounts import detect_transfers as _detect
+    return await _detect(session_id=session_id, date_tolerance=date_tolerance)
 
 
 @tool

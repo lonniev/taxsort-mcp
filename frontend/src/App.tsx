@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, createContext, useContext } f
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import SessionsPage from "./components/SessionsPage";
 import ImportPage from "./components/ImportPage";
+import AccountsPage from "./components/AccountsPage";
 import TransactionsPage from "./components/TransactionsPage";
 import ClassifyPage from "./components/ClassifyPage";
 import SummaryPage from "./components/SummaryPage";
@@ -356,6 +357,10 @@ export default function App() {
                 <Route
                   path="/import"
                   element={sessionId ? <ImportPage /> : <Navigate to="/" />}
+                />
+                <Route
+                  path="/accounts"
+                  element={sessionId ? <AccountsPage /> : <Navigate to="/" />}
                 />
                 <Route
                   path="/classify"

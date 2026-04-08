@@ -23,6 +23,7 @@ _DOMAIN_TABLES = {
     "tax_locks": "tax_locks",
     "tax_presence": "tax_presence",
     "tax_feedback": "tax_feedback",
+    "tax_accounts": "tax_accounts",
     "share_tokens": "tax_share_tokens",
 }
 
@@ -142,6 +143,12 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "npub TEXT NOT NULL, "
         "last_seen_at TIMESTAMPTZ DEFAULT NOW(), "
         "PRIMARY KEY (session_id, npub))",
+
+        f"CREATE TABLE IF NOT EXISTS {t('tax_accounts')} ("
+        f"session_id TEXT NOT NULL REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
+        "account_name TEXT NOT NULL, "
+        "account_type TEXT NOT NULL DEFAULT 'unknown', "
+        "PRIMARY KEY (session_id, account_name))",
 
         f"CREATE TABLE IF NOT EXISTS {t('tax_feedback')} ("
         "id SERIAL PRIMARY KEY, "

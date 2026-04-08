@@ -61,6 +61,7 @@ export default function Nav() {
         {sessionId && (
           <>
             {link("/import", "Import", "Upload bank CSV files (SoFi, Chase, Schwab, PayPal, etc.)")}
+            {link("/accounts", "Accounts", "Tag account types and detect cross-account transfers")}
             {link("/classify", "Classify", "Run Claude AI to categorize your transactions")}
             {link("/transactions", "Transactions", "Browse, search, filter, and edit classifications")}
             {link("/summary", "Summary", "View tax totals by IRS line, category, month, or account")}
