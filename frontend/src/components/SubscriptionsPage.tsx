@@ -1,29 +1,7 @@
 import { useState } from "react";
 import { useSession } from "../App";
-import { useToolCall } from "../hooks/useMCP";
-
-interface Subscription {
-  merchant: string;
-  amount: number;
-  frequency: string;
-  occurrences: number;
-  total_spent: number;
-  annual_cost: number;
-  first_seen: string;
-  last_seen: string;
-  account: string;
-  subcategory?: string;
-  service_type?: string;
-  cancel_url?: string | null;
-  cancel_method?: string;
-  cancel_note?: string;
-}
-
-interface DetectResult {
-  subscriptions: Subscription[];
-  total_recurring_spend: number;
-  total_annual_cost: number;
-}
+import { useSubscriptions } from "../hooks/useSubscriptions";
+import type { Subscription } from "../hooks/useSubscriptions";
 
 const FREQ_COLOR: Record<string, string> = {
   daily: "bg-red-100 text-red-700",
@@ -41,21 +19,21 @@ const FREQ_ICON: Record<string, string> = {
   annual: "\u{1F4C5}",
 };
 
+const PHASE_LABEL: Record<string, string> = {
+  fetching: "Loading transactions\u2026",
+  analyzing: "Detecting recurring patterns\u2026",
+  enriching: "Looking up cancel URLs\u2026",
+};
+
 function fmt$(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export default function SubscriptionsPage() {
   const { sessionId, npub } = useSession();
-  const detectTool = useToolCall<DetectResult>("detect_subscriptions");
+  const { phase, result, error, scan } = useSubscriptions(sessionId, npub);
 
-  const [result, setResult] = useState<DetectResult | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-
-  async function handleDetect() {
-    const data = await detectTool.invoke({ session_id: sessionId, npub });
-    if (data) setResult(data);
-  }
 
   function toggleExpand(i: number) {
     setExpanded(prev => {
@@ -65,6 +43,8 @@ export default function SubscriptionsPage() {
     });
   }
 
+  const loading = phase === "fetching" || phase === "analyzing" || phase === "enriching";
+
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -73,28 +53,27 @@ export default function SubscriptionsPage() {
           <p className="text-xs text-stone-400 mt-1">Find recurring charges and forgotten money leaks</p>
         </div>
         <button
-          onClick={handleDetect}
-          disabled={detectTool.loading || !sessionId}
+          onClick={scan}
+          disabled={loading || !sessionId}
           className="bg-amber-600 text-white text-sm px-5 py-2 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors"
         >
-          {detectTool.loading ? "Scanning\u2026" : result ? "Rescan" : "Scan for Subscriptions"}
+          {loading ? "Scanning\u2026" : result ? "Rescan" : "Scan for Subscriptions"}
         </button>
       </div>
 
-      {detectTool.loading && (
+      {loading && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
-          <div className="text-sm text-amber-700 mb-2">Scanning your transactions for recurring patterns&hellip;</div>
-          <div className="text-xs text-amber-500">Looking up cancel URLs for detected subscriptions</div>
+          <div className="text-sm text-amber-700 mb-2">{PHASE_LABEL[phase] ?? "Working\u2026"}</div>
         </div>
       )}
 
-      {detectTool.error && (
+      {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-sm text-red-700">
-          {detectTool.error}
+          {error}
         </div>
       )}
 
-      {result && !detectTool.loading && (
+      {result && !loading && (
         <>
           {/* Summary cards */}
           <div className="grid grid-cols-3 gap-3 mb-6">
@@ -120,7 +99,7 @@ export default function SubscriptionsPage() {
           )}
 
           <div className="space-y-3">
-            {result.subscriptions.map((sub, i) => (
+            {result.subscriptions.map((sub: Subscription, i: number) => (
               <div key={i} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
                 {/* Main row */}
                 <div
@@ -203,7 +182,7 @@ export default function SubscriptionsPage() {
         </>
       )}
 
-      {!result && !detectTool.loading && (
+      {!result && !loading && (
         <div className="bg-white border border-stone-200 rounded-xl p-8 text-center">
           <div className="text-2xl mb-3">{"\u{1F50D}"}</div>
           <p className="text-sm text-stone-500 mb-2">
