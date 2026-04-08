@@ -5,22 +5,19 @@ import { useToolCall } from "../hooks/useMCP";
 interface Account {
   name: string;
   type: string;
+  last4: string | null;
   tx_count: number;
   date_range: string;
 }
 
 interface AccountsResult {
   accounts: Account[];
+  alias_groups: string[][];
 }
 
 interface SetTypeResult {
   account_name: string;
   account_type: string;
-}
-
-interface DetectResult {
-  pairs: number;
-  classified: number;
 }
 
 const ACCOUNT_TYPES = [
@@ -43,17 +40,17 @@ export default function AccountsPage() {
   const { sessionId, npub } = useSession();
   const accountsTool = useToolCall<AccountsResult>("get_accounts");
   const setTypeTool = useToolCall<SetTypeResult>("set_account_type");
-  const detectTool = useToolCall<DetectResult>("detect_transfers");
 
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [detectResult, setDetectResult] = useState<DetectResult | null>(null);
+  const [aliasGroups, setAliasGroups] = useState<string[][]>([]);
   const [loaded, setLoaded] = useState(false);
 
   async function load() {
     if (!sessionId) return;
     const data = await accountsTool.invoke({ session_id: sessionId, npub });
-    if (data?.accounts) {
+    if (data) {
       setAccounts(data.accounts);
+      setAliasGroups(data.alias_groups ?? []);
       setLoaded(true);
     }
   }
@@ -75,22 +72,13 @@ export default function AccountsPage() {
     }
   }
 
-  async function handleDetect() {
-    if (!sessionId) return;
-    setDetectResult(null);
-    const data = await detectTool.invoke({ session_id: sessionId, npub });
-    if (data) setDetectResult(data);
-  }
-
-  const allTyped = accounts.length > 0 && accounts.every(a => a.type !== "unknown");
-
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-xl font-semibold mb-2 text-stone-800">Accounts</h1>
       <p className="text-sm text-stone-500 mb-6">
-        Tag each account so TaxSort can detect transfers between your own accounts
-        (credit card payments, savings moves) and avoid double-counting them as
-        income or expenses.
+        Tag each account so the classifier can detect duplicates from overlapping CSV exports
+        and identify transfers between your own accounts.
+        Set account types <strong>before</strong> classifying for best results.
       </p>
 
       {!loaded && (
@@ -99,6 +87,23 @@ export default function AccountsPage() {
 
       {loaded && accounts.length === 0 && (
         <p className="text-sm text-stone-400">No transactions imported yet. Import CSVs first.</p>
+      )}
+
+      {/* Alias groups */}
+      {aliasGroups.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+          <div className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2">
+            Detected account aliases (same last-4 digits)
+          </div>
+          {aliasGroups.map((group, i) => (
+            <div key={i} className="text-sm text-blue-800 mb-1">
+              {group.join(" = ")}
+            </div>
+          ))}
+          <p className="text-xs text-blue-500 mt-2">
+            The classifier will treat transactions from aliased accounts as potential duplicates.
+          </p>
+        </div>
       )}
 
       {accounts.length > 0 && (
@@ -110,6 +115,9 @@ export default function AccountsPage() {
                   {a.type}
                 </span>
                 <span className="font-medium text-stone-700 flex-1">{a.name}</span>
+                {a.last4 && (
+                  <span className="text-xs font-mono text-stone-400">***{a.last4}</span>
+                )}
                 <span className="text-xs text-stone-400">{a.tx_count} txns</span>
               </div>
               <div className="text-xs text-stone-400 mb-2">{a.date_range}</div>
@@ -132,31 +140,6 @@ export default function AccountsPage() {
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {accounts.length > 0 && (
-        <div className="border-t border-stone-200 pt-4">
-          <h2 className="text-sm font-semibold text-stone-700 mb-2">Detect transfers</h2>
-          <p className="text-xs text-stone-400 mb-3">
-            Scan for matching amounts across different accounts within 3 days.
-            {!allTyped && " Tag all accounts first for best results."}
-          </p>
-          <button
-            onClick={handleDetect}
-            disabled={detectTool.loading}
-            className="bg-blue-600 text-white text-sm px-5 py-2 rounded-lg hover:bg-blue-500 disabled:opacity-40 transition-colors"
-          >
-            {detectTool.loading ? "Scanning\u2026" : "Detect transfers"}
-          </button>
-          {detectResult && (
-            <div className="mt-3 text-sm text-stone-600">
-              Found <strong>{detectResult.pairs}</strong> transfer pair{detectResult.pairs !== 1 ? "s" : ""}.
-              {detectResult.classified > 0
-                ? ` Classified ${detectResult.classified} transactions as Internal Transfer.`
-                : " No new transfers to classify."}
-            </div>
-          )}
         </div>
       )}
     </div>

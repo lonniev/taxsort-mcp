@@ -24,7 +24,7 @@ from tollbooth.slug_tools import make_slug_tool
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.18.0"
+__version__ = "0.19.0"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -87,7 +87,6 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="get_amount_neighbors", category="free", intent="Fetch transactions with same amount near a date"),
     ToolIdentity(capability="get_accounts", category="free", intent="List accounts in session with their types"),
     ToolIdentity(capability="set_account_type", category="free", intent="Set account type (bank, card, investment, loan)"),
-    ToolIdentity(capability="detect_transfers", category="free", intent="Auto-detect and classify cross-account transfers"),
     ToolIdentity(capability="save_rule", category="free", intent="Save a classification rule"),
     ToolIdentity(capability="delete_rule", category="free", intent="Delete a classification rule"),
     ToolIdentity(capability="apply_rules", category="free", intent="Apply rules to unclassified transactions"),
@@ -445,17 +444,6 @@ async def set_account_type(
     from tools.accounts import set_account_type as _set
     return await _set(session_id=session_id, account_name=account_name, account_type=account_type)
 
-
-@tool
-@runtime.paid_tool(capability_uuid("detect_transfers"))
-async def detect_transfers(
-    session_id: str,
-    date_tolerance: int = 3,
-    npub: NpubField = "",
-) -> dict[str, Any]:
-    """Auto-detect cross-account transfers and classify them as Internal Transfer."""
-    from tools.accounts import detect_transfers as _detect
-    return await _detect(session_id=session_id, date_tolerance=date_tolerance)
 
 
 @tool

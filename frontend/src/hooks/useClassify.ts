@@ -63,11 +63,13 @@ Personal (non-deductible personal spending):
 Internal Transfer (money moving between own accounts):
   ${TRANSFER.join(", ")}
 
-Duplicate — this exact charge already appears from another CSV export of the same account.
-  Use subcategory "Duplicate" when you see the same merchant, same amount, same date (±2 days),
-  but from different account names that clearly refer to the same card or bank account
-  (e.g., "Chase8890_Activity..." and "United Club Visa ***8890" both end in 8890).
-  Mark the LESS descriptive account's entry as Duplicate. Only the SECOND occurrence is Duplicate.
+Duplicate — this charge is a duplicate from an overlapping CSV export.
+  The ACCOUNT ALIASES section below tells you which account names are the same underlying account.
+  When you see the same merchant, same amount, same date (±2 days) from accounts in the same
+  alias group, the shorter/less-descriptive account name's entry is the Duplicate.
+  Also check the OTHER TRANSACTIONS section for already-classified entries that match.
+  If a neighbor is already classified as something other than Duplicate, then THIS transaction
+  is the duplicate. Only ONE entry per real charge should survive — all others are Duplicate.
 
 Needs Review — ONLY if truly ambiguous after considering all signals.
 
@@ -178,6 +180,7 @@ export function useClassify(sessionId: string | null, npub: string) {
   const keyTool = useToolCall<{ key: string | null }>("get_anthropic_key");
   const rulesTool = useToolCall<{ rules: Rule[] }>("get_rules");
   const neighborTool = useToolCall<{ neighbors: Array<{ id: string; date: string; description: string; amount: number; account: string; category: string | null; subcategory: string | null }> }>("get_amount_neighbors");
+  const accountsTool = useToolCall<{ accounts: Array<{ name: string; type: string; last4: string | null }>; alias_groups: string[][] }>("get_accounts");
 
   const classify = useCallback(async (reclassifyAll = false) => {
     if (!sessionId) return;
@@ -197,9 +200,29 @@ export function useClassify(sessionId: string | null, npub: string) {
     const rules = rulesResult?.rules ?? [];
     const rulesCtx = buildRulesContext(rules);
 
+    // 2b. Get account aliases for duplicate detection
+    const acctResult = await accountsTool.invoke({ session_id: sessionId, npub });
+    const aliasGroups = acctResult?.alias_groups ?? [];
+    const accounts = acctResult?.accounts ?? [];
+
+    let aliasCtx = "";
+    if (aliasGroups.length > 0) {
+      const lines = aliasGroups.map(group => `  Same account: ${group.join(" = ")}`);
+      aliasCtx = "\n\nACCOUNT ALIASES (these account names refer to the SAME underlying account — " +
+        "transactions from different names in the same group are duplicates, not transfers):\n" +
+        lines.join("\n");
+    }
+
+    let acctTypeCtx = "";
+    const typed = accounts.filter(a => a.type !== "unknown");
+    if (typed.length > 0) {
+      acctTypeCtx = "\n\nACCOUNT TYPES:\n" +
+        typed.map(a => `  "${a.name}" → ${a.type}`).join("\n");
+    }
+
     // 3. Create Anthropic client (browser — uses dangerouslyAllowBrowser)
     const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-    const systemPrompt = buildSystemPrompt(rulesCtx);
+    const systemPrompt = buildSystemPrompt(rulesCtx) + aliasCtx + acctTypeCtx;
 
     // 4. If reclassify all, we need total count first
     if (reclassifyAll) {
