@@ -171,23 +171,41 @@ def parse_csv(content: str, filename: str) -> tuple[list[dict], dict]:
     return rows, meta
 
 
-def _dedup_usbank(rows: list[dict]) -> list[dict]:
-    """Remove US Bank duplicate debit card / checking entries."""
+def _dedup_usbank(rows: list[dict], date_tolerance: int = 3) -> list[dict]:
+    """Remove US Bank duplicate debit card / checking entries.
+
+    Groups by amount, then within each group drops entries whose dates
+    are within date_tolerance days of each other, keeping the one with
+    the longer (more descriptive) description.
+    """
     from collections import defaultdict
+    from datetime import date as dt_date
 
-    groups: dict[str, list[int]] = defaultdict(list)
+    by_amount: dict[str, list[int]] = defaultdict(list)
     for i, row in enumerate(rows):
-        key = f"{row['date']}|{row['amount']}"
-        groups[key].append(i)
+        key = f"{float(row['amount']):.2f}"
+        by_amount[key].append(i)
 
-    drop = set()
-    for key, indices in groups.items():
+    drop: set[int] = set()
+    for indices in by_amount.values():
         if len(indices) < 2:
             continue
-        best = max(indices, key=lambda i: len(rows[i].get("description", "")))
-        for i in indices:
-            if i != best:
-                drop.add(i)
+        # Compare all pairs within this amount group
+        for a in range(len(indices)):
+            if indices[a] in drop:
+                continue
+            for b in range(a + 1, len(indices)):
+                if indices[b] in drop:
+                    continue
+                ia, ib = indices[a], indices[b]
+                da = dt_date.fromisoformat(str(rows[ia]["date"])[:10])
+                db = dt_date.fromisoformat(str(rows[ib]["date"])[:10])
+                if abs((da - db).days) <= date_tolerance:
+                    # Keep the longer description
+                    if len(rows[ia].get("description", "")) >= len(rows[ib].get("description", "")):
+                        drop.add(ib)
+                    else:
+                        drop.add(ia)
 
     if drop:
         rows = [r for i, r in enumerate(rows) if i not in drop]
