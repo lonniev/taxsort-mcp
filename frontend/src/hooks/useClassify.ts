@@ -98,6 +98,11 @@ CLASSIFICATION RULES:
    Streaming → name the service. Subscriptions → what kind?
 5. If something could be business OR personal, classify as Personal unless clearly business.
 6. Transfers between own accounts (credit card payments, savings moves) are Internal Transfer.
+8. MORTGAGE PAYMENTS: A payment to a mortgage servicer (e.g. "Mr Cooper", "Nationstar", "Wells Fargo Mortgage",
+   "Rocket Mortgage") is Personal / Loan Payment, NOT Schedule A / Mortgage Interest.
+   The full payment includes principal, escrow, and interest — only the interest portion is deductible,
+   and that amount comes from the lender's 1098 form, not from the transaction amount.
+   Only classify as Mortgage Interest if the description explicitly says "interest" or "1098".
 7. INCOME: Positive amounts with words like "salary", "payroll", "direct deposit",
    "wage", "bonus", "tax refund", "IRS" → Personal / Income (or Salary, Bonus, Tax Refund).
    NEVER classify income as "Other Personal". Use the specific income subcategory.
