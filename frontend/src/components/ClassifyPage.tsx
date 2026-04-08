@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "../App";
 import { useClassify } from "../hooks/useClassify";
+import type { Rule } from "../hooks/useClassify";
 import { useToolCall } from "../hooks/useMCP";
 import DonutChart from "./DonutChart";
 
@@ -8,20 +9,136 @@ interface ResetResult {
   classifications_deleted: number;
 }
 
+interface RulesResult {
+  rules: Rule[];
+}
+
+interface SaveRuleResult {
+  id: number;
+}
+
+interface ApplyResult {
+  updated: number;
+}
+
+const CATEGORIES = [
+  "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate",
+];
+const CAT_SUBS: Record<string, string[]> = {
+  "Schedule C": [
+    "Advertising & Marketing", "Business Meals (50%)", "Business Software & Subscriptions",
+    "Home Office Utilities", "Office Supplies", "Phone & Internet", "Professional Services",
+    "Travel & Transportation", "Vehicle Expenses", "Other Business Expense",
+  ],
+  "Schedule A": [
+    "Charitable Contributions", "Medical & Dental", "Mortgage Interest",
+    "Property Tax", "State & Local Tax", "Other Itemized Deduction",
+  ],
+  "Internal Transfer": [
+    "Internal Transfer", "Credit Card Payment", "Savings Transfer",
+    "Investment Transfer", "Loan Payment",
+  ],
+  "Personal": [
+    "Income", "Salary", "Bonus", "Tax Refund",
+    "Auto Insurance", "Home Insurance", "Life Insurance", "Health Insurance",
+    "Groceries", "Dining Out", "Clothing",
+    "Personal Care", "Entertainment", "Streaming & Subscriptions",
+    "Gym & Fitness", "Pet Care", "Childcare",
+    "Utilities (Personal)", "Rent", "Auto Loan", "Student Loan",
+    "Cash & ATM", "Shopping", "Gifts",
+    "Education", "Travel (Personal)", "Other Personal",
+  ],
+  "Duplicate": ["Duplicate"],
+};
+
+const AMOUNT_OPS = [
+  { value: "", label: "Any" },
+  { value: "eq", label: "=" },
+  { value: "lt", label: "<" },
+  { value: "lte", label: "<=" },
+  { value: "gt", label: ">" },
+  { value: "gte", label: ">=" },
+];
+
 export default function ClassifyPage() {
   const { sessionId, npub } = useSession();
   const { state, classify, pause, resume, refreshCounts } = useClassify(sessionId, npub);
   const resetTool = useToolCall<ResetResult>("reset_classifications");
+  const rulesTool = useToolCall<RulesResult>("get_rules");
+  const saveRuleTool = useToolCall<SaveRuleResult>("save_rule");
+  const deleteRuleTool = useToolCall<unknown>("delete_rule");
+  const applyRulesTool = useToolCall<ApplyResult>("apply_rules");
+
   const [resetMsg, setResetMsg] = useState<string | null>(null);
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [applyMsg, setApplyMsg] = useState<string | null>(null);
+
+  // New rule form state
+  const [formPattern, setFormPattern] = useState("");
+  const [formCategory, setFormCategory] = useState("Personal");
+  const [formSubcategory, setFormSubcategory] = useState("");
+  const [formAmountOp, setFormAmountOp] = useState("");
+  const [formAmountVal, setFormAmountVal] = useState("");
+  const [formNewDesc, setFormNewDesc] = useState("");
 
   const { phase, total, classified, errors, recentUpdates } = state;
   const needsReview = Math.max(0, total - classified);
   const pct = total > 0 ? Math.round((classified / total) * 100) : 0;
 
-  // Fetch counts on mount
+  async function loadRules() {
+    if (!sessionId) return;
+    const data = await rulesTool.invoke({ session_id: sessionId, npub });
+    if (data?.rules) setRules(data.rules);
+  }
+
   useEffect(() => {
-    if (sessionId) refreshCounts();
-  }, [sessionId, refreshCounts]);
+    if (sessionId) {
+      refreshCounts();
+      loadRules();
+    }
+  }, [sessionId]);
+
+  async function handleSaveRule() {
+    if (!sessionId || !formPattern || !formCategory || !formSubcategory) return;
+    const data = await saveRuleTool.invoke({
+      session_id: sessionId,
+      description_pattern: formPattern,
+      category: formCategory,
+      subcategory: formSubcategory,
+      amount_operator: formAmountOp || "",
+      amount_value: formAmountOp && formAmountVal ? parseFloat(formAmountVal) : null,
+      new_description: formNewDesc || "",
+      npub,
+    });
+    if (data) {
+      setFormPattern("");
+      setFormCategory("Personal");
+      setFormSubcategory("");
+      setFormAmountOp("");
+      setFormAmountVal("");
+      setFormNewDesc("");
+      setShowForm(false);
+      loadRules();
+    }
+  }
+
+  async function handleDeleteRule(id: number) {
+    await deleteRuleTool.invoke({ rule_id: id, npub });
+    loadRules();
+  }
+
+  async function handleApplyRules() {
+    if (!sessionId) return;
+    setApplyMsg(null);
+    const data = await applyRulesTool.invoke({ session_id: sessionId, npub });
+    if (data) {
+      setApplyMsg(`Applied rules: ${data.updated} transactions updated.`);
+      refreshCounts();
+    }
+  }
+
+  const subs = CAT_SUBS[formCategory] ?? [];
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -32,7 +149,6 @@ export default function ClassifyPage() {
         <div className="flex items-center gap-8">
           <DonutChart total={total} classified={classified} needsReview={needsReview} />
 
-          {/* Stats */}
           <div className="flex-1 space-y-3">
             <div className="grid grid-cols-3 gap-3">
               <div>
@@ -49,7 +165,6 @@ export default function ClassifyPage() {
               </div>
             </div>
 
-            {/* Progress bar */}
             <div>
               <div className="w-full bg-stone-100 rounded-full h-2">
                 <div
@@ -72,14 +187,13 @@ export default function ClassifyPage() {
       {/* Actions */}
       <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
         <div className="flex items-start gap-6">
-          {/* Left: Classification action */}
           <div className="flex-1">
             <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">
               Run Claude AI Classification
             </div>
             <p className="text-xs text-stone-500 mb-3">
               Classifies unclassified transactions using Claude directly from your browser.
-              Your manual edits are preserved.
+              Rules are applied first, then AI classifies the rest.
             </p>
 
             {(phase === "idle" || phase === "error" || phase === "complete") && total > 0 && (
@@ -157,19 +271,15 @@ export default function ClassifyPage() {
             )}
           </div>
 
-          {/* Right: Refresh stats */}
           <div className="border-l border-stone-100 pl-6">
             <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">
               Refresh Stats
             </div>
-            <p className="text-xs text-stone-500 mb-3">
-              Refresh the counts and chart above.
-            </p>
             <button
               onClick={refreshCounts}
               className="text-xs text-stone-500 hover:text-stone-700 border border-stone-200 px-3 py-1.5 rounded-lg"
             >
-              Refresh Stats
+              Refresh
             </button>
           </div>
         </div>
@@ -178,6 +288,150 @@ export default function ClassifyPage() {
       {resetMsg && (
         <div className="text-xs text-stone-500 mb-4">{resetMsg}</div>
       )}
+
+      {/* Classification Rules */}
+      <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
+            Classification Rules
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleApplyRules}
+              disabled={applyRulesTool.loading || rules.length === 0}
+              className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 px-3 py-1 rounded hover:bg-blue-50 disabled:opacity-40 transition-colors"
+            >
+              {applyRulesTool.loading ? "Applying\u2026" : "Apply Rules Now"}
+            </button>
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="text-xs text-stone-500 hover:text-stone-700 border border-stone-200 px-3 py-1 rounded hover:bg-stone-50 transition-colors"
+            >
+              {showForm ? "Cancel" : "+ New Rule"}
+            </button>
+          </div>
+        </div>
+
+        <p className="text-xs text-stone-400 mb-3">
+          Rules run before AI classification. Matching transactions are classified instantly without an API call.
+        </p>
+
+        {applyMsg && (
+          <div className="text-xs text-blue-600 mb-3">{applyMsg}</div>
+        )}
+
+        {/* New rule form */}
+        {showForm && (
+          <div className="bg-stone-50 border border-stone-200 rounded-lg p-4 mb-4 space-y-3">
+            <div>
+              <label className="text-xs text-stone-500 block mb-1">Description pattern (regex, case-insensitive)</label>
+              <input
+                value={formPattern}
+                onChange={e => setFormPattern(e.target.value)}
+                placeholder="e.g. mr cooper|nationstar|rocket mortgage"
+                className="w-full text-sm border border-stone-200 rounded px-3 py-1.5 bg-white focus:outline-none focus:border-stone-400"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Category</label>
+                <select
+                  value={formCategory}
+                  onChange={e => { setFormCategory(e.target.value); setFormSubcategory(""); }}
+                  className="w-full text-sm border border-stone-200 rounded px-2 py-1.5 bg-white"
+                >
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Subcategory</label>
+                <select
+                  value={formSubcategory}
+                  onChange={e => setFormSubcategory(e.target.value)}
+                  className="w-full text-sm border border-stone-200 rounded px-2 py-1.5 bg-white"
+                >
+                  <option value="">Select...</option>
+                  {subs.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Amount filter</label>
+                <select
+                  value={formAmountOp}
+                  onChange={e => setFormAmountOp(e.target.value)}
+                  className="w-full text-sm border border-stone-200 rounded px-2 py-1.5 bg-white"
+                >
+                  {AMOUNT_OPS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Amount value</label>
+                <input
+                  type="number"
+                  value={formAmountVal}
+                  onChange={e => setFormAmountVal(e.target.value)}
+                  disabled={!formAmountOp}
+                  placeholder="0.00"
+                  className="w-full text-sm border border-stone-200 rounded px-3 py-1.5 bg-white disabled:opacity-40"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Rename to (optional)</label>
+                <input
+                  value={formNewDesc}
+                  onChange={e => setFormNewDesc(e.target.value)}
+                  placeholder="New description"
+                  className="w-full text-sm border border-stone-200 rounded px-3 py-1.5 bg-white"
+                />
+              </div>
+            </div>
+            <button
+              onClick={handleSaveRule}
+              disabled={!formPattern || !formSubcategory || saveRuleTool.loading}
+              className="bg-stone-900 text-white text-xs px-4 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
+            >
+              {saveRuleTool.loading ? "Saving\u2026" : "Save Rule"}
+            </button>
+          </div>
+        )}
+
+        {/* Rules list */}
+        {rules.length === 0 && !showForm && (
+          <div className="text-xs text-stone-400 italic">No rules defined yet.</div>
+        )}
+        {rules.length > 0 && (
+          <div className="space-y-2">
+            {rules.map(r => (
+              <div key={r.id} className="flex items-center gap-3 bg-stone-50 border border-stone-100 rounded-lg px-3 py-2 text-xs">
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-stone-600">/{r.description_pattern}/i</span>
+                  {r.amount_operator && (
+                    <span className="text-stone-400 ml-2">
+                      amount {r.amount_operator} {r.amount_value}
+                    </span>
+                  )}
+                  <span className="text-stone-400 mx-1">&rarr;</span>
+                  <span className="text-amber-700 font-medium">{r.category}</span>
+                  <span className="text-stone-400 mx-1">/</span>
+                  <span className="text-stone-600">{r.subcategory}</span>
+                  {r.new_description && (
+                    <span className="text-blue-600 ml-2">rename: &ldquo;{r.new_description}&rdquo;</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleDeleteRule(r.id)}
+                  disabled={deleteRuleTool.loading}
+                  className="text-stone-300 hover:text-red-500 transition-colors flex-shrink-0"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Errors */}
       {errors.length > 0 && (
