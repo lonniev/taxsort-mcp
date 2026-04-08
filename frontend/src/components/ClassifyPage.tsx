@@ -1,11 +1,18 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "../App";
 import { useClassify } from "../hooks/useClassify";
+import { useToolCall } from "../hooks/useMCP";
 import DonutChart from "./DonutChart";
+
+interface ResetResult {
+  classifications_deleted: number;
+}
 
 export default function ClassifyPage() {
   const { sessionId, npub } = useSession();
   const { state, classify, pause, resume, refreshCounts } = useClassify(sessionId, npub);
+  const resetTool = useToolCall<ResetResult>("reset_classifications");
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
 
   const { phase, total, classified, errors, recentUpdates } = state;
   const needsReview = Math.max(0, total - classified);
@@ -105,6 +112,22 @@ export default function ClassifyPage() {
                 >
                   Reclassify All ({total})
                 </button>
+                <button
+                  onClick={async () => {
+                    if (!sessionId) return;
+                    if (!confirm("Delete all classifications? Transactions will be kept.")) return;
+                    setResetMsg(null);
+                    const r = await resetTool.invoke({ session_id: sessionId, npub });
+                    if (r) {
+                      setResetMsg(`Cleared ${r.classifications_deleted} classifications.`);
+                      refreshCounts();
+                    }
+                  }}
+                  disabled={resetTool.loading}
+                  className="text-xs border border-stone-200 text-stone-500 px-4 py-2 rounded-lg hover:bg-stone-50 transition-colors"
+                >
+                  {resetTool.loading ? "Clearing\u2026" : "Reset All Classifications"}
+                </button>
               </div>
             )}
 
@@ -151,6 +174,10 @@ export default function ClassifyPage() {
           </div>
         </div>
       </div>
+
+      {resetMsg && (
+        <div className="text-xs text-stone-500 mb-4">{resetMsg}</div>
+      )}
 
       {/* Errors */}
       {errors.length > 0 && (

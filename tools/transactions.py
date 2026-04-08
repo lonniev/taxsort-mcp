@@ -182,6 +182,15 @@ async def delete_classification(
     return {"deleted": deleted, "transaction_id": transaction_id}
 
 
+async def reset_classifications(session_id: str) -> dict:
+    """Delete all classifications for a session, keeping raw transactions."""
+    result = await execute(
+        "DELETE FROM classifications WHERE session_id=$1", session_id,
+    )
+    count = int(str(result).split()[-1]) if result else 0
+    return {"session_id": session_id, "classifications_deleted": count}
+
+
 async def clear_transactions(session_id: str) -> dict:
     """Delete all raw transactions and their classifications for a session."""
     cls_result = await execute(
