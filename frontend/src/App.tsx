@@ -338,7 +338,11 @@ export default function App() {
     if (timerRef.current) clearTimeout(timerRef.current);
     const minutes = parseInt(localStorage.getItem("taxsort_timeout_minutes") ?? "15", 10);
     if (minutes <= 0 || !npub) return;
-    timerRef.current = setTimeout(() => setLocked(true), minutes * 60 * 1000);
+    timerRef.current = setTimeout(() => {
+      // Timeout = full session expiry — requires re-verification
+      sessionStorage.removeItem("taxsort_verified");
+      setLocked(true);
+    }, minutes * 60 * 1000);
   }, [npub]);
 
   useEffect(() => {
@@ -357,7 +361,7 @@ export default function App() {
     return (
       <LockScreen
         npub={npub}
-        onUnlock={() => { setLocked(false); resetTimer(); }}
+        onUnlock={() => { sessionStorage.setItem("taxsort_verified", "true"); setLocked(false); resetTimer(); }}
         onLogOut={logOut}
       />
     );
@@ -370,7 +374,7 @@ export default function App() {
           <div className="min-h-screen bg-stone-50 text-stone-900">
             <StatusBanner />
             <Nav />
-            <main className="max-w-5xl mx-auto px-4 py-6">
+            <main className="px-4 py-6">
               <Routes>
                 <Route path="/" element={<SessionsPage />} />
                 <Route
