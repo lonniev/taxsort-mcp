@@ -74,7 +74,7 @@ async function getClient(): Promise<Client> {
 
 const QUIET_TOOLS = new Set(["session_heartbeat"]);
 
-async function mcpCall(toolName: string, args: Record<string, unknown>): Promise<unknown> {
+export async function mcpCall(toolName: string, args: Record<string, unknown>): Promise<unknown> {
   const quiet = QUIET_TOOLS.has(toolName);
   if (!quiet) debugPush("call", `taxsort_${toolName}(${JSON.stringify(args).slice(0, 120)})`);
   const c = await getClient();

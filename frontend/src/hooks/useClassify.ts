@@ -1,13 +1,14 @@
 /**
  * useClassify — FE-driven transaction classification using Anthropic API.
  *
- * Fetches unclassified transactions from the MCP BE, sends them in batches
- * to Claude, and writes results back via save_classifications.
+ * The classification engine is a module-level singleton so it survives
+ * component unmount (e.g. navigating away from the Classify tab).
+ * The React hook is a thin subscriber to the engine's state.
  */
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Anthropic from "@anthropic-ai/sdk";
-import { useToolCall } from "./useMCP";
+import { mcpCall } from "./useMCP";
 
 // ── Category / subcategory lists (mirrored from BE) ──────────────────────
 
@@ -157,7 +158,7 @@ export interface ClassificationResult {
   classified_by: "ai";
 }
 
-// ── Hook state ───────────────────────────────────────────────────────────
+// ── Engine state ─────────────────────────────────────────────────────────
 
 export type ClassifyPhase = "idle" | "running" | "paused" | "complete" | "error";
 
@@ -169,39 +170,57 @@ export interface ClassifyState {
   recentUpdates: ClassificationResult[];
 }
 
-export function useClassify(sessionId: string | null, npub: string) {
-  const [state, setState] = useState<ClassifyState>({
-    phase: "idle", total: 0, classified: 0, errors: [], recentUpdates: [],
-  });
-  const abortRef = useRef(false);
+// ── Module-level singleton engine ────────────────────────────────────────
 
-  const txTool = useToolCall<{ total: number; transactions: RawTransaction[] }>("get_transactions");
-  const saveTool = useToolCall<{ saved: number }>("save_classifications");
-  const keyTool = useToolCall<{ key: string | null }>("get_anthropic_key");
-  const rulesTool = useToolCall<{ rules: Rule[] }>("get_rules");
-  const neighborTool = useToolCall<{ neighbors: Array<{ id: string; date: string; description: string; amount: number; account: string; category: string | null; subcategory: string | null }> }>("get_amount_neighbors");
-  const accountsTool = useToolCall<{ accounts: Array<{ name: string; type: string; last4: string | null }>; alias_groups: string[][] }>("get_accounts");
+type McpCallFn = (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
 
-  const classify = useCallback(async (reclassifyAll = false) => {
-    if (!sessionId) return;
-    abortRef.current = false;
-    setState(s => ({ ...s, phase: "running", classified: 0, errors: [], recentUpdates: [] }));
+let _state: ClassifyState = {
+  phase: "idle", total: 0, classified: 0, errors: [], recentUpdates: [],
+};
+let _abort = false;
+let _listeners: Set<() => void> = new Set();
+let _running = false;
 
+function _notify() {
+  _listeners.forEach(fn => fn());
+}
+
+function _setState(updater: (s: ClassifyState) => ClassifyState) {
+  _state = updater(_state);
+  _notify();
+}
+
+async function _runEngine(
+  sessionId: string,
+  npub: string,
+  reclassifyAll: boolean,
+  mcpCall: McpCallFn,
+) {
+  if (_running) return;
+  _running = true;
+  _abort = false;
+  _setState(s => ({ ...s, phase: "running", classified: 0, errors: [], recentUpdates: [] }));
+
+  try {
     // 1. Get API key
-    const keyResult = await keyTool.invoke({ npub });
+    const keyResult = await mcpCall("get_anthropic_key", { npub }) as { key: string | null } | null;
     const apiKey = keyResult?.key;
     if (!apiKey) {
-      setState(s => ({ ...s, phase: "error", errors: ["No Anthropic API key available."] }));
+      _setState(s => ({ ...s, phase: "error", errors: ["No Anthropic API key available."] }));
+      _running = false;
       return;
     }
 
-    // 2. Get rules for context
-    const rulesResult = await rulesTool.invoke({ npub, session_id: sessionId });
+    // 2. Get rules
+    const rulesResult = await mcpCall("get_rules", { npub, session_id: sessionId }) as { rules: Rule[] } | null;
     const rules = rulesResult?.rules ?? [];
     const rulesCtx = buildRulesContext(rules);
 
-    // 2b. Get account aliases for duplicate detection
-    const acctResult = await accountsTool.invoke({ session_id: sessionId, npub });
+    // 2b. Get account aliases
+    const acctResult = await mcpCall("get_accounts", { session_id: sessionId, npub }) as {
+      accounts: Array<{ name: string; type: string; last4: string | null }>;
+      alias_groups: string[][];
+    } | null;
     const aliasGroups = acctResult?.alias_groups ?? [];
     const accounts = acctResult?.accounts ?? [];
 
@@ -220,68 +239,64 @@ export function useClassify(sessionId: string | null, npub: string) {
         typed.map(a => `  "${a.name}" → ${a.type}`).join("\n");
     }
 
-    // 3. Create Anthropic client (browser — uses dangerouslyAllowBrowser)
+    // 3. Create Anthropic client
     const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
     const systemPrompt = buildSystemPrompt(rulesCtx) + aliasCtx + acctTypeCtx;
 
-    // 4. If reclassify all, we need total count first
+    // 4. Total count for reclassify
     if (reclassifyAll) {
-      // Fetch total count to set progress
-      const countResult = await txTool.invoke({
+      const countResult = await mcpCall("get_transactions", {
         session_id: sessionId, npub, limit: 1, offset: 0,
-      });
-      setState(s => ({ ...s, total: countResult?.total ?? 0 }));
+      }) as { total: number } | null;
+      _setState(s => ({ ...s, total: countResult?.total ?? 0 }));
     }
 
     // 5. Process batches
     let totalClassified = 0;
     let offset = 0;
 
-    while (!abortRef.current) {
-      // Fetch a batch of unclassified transactions
-      const batch = await txTool.invoke({
+    while (!_abort) {
+      const batch = await mcpCall("get_transactions", {
         session_id: sessionId,
         npub,
         limit: BATCH_SIZE,
         offset: reclassifyAll ? offset : 0,
         unclassified_only: !reclassifyAll,
-      });
+      }) as { total: number; transactions: RawTransaction[] } | null;
 
       if (!batch?.transactions?.length) {
-        setState(s => ({ ...s, phase: "complete" }));
+        _setState(s => ({ ...s, phase: "complete" }));
+        _running = false;
         return;
       }
 
-      // Update total on first fetch
       if (totalClassified === 0 && !reclassifyAll) {
-        setState(s => ({ ...s, total: batch.total }));
+        _setState(s => ({ ...s, total: batch.total }));
       }
 
       const txns = batch.transactions;
 
-      // Fetch neighbors for dedup context — unique amounts in this batch
+      // Fetch neighbors for dedup context
       const seenAmounts = new Set<string>();
       const neighborLines: string[] = [];
       for (const t of txns) {
         const amtKey = `${t.amount.toFixed(2)}|${t.date}`;
         if (seenAmounts.has(amtKey)) continue;
         seenAmounts.add(amtKey);
-        const nbResult = await neighborTool.invoke({
+        const nbResult = await mcpCall("get_amount_neighbors", {
           session_id: sessionId,
           amount: t.amount,
           date: t.date,
           days: 14,
           exclude_id: t.id,
           npub,
-        });
+        }) as { neighbors: Array<{ id: string; date: string; description: string; amount: number; account: string; category: string | null; subcategory: string | null }> } | null;
         const nbs = nbResult?.neighbors ?? [];
-        if (nbs.length > 0) {
-          for (const nb of nbs) {
-            const status = nb.category ? `[already: ${nb.category}/${nb.subcategory}]` : "[unclassified]";
-            neighborLines.push(
-              `  $${nb.amount.toFixed(2)} | ${nb.date} | ${nb.description} | ${nb.account} ${status}`
-            );
-          }
+        for (const nb of nbs) {
+          const status = nb.category ? `[already: ${nb.category}/${nb.subcategory}]` : "[unclassified]";
+          neighborLines.push(
+            `  $${nb.amount.toFixed(2)} | ${nb.date} | ${nb.description} | ${nb.account} ${status}`
+          );
         }
       }
 
@@ -300,7 +315,6 @@ export function useClassify(sessionId: string | null, npub: string) {
         : "";
 
       try {
-        // Call Claude
         const message = await client.messages.create({
           model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
@@ -318,7 +332,7 @@ export function useClassify(sessionId: string | null, npub: string) {
         try {
           results = JSON.parse(text);
         } catch {
-          setState(s => ({
+          _setState(s => ({
             ...s,
             errors: [...s.errors, `Failed to parse Claude response for batch at offset ${offset}`],
           }));
@@ -326,7 +340,6 @@ export function useClassify(sessionId: string | null, npub: string) {
           continue;
         }
 
-        // Build classifications
         const classifications: ClassificationResult[] = [];
         for (const r of results) {
           const idx = r.idx;
@@ -343,16 +356,15 @@ export function useClassify(sessionId: string | null, npub: string) {
           }
         }
 
-        // Write back to BE
         if (classifications.length > 0) {
-          await saveTool.invoke({
+          await mcpCall("save_classifications", {
             session_id: sessionId,
             classifications: JSON.stringify(classifications),
             npub,
           });
 
           totalClassified += classifications.length;
-          setState(s => ({
+          _setState(s => ({
             ...s,
             classified: totalClassified,
             recentUpdates: [...classifications.slice(0, 10), ...s.recentUpdates].slice(0, 20),
@@ -361,37 +373,58 @@ export function useClassify(sessionId: string | null, npub: string) {
 
         offset += BATCH_SIZE;
 
-        // If not reclassify and we got fewer than BATCH_SIZE, we're done
         if (!reclassifyAll && txns.length < BATCH_SIZE) {
-          setState(s => ({ ...s, phase: "complete" }));
+          _setState(s => ({ ...s, phase: "complete" }));
+          _running = false;
           return;
         }
 
-        // If reclassify and we've gone past total
         if (reclassifyAll && offset >= (batch.total ?? 0)) {
-          setState(s => ({ ...s, phase: "complete" }));
+          _setState(s => ({ ...s, phase: "complete" }));
+          _running = false;
           return;
         }
 
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        setState(s => ({
+        _setState(s => ({
           ...s,
           errors: [...s.errors, `Batch error: ${msg}`],
         }));
-        // Continue to next batch despite errors
         offset += BATCH_SIZE;
       }
     }
 
-    // If we exited because of abort
-    if (abortRef.current) {
-      setState(s => ({ ...s, phase: "paused" }));
+    if (_abort) {
+      _setState(s => ({ ...s, phase: "paused" }));
     }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    _setState(s => ({ ...s, phase: "error", errors: [...s.errors, msg] }));
+  }
+
+  _running = false;
+}
+
+// ── React hook (thin subscriber) ─────────────────────────────────────────
+
+export function useClassify(sessionId: string | null, npub: string) {
+  const [, setTick] = useState(0);
+
+  // Subscribe to engine state changes
+  useEffect(() => {
+    const listener = () => setTick(t => t + 1);
+    _listeners.add(listener);
+    return () => { _listeners.delete(listener); };
+  }, []);
+
+  const classify = useCallback(async (reclassifyAll = false) => {
+    if (!sessionId) return;
+    await _runEngine(sessionId, npub, reclassifyAll, mcpCall);
   }, [sessionId, npub]);
 
   const pause = useCallback(() => {
-    abortRef.current = true;
+    _abort = true;
   }, []);
 
   const resume = useCallback(() => {
@@ -400,18 +433,18 @@ export function useClassify(sessionId: string | null, npub: string) {
 
   const refreshCounts = useCallback(async () => {
     if (!sessionId) return;
-    const all = await txTool.invoke({ session_id: sessionId, npub, limit: 1, offset: 0 });
-    const unclassified = await txTool.invoke({
+    const all = await mcpCall("get_transactions", { session_id: sessionId, npub, limit: 1, offset: 0 }) as { total: number } | null;
+    const unclassified = await mcpCall("get_transactions", {
       session_id: sessionId, npub, limit: 1, offset: 0, unclassified_only: true,
-    });
+    }) as { total: number } | null;
     const totalN = all?.total ?? 0;
     const unclassifiedN = unclassified?.total ?? 0;
-    setState(s => ({
+    _setState(s => ({
       ...s,
       total: totalN,
       classified: totalN - unclassifiedN,
     }));
   }, [sessionId, npub]);
 
-  return { state, classify, pause, resume, refreshCounts };
+  return { state: _state, classify, pause, resume, refreshCounts };
 }
