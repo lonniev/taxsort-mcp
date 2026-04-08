@@ -33,55 +33,55 @@ export default function Nav() {
     };
   }, [sessionId, npub]);
 
-  const link = (to: string, label: string, tip?: string) => (
+  const link = (to: string, icon: string, label: string, tip?: string) => (
     <Link
       to={to}
       title={tip}
-      className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+      className={`px-2.5 py-1.5 rounded text-sm font-medium transition-colors whitespace-nowrap ${
         loc.pathname === to
           ? "bg-amber-100 text-amber-800"
           : "text-stone-500 hover:text-stone-900 hover:bg-stone-100"
       }`}
     >
-      {label}
+      <span className="mr-1">{icon}</span>{label}
     </Link>
   );
 
   return (
     <>
       {/* Main nav bar */}
-      <header className="bg-white border-b border-stone-200 px-4 py-2.5 flex items-center gap-2 flex-wrap">
+      <header className="bg-white border-b border-stone-200 px-4 py-2.5 flex items-center gap-1 flex-wrap">
         <div className="flex items-center gap-2 mr-3">
           <span className="w-2 h-2 rounded-full bg-amber-600" />
           <span className="text-sm font-semibold tracking-wider text-amber-700">TaxSort</span>
         </div>
 
-        {link("/", "Sessions", "Create and switch between tax year sessions")}
+        {link("/", "\u{1F4C1}", "Sessions", "Create and switch between tax year sessions")}
 
         {sessionId && (
           <>
-            {link("/import", "Import", "Upload bank CSV files (SoFi, Chase, Schwab, PayPal, etc.)")}
-            {link("/accounts", "Accounts", "Tag account types and detect cross-account transfers")}
-            {link("/classify", "Classify", "Run Claude AI to categorize your transactions")}
-            {link("/transactions", "Transactions", "Browse, search, filter, and edit classifications")}
-            {link("/summary", "Categorized", "View classified totals by IRS line, category, month, or account")}
-            {link("/subscriptions", "Subscriptions", "Find recurring charges, forgotten money leaks, cancel URLs")}
-          {link("/wallet", "Wallet", "Check your credit balance, buy more sats via Lightning")}
-            {link("/advisor", "Advisor", "Ask the Financial Advisor how to use TaxSort")}
-            {link("/tax-research", "Tax Code", "Look up IRS code sections — chapter and verse")}
-            {link("/feedback", "Feedback", "Report bugs, request features, ask questions")}
+            {link("/import", "\u{1F4E5}", "Import", "Upload bank CSV files")}
+            {link("/accounts", "\u{1F3E6}", "Accounts", "Tag account types, view aliases")}
+            {link("/transactions", "\u{1F4C4}", "Transactions", "Browse and search raw transaction data")}
+            {link("/classify", "\u{1F916}", "Classify", "Run Claude AI classification and manage rules")}
+            {link("/summary", "\u2705", "Categorized", "View classified totals with semantic categories")}
+            {link("/subscriptions", "\u{1F501}", "Subscriptions", "Find recurring charges and money leaks")}
+            {link("/advisor", "\u{1F4AC}", "Advisor", "Ask the Financial Advisor")}
+            {link("/tax-research", "\u{1F4D6}", "Tax Code", "IRS code sections — chapter and verse")}
+            {link("/feedback", "\u{1F4E8}", "Feedback", "Report bugs, request features")}
           </>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
-          {link("/privacy", "Privacy", "How your data is protected — no KYC, no email, Nostr identity")}
-          {link("/settings", "Settings", "Session timeout, sharing, and about")}
+        <div className="ml-auto flex items-center gap-1">
+          {link("/wallet", "\u{1F4B0}", "Wallet", "Credit balance and Lightning purchases")}
+          {link("/settings", "\u2699\uFE0F", "Settings", "Session timeout, sharing, and about")}
+          {link("/privacy", "\u{1F512}", "Privacy", "How your data is protected")}
           <button
             onClick={logOut}
             title="Log out — clears session and requires re-verification"
-            className="px-3 py-1.5 rounded text-sm font-medium text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+            className="px-2.5 py-1.5 rounded text-sm font-medium text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors whitespace-nowrap"
           >
-            Log out
+            <span className="mr-1">{"\u{1F6AA}"}</span>Log out
           </button>
         </div>
       </header>

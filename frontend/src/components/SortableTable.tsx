@@ -167,7 +167,7 @@ export default function SortableTable<T>({
   const displayRows = groupBy ? [] : sortedRows;
 
   return (
-    <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+    <div className="bg-white border border-stone-200 rounded-xl overflow-auto max-h-[70vh]">
       {hasGroups && (
         <div className="flex items-center gap-2 px-4 py-1.5 bg-stone-50 border-b border-stone-200 text-xs text-stone-400">
           <span>{groups!.order.length} groups</span>
@@ -180,7 +180,7 @@ export default function SortableTable<T>({
         </div>
       )}
       <table className="w-full text-sm border-collapse">
-        <thead>
+        <thead className="sticky top-0 z-10">
           <tr className="bg-stone-50 text-xs font-semibold text-stone-400 uppercase tracking-wider">
             {columns.map(col => {
               const sortable = !!col.sortValue;

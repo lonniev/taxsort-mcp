@@ -23,7 +23,8 @@ async def get_accounts(session_id: str) -> dict:
         """
         SELECT r.account, COALESCE(a.account_type, 'unknown') as account_type,
                COUNT(*) as tx_count,
-               MIN(r.date) as earliest, MAX(r.date) as latest
+               MIN(r.date) as earliest, MAX(r.date) as latest,
+               ARRAY_AGG(DISTINCT r.format) as formats
         FROM raw_transactions r
         LEFT JOIN tax_accounts a
           ON a.session_id = r.session_id AND a.account_name = r.account
@@ -54,6 +55,7 @@ async def get_accounts(session_id: str) -> dict:
                 "last4": _last4(str(r["account"])),
                 "tx_count": int(r["tx_count"]),
                 "date_range": f"{r['earliest']} to {r['latest']}",
+                "formats": r.get("formats") or [],
             }
             for r in rows
         ],

@@ -7,6 +7,7 @@ interface Account {
   type: string;
   last4: string | null;
   tx_count: number;
+  formats: string[];
   date_range: string;
 }
 
@@ -120,7 +121,14 @@ export default function AccountsPage() {
                 )}
                 <span className="text-xs text-stone-400">{a.tx_count} txns</span>
               </div>
-              <div className="text-xs text-stone-400 mb-2">{a.date_range}</div>
+              <div className="text-xs text-stone-400 mb-1">{a.date_range}</div>
+              {a.formats?.length > 0 && (
+                <div className="text-xs text-stone-400 mb-2">
+                  Sources: {a.formats.map((f, i) => (
+                    <span key={i} className="inline-block bg-stone-100 text-stone-500 font-mono px-1.5 py-0.5 rounded mr-1">{f}</span>
+                  ))}
+                </div>
+              )}
               <div className="flex gap-1.5 flex-wrap">
                 {ACCOUNT_TYPES.map(t => (
                   <button

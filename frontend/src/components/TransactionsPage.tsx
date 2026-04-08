@@ -90,6 +90,8 @@ export default function TransactionsPage() {
   const [subFilter, setSubFilter] = useState(searchParams.get("subcategory") ?? "");
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
+  const [amountMin, setAmountMin] = useState("");
+  const [amountMax, setAmountMax] = useState("");
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [editCat, setEditCat] = useState("");
@@ -253,10 +255,18 @@ export default function TransactionsPage() {
     }
   }
 
-  // Filter by scope
-  const scopedTxns = scope === "all" ? txns
+  // Filter by scope + amount range
+  const minAmt = amountMin ? parseFloat(amountMin) : null;
+  const maxAmt = amountMax ? parseFloat(amountMax) : null;
+
+  const scopedTxns = (scope === "all" ? txns
     : scope === "tax" ? txns.filter(t => t.category === "Schedule C" || t.category === "Schedule A")
-    : txns.filter(t => t.category === scope);
+    : txns.filter(t => t.category === scope)
+  ).filter(t => {
+    if (minAmt !== null && t.amount < minAmt) return false;
+    if (maxAmt !== null && t.amount > maxAmt) return false;
+    return true;
+  });
 
   // (grouping is handled by SortableTable)
 
@@ -398,6 +408,24 @@ export default function TransactionsPage() {
               if (e.key === "Enter") { setSearch(searchInput); setOffset(0); }
             }}
           />
+          <span className="text-xs text-stone-400 ml-2">Amount:</span>
+          <input
+            className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 w-20 font-mono"
+            placeholder="min"
+            type="number"
+            step="0.01"
+            value={amountMin}
+            onChange={e => setAmountMin(e.target.value)}
+          />
+          <span className="text-xs text-stone-300">..</span>
+          <input
+            className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 w-20 font-mono"
+            placeholder="max"
+            type="number"
+            step="0.01"
+            value={amountMax}
+            onChange={e => setAmountMax(e.target.value)}
+          />
           {searchInput && (
             <button
               onClick={() => { setSearch(searchInput); setOffset(0); }}
@@ -406,9 +434,9 @@ export default function TransactionsPage() {
               Search
             </button>
           )}
-          {(search || subFilter) && (
+          {(search || subFilter || amountMin || amountMax) && (
             <button
-              onClick={() => { setSearch(""); setSearchInput(""); setSubFilter(""); setOffset(0); }}
+              onClick={() => { setSearch(""); setSearchInput(""); setSubFilter(""); setAmountMin(""); setAmountMax(""); setOffset(0); }}
               className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded"
             >
               Clear filters
