@@ -65,12 +65,15 @@ Internal Transfer (money moving between own accounts):
   ${TRANSFER.join(", ")}
 
 Duplicate — this charge is a duplicate from an overlapping CSV export.
-  The ACCOUNT ALIASES section below tells you which account names are the same underlying account.
-  When you see the same merchant, same amount, same date (±2 days) from accounts in the same
-  alias group, the shorter/less-descriptive account name's entry is the Duplicate.
-  Also check the OTHER TRANSACTIONS section for already-classified entries that match.
-  If a neighbor is already classified as something other than Duplicate, then THIS transaction
-  is the duplicate. Only ONE entry per real charge should survive — all others are Duplicate.
+  DETECTION: same merchant (semantically — "JetBrains Americas Inc" = "JetBrains Americas Inc."),
+  same amount, dates within ±2 days, from different account names.
+  The ACCOUNT ALIASES section tells you which names are the same underlying account.
+  Also check OTHER TRANSACTIONS for already-classified neighbors that match.
+  WHICH IS THE DUPLICATE: the entry from the less-descriptive or shorter account name.
+  If a neighbor is already classified (not as Duplicate), THIS entry is the duplicate.
+  REFERENCING: For the Duplicate entry, set reason to "Dup of [account]:[date]".
+  For the surviving entry (classified normally), append " (kept, dup: [account]:[date])" to reason.
+  Only ONE entry per real charge should survive — all others are Duplicate.
 
 Needs Review — ONLY if truly ambiguous after considering all signals.
 
@@ -101,7 +104,7 @@ Respond ONLY with a JSON array, no markdown or preamble:
 [{"idx":N,"category":"...",
   "subcategory":"...",
   "confidence":"high"|"medium"|"low",
-  "reason":"max 8 words",
+  "reason":"concise — for Duplicates: 'Dup of [acct]:[date]'; for kept entries: include '(kept, dup: [acct]:[date])'",
   "merchant":"resolved full merchant name"}]
 
 The "merchant" field is the RESOLVED human-readable business name. Always provide it.`;
