@@ -9,7 +9,7 @@ interface HeartbeatResult {
 }
 
 export default function Nav() {
-  const { sessionId, sessionLabel, npub } = useSession();
+  const { sessionId, sessionLabel, npub, logOut } = useSession();
   const loc = useLocation();
   const heartbeatTool = useToolCall<HeartbeatResult>("session_heartbeat");
   const [others, setOthers] = useState<{ npub: string }[]>([]);
@@ -76,6 +76,13 @@ export default function Nav() {
         <div className="ml-auto flex items-center gap-2">
           {link("/privacy", "Privacy", "How your data is protected — no KYC, no email, Nostr identity")}
           {link("/settings", "Settings", "Session timeout, sharing, and about")}
+          <button
+            onClick={logOut}
+            title="Log out — clears session and requires re-verification"
+            className="px-3 py-1.5 rounded text-sm font-medium text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+          >
+            Log out
+          </button>
         </div>
       </header>
 

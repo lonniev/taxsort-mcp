@@ -28,6 +28,7 @@ interface SessionCtx {
   npub: string;
   setSession: (id: string, label: string) => void;
   clearSession: () => void;
+  logOut: () => void;
 }
 
 const SessionContext = createContext<SessionCtx>({
@@ -36,6 +37,7 @@ const SessionContext = createContext<SessionCtx>({
   npub: "",
   setSession: () => {},
   clearSession: () => {},
+  logOut: () => {},
 });
 
 export const useSession = () => useContext(SessionContext);
@@ -117,12 +119,29 @@ function NpubGate({ children, npub, setNpub }: {
 }) {
   const [input, setInput] = useState(npub);
   const [verified, setVerified] = useState(
-    localStorage.getItem("taxsort_verified") === "true",
+    sessionStorage.getItem("taxsort_verified") === "true",
   );
-  const [verifyPhase, setVerifyPhase] = useState<"enter" | "waiting" | "checking">("enter");
+  const [verifyPhase, setVerifyPhase] = useState<"enter" | "waiting" | "checking">(
+    // If we have an npub but aren't verified, auto-check on mount
+    npub && !sessionStorage.getItem("taxsort_verified") ? "checking" : "enter",
+  );
 
   const verifyTool = useToolCall<VerifyResult>("verify_npub");
   const checkTool = useToolCall<VerifyResult>("check_verification");
+
+  // Auto-check verification on mount if we have an npub but no session token
+  useEffect(() => {
+    if (npub && !verified) {
+      checkTool.invoke({ npub }).then((r) => {
+        if (r?.verified) {
+          sessionStorage.setItem("taxsort_verified", "true");
+          setVerified(true);
+        } else {
+          setVerifyPhase("enter");
+        }
+      });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // If npub is set and verified, show the app
   if (npub && verified) return <>{children}</>;
@@ -157,7 +176,7 @@ function NpubGate({ children, npub, setNpub }: {
                   setVerifyPhase("checking");
                   checkTool.invoke({ npub }).then((r) => {
                     if (r?.verified) {
-                      localStorage.setItem("taxsort_verified", "true");
+                      sessionStorage.setItem("taxsort_verified", "true");
                       setVerified(true);
                     } else {
                       setVerifyPhase("enter");
@@ -187,7 +206,7 @@ function NpubGate({ children, npub, setNpub }: {
                   setVerifyPhase("checking");
                   const r = await checkTool.invoke({ npub });
                   if (r?.verified) {
-                    localStorage.setItem("taxsort_verified", "true");
+                    sessionStorage.setItem("taxsort_verified", "true");
                     setVerified(true);
                   } else {
                     setVerifyPhase("waiting");
@@ -215,7 +234,7 @@ function NpubGate({ children, npub, setNpub }: {
           <button
             onClick={() => {
               localStorage.removeItem("taxsort_npub");
-              localStorage.removeItem("taxsort_verified");
+              sessionStorage.removeItem("taxsort_verified");
               setNpub("");
               setVerified(false);
               setVerifyPhase("enter");
@@ -305,7 +324,7 @@ export default function App() {
 
   function logOut() {
     localStorage.removeItem("taxsort_npub");
-    localStorage.removeItem("taxsort_verified");
+    sessionStorage.removeItem("taxsort_verified");
     localStorage.removeItem("taxsort_session_id");
     localStorage.removeItem("taxsort_session_label");
     setNpub("");
@@ -346,7 +365,7 @@ export default function App() {
 
   return (
     <NpubGate npub={npub} setNpub={setNpub}>
-      <SessionContext.Provider value={{ sessionId, sessionLabel, npub, setSession, clearSession }}>
+      <SessionContext.Provider value={{ sessionId, sessionLabel, npub, setSession, clearSession, logOut }}>
         <BrowserRouter>
           <div className="min-h-screen bg-stone-50 text-stone-900">
             <StatusBanner />
