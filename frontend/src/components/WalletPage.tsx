@@ -13,6 +13,8 @@ interface BalanceResult {
   pending_invoice_count?: number;
   pending_invoice_ids?: string[];
   tranches?: { id: string; amount_sats: number; remaining_sats: number; expires_at: string }[];
+  vault_unavailable?: boolean;
+  warning?: string;
 }
 
 interface PurchaseResult {
@@ -111,6 +113,11 @@ export default function WalletPage() {
             {balanceTool.loading ? "\u2026" : "Refresh"}
           </button>
         </div>
+        {balance?.vault_unavailable && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 mb-4">
+            {balance.warning || "Vault not yet available — balance may be stale. Try refreshing."}
+          </div>
+        )}
 
         {balance && (
           <div className="grid grid-cols-4 gap-3 text-center">
