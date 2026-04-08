@@ -84,7 +84,7 @@ async def get_transactions(
         LEFT JOIN classifications c
           ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
         WHERE {where_clause}
-        ORDER BY r.date DESC, r.description
+        ORDER BY r.date ASC, r.amount, r.description
         LIMIT ${idx} OFFSET ${idx+1}
         """,
         *params, limit, offset,
