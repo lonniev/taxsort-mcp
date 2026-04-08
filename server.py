@@ -85,6 +85,7 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="save_classifications", category="free", intent="Bulk write classifications from FE"),
     ToolIdentity(capability="delete_classification", category="free", intent="Remove a classification (revert to unclassified)"),
     ToolIdentity(capability="clear_transactions", category="free", intent="Delete all transactions and classifications for a session"),
+    ToolIdentity(capability="get_amount_neighbors", category="free", intent="Fetch transactions with same amount near a date"),
     ToolIdentity(capability="get_accounts", category="free", intent="List accounts in session with their types"),
     ToolIdentity(capability="set_account_type", category="free", intent="Set account type (bank, card, investment, loan)"),
     ToolIdentity(capability="detect_transfers", category="free", intent="Auto-detect and classify cross-account transfers"),
@@ -394,6 +395,21 @@ async def clear_transactions(
     """Delete all transactions and classifications for a session, so CSVs can be re-imported."""
     from tools.transactions import clear_transactions as _clear
     return await _clear(session_id=session_id)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("get_amount_neighbors"))
+async def get_amount_neighbors(
+    session_id: str,
+    amount: float,
+    date: str,
+    days: int = 14,
+    exclude_id: str = "",
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Fetch transactions with the same amount within ±days of a date. Used by the classifier to detect duplicates from overlapping CSV imports."""
+    from tools.transactions import get_amount_neighbors as _get
+    return await _get(session_id=session_id, amount=amount, date=date, days=days, exclude_id=exclude_id)
 
 
 @tool

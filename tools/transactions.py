@@ -199,6 +199,53 @@ async def clear_transactions(session_id: str) -> dict:
     }
 
 
+async def get_amount_neighbors(
+    session_id: str,
+    amount: float,
+    date: str,
+    days: int = 14,
+    exclude_id: str = "",
+) -> dict:
+    """Return transactions with the same amount within ±days of date."""
+    where = [
+        "r.session_id = $1",
+        "r.amount = $2",
+        "r.date BETWEEN ($3::date - $4 * INTERVAL '1 day') AND ($3::date + $4 * INTERVAL '1 day')",
+    ]
+    params: list = [session_id, amount, date, days]
+    idx = 5
+    if exclude_id:
+        where.append(f"r.id != ${idx}")
+        params.append(exclude_id)
+
+    rows = await fetch(
+        f"""
+        SELECT r.id, r.date, r.description, r.amount, r.account,
+               c.category, c.subcategory
+        FROM raw_transactions r
+        LEFT JOIN classifications c
+          ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
+        WHERE {" AND ".join(where)}
+        ORDER BY r.date
+        """,
+        *params,
+    )
+    return {
+        "neighbors": [
+            {
+                "id": str(r["id"]),
+                "date": str(r["date"]),
+                "description": str(r["description"]),
+                "amount": float(r["amount"]),
+                "account": str(r["account"]),
+                "category": r.get("category"),
+                "subcategory": r.get("subcategory"),
+            }
+            for r in rows
+        ],
+    }
+
+
 async def get_summary(
     session_id: str,
     group_by: str = "taxline",
@@ -206,7 +253,7 @@ async def get_summary(
     month: str = "",
 ) -> dict:
     """Get a grouped spending summary for tax reporting."""
-    scope_where = ""
+    scope_where = "AND c.category != 'Duplicate'"
     if scope == "tax":
         scope_where = "AND c.category IN ('Schedule C', 'Schedule A')"
     elif scope in ("Schedule C", "Schedule A"):

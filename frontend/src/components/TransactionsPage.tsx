@@ -32,7 +32,7 @@ interface TxResult {
 }
 
 const CATEGORIES = [
-  "Schedule C", "Schedule A", "Internal Transfer", "Personal",
+  "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate",
 ];
 const SCHED_C_SUBS = [
   "Advertising & Marketing", "Business Meals (50%)", "Business Software & Subscriptions",
@@ -62,11 +62,13 @@ const CAT_SUBS: Record<string, string[]> = {
   "Schedule A": SCHED_A_SUBS,
   "Internal Transfer": TRANSFER_SUBS,
   "Personal": PERSONAL_SUBS,
+  "Duplicate": ["Duplicate"],
 };
 const CAT_COLOR: Record<string, string> = {
   "Schedule C": "text-amber-700",
   "Schedule A": "text-green-700",
   "Internal Transfer": "text-blue-600",
+  "Duplicate": "text-stone-400 line-through",
   "Personal": "text-stone-400",
   "Unclassified": "text-red-500",
 };
@@ -321,7 +323,7 @@ export default function TransactionsPage() {
     },
   ], []);
 
-  const filters = ["all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Unclassified"];
+  const filters = ["all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate", "Unclassified"];
 
   return (
     <div className="flex gap-4">

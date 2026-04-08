@@ -63,6 +63,12 @@ Personal (non-deductible personal spending):
 Internal Transfer (money moving between own accounts):
   ${TRANSFER.join(", ")}
 
+Duplicate — this exact charge already appears from another CSV export of the same account.
+  Use subcategory "Duplicate" when you see the same merchant, same amount, same date (±2 days),
+  but from different account names that clearly refer to the same card or bank account
+  (e.g., "Chase8890_Activity..." and "United Club Visa ***8890" both end in 8890).
+  Mark the LESS descriptive account's entry as Duplicate. Only the SECOND occurrence is Duplicate.
+
 Needs Review — ONLY if truly ambiguous after considering all signals.
 
 CLASSIFICATION RULES:
@@ -171,6 +177,7 @@ export function useClassify(sessionId: string | null, npub: string) {
   const saveTool = useToolCall<{ saved: number }>("save_classifications");
   const keyTool = useToolCall<{ key: string | null }>("get_anthropic_key");
   const rulesTool = useToolCall<{ rules: Rule[] }>("get_rules");
+  const neighborTool = useToolCall<{ neighbors: Array<{ id: string; date: string; description: string; amount: number; account: string; category: string | null; subcategory: string | null }> }>("get_amount_neighbors");
 
   const classify = useCallback(async (reclassifyAll = false) => {
     if (!sessionId) return;
@@ -229,6 +236,32 @@ export function useClassify(sessionId: string | null, npub: string) {
 
       const txns = batch.transactions;
 
+      // Fetch neighbors for dedup context — unique amounts in this batch
+      const seenAmounts = new Set<string>();
+      const neighborLines: string[] = [];
+      for (const t of txns) {
+        const amtKey = `${t.amount.toFixed(2)}|${t.date}`;
+        if (seenAmounts.has(amtKey)) continue;
+        seenAmounts.add(amtKey);
+        const nbResult = await neighborTool.invoke({
+          session_id: sessionId,
+          amount: t.amount,
+          date: t.date,
+          days: 14,
+          exclude_id: t.id,
+          npub,
+        });
+        const nbs = nbResult?.neighbors ?? [];
+        if (nbs.length > 0) {
+          for (const nb of nbs) {
+            const status = nb.category ? `[already: ${nb.category}/${nb.subcategory}]` : "[unclassified]";
+            neighborLines.push(
+              `  $${nb.amount.toFixed(2)} | ${nb.date} | ${nb.description} | ${nb.account} ${status}`
+            );
+          }
+        }
+      }
+
       // Build batch text
       const batchText = txns.map((t, i) => {
         let line = `${i}: ${t.date} | ${t.raw_description || t.description} | $${t.amount.toFixed(2)} | ${t.account}`;
@@ -239,13 +272,17 @@ export function useClassify(sessionId: string | null, npub: string) {
         return line;
       }).join("\n");
 
+      const neighborCtx = neighborLines.length > 0
+        ? `\n\nOTHER TRANSACTIONS WITH SAME AMOUNTS (for duplicate detection):\n${neighborLines.join("\n")}`
+        : "";
+
       try {
         // Call Claude
         const message = await client.messages.create({
           model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
           system: systemPrompt,
-          messages: [{ role: "user", content: `Classify:\n${batchText}` }],
+          messages: [{ role: "user", content: `Classify:\n${batchText}${neighborCtx}` }],
         });
 
         const text = (message.content[0]?.type === "text" ? message.content[0].text : "[]")
