@@ -107,38 +107,93 @@ async def detect_subscriptions(session_id: str, enrich: bool = True) -> dict:
             "subcategory": str(r.get("subcategory") or ""),
         })
 
+    # Minimum occurrences per frequency to qualify as a subscription:
+    #   daily:     5+ hits in any 7-day window
+    #   weekly:    charges spanning 3+ months (12+ weeks)
+    #   monthly:   4+ occurrences
+    #   quarterly: 2+ occurrences
+    #   annual:    2+ occurrences
+    MIN_OCCURRENCES = {
+        "daily": 5,
+        "weekly": 12,
+        "monthly": 4,
+        "quarterly": 2,
+        "annual": 2,
+    }
+
     subscriptions = []
     for key, txns in groups.items():
         if len(txns) < 2:
             continue
 
+        from datetime import date as dt_date
+
         dates = sorted(txns, key=lambda t: t["date"])
-        gaps = []
-        for i in range(1, len(dates)):
+        parsed_dates = []
+        for t in dates:
             try:
-                from datetime import date as dt_date
-                a = dt_date.fromisoformat(dates[i - 1]["date"])
-                b = dt_date.fromisoformat(dates[i]["date"])
-                gaps.append((b - a).days)
+                parsed_dates.append(dt_date.fromisoformat(t["date"]))
             except (ValueError, TypeError):
                 continue
 
+        if len(parsed_dates) < 2:
+            continue
+
+        gaps = [(parsed_dates[i] - parsed_dates[i - 1]).days for i in range(1, len(parsed_dates))]
         if not gaps:
             continue
 
-        avg_gap = sum(gaps) / len(gaps)
-        if avg_gap <= 3:
+        # Use median gap (more robust than mean against outliers)
+        sorted_gaps = sorted(gaps)
+        mid = len(sorted_gaps) // 2
+        median_gap = sorted_gaps[mid] if len(sorted_gaps) % 2 else (sorted_gaps[mid - 1] + sorted_gaps[mid]) / 2
+
+        if median_gap <= 3:
             frequency = "daily"
-        elif avg_gap <= 10:
+        elif median_gap <= 10:
             frequency = "weekly"
-        elif avg_gap <= 35:
+        elif median_gap <= 35:
             frequency = "monthly"
-        elif avg_gap <= 100:
+        elif median_gap <= 100:
             frequency = "quarterly"
-        elif avg_gap <= 400:
+        elif median_gap <= 400:
             frequency = "annual"
         else:
             continue
+
+        # Enforce minimum occurrence thresholds
+        min_required = MIN_OCCURRENCES.get(frequency, 2)
+        if len(txns) < min_required:
+            continue
+
+        # For daily: verify at least 5 hits in some 7-day window
+        if frequency == "daily":
+            found_dense = False
+            for i in range(len(parsed_dates)):
+                window_end = parsed_dates[i]
+                count_in_window = sum(
+                    1 for d in parsed_dates
+                    if 0 <= (window_end - d).days <= 6
+                )
+                if count_in_window >= 5:
+                    found_dense = True
+                    break
+            if not found_dense:
+                continue
+
+        # For weekly: span must cover 3+ months
+        if frequency == "weekly":
+            span_days = (parsed_dates[-1] - parsed_dates[0]).days
+            if span_days < 84:  # ~3 months
+                continue
+
+        # For monthly: check dates cluster around same day of month (±3 days)
+        if frequency == "monthly":
+            days_of_month = [d.day for d in parsed_dates]
+            ref_day = sorted(days_of_month)[len(days_of_month) // 2]  # median day
+            consistent = sum(1 for dom in days_of_month if abs(dom - ref_day) <= 3)
+            if consistent < min_required:
+                continue
 
         total_spent = sum(abs(t["amount"]) for t in txns)
         avg_amount = total_spent / len(txns)
