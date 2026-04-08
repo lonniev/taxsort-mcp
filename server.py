@@ -97,6 +97,8 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
     ToolIdentity(capability="check_unlock", category="free", intent="Check if session unlock was approved"),
     ToolIdentity(capability="get_github_token", category="free", intent="Get GitHub token for issue reporting"),
+    ToolIdentity(capability="create_feedback_issue", category="free", intent="Create a GitHub issue for feedback"),
+    ToolIdentity(capability="list_feedback_issues", category="free", intent="List feedback issues for this patron"),
     ToolIdentity(capability="get_anthropic_key", category="free", intent="Get Anthropic API key for FE classification"),
     ToolIdentity(capability="session_heartbeat", category="free", intent="Presence heartbeat — who's active in this session"),
     ToolIdentity(capability="ask_advisor", category="free", intent="Ask the Financial Advisor about TaxSort"),
@@ -631,6 +633,32 @@ async def get_anthropic_key(
         return {"key": None, "message": "No Anthropic API key configured. Deliver one via Secure Courier."}
     except Exception as e:
         return {"key": None, "error": str(e)}
+
+
+# ── Feedback ─────────────────────────────────────────────────────────────
+
+@tool
+@runtime.paid_tool(capability_uuid("create_feedback_issue"))
+async def create_feedback_issue(
+    title: str,
+    body: str = "",
+    category: str = "feedback",
+    contact: str = "",
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Create a GitHub issue for bug reports, feature requests, or feedback."""
+    from tools.feedback import create_issue
+    return await create_issue(npub=npub, title=title, body=body, category=category, contact=contact)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("list_feedback_issues"))
+async def list_feedback_issues(
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """List feedback issues submitted by this patron."""
+    from tools.feedback import list_my_issues
+    return await list_my_issues(npub=npub)
 
 
 # ── Presence ──────────────────────────────────────────────────────────────

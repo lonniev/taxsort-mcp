@@ -2,23 +2,26 @@ import { useEffect, useState } from "react";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
 
-const REPO = "lonniev/taxsort-mcp";
-const GH_API = `https://api.github.com/repos/${REPO}`;
-
-interface GHIssue {
-  number: number;
+interface Issue {
+  number: number | null;
   title: string;
   state: string;
   created_at: string;
-  html_url: string;
-  labels: { name: string }[];
+  url?: string;
+  labels: string[];
   comments: number;
 }
 
-interface TokenResult {
-  token?: string | null;
-  repo?: string;
-  message?: string;
+interface IssuesResult {
+  issues: Issue[];
+}
+
+interface CreateResult {
+  created: boolean;
+  issue_number?: number;
+  url?: string;
+  message: string;
+  error?: string;
 }
 
 const CATEGORIES = [
@@ -31,103 +34,44 @@ const CATEGORIES = [
 const STATE_BADGE: Record<string, string> = {
   open: "bg-green-100 text-green-700",
   closed: "bg-stone-100 text-stone-500",
+  submitted: "bg-blue-100 text-blue-700",
 };
 
 export default function FeedbackPage() {
   const { npub } = useSession();
-  const tokenTool = useToolCall<TokenResult>("get_github_token");
+  const createTool = useToolCall<CreateResult>("create_feedback_issue");
+  const listTool = useToolCall<IssuesResult>("list_feedback_issues");
 
-  const [ghToken, setGhToken] = useState<string | null>(null);
-  const [tokenLoading, setTokenLoading] = useState(true);
-  const [issues, setIssues] = useState<GHIssue[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState("feedback");
-  const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ ok: boolean; message: string; url?: string } | null>(null);
 
-  // Get GitHub token from MCP on mount
-  useEffect(() => {
-    tokenTool.invoke({ npub }).then(data => {
-      setGhToken(data?.token ?? null);
-      setTokenLoading(false);
-    });
-  }, []);
-
-  // Load issues when token is available
-  useEffect(() => {
-    if (ghToken) loadIssues();
-  }, [ghToken]);
-
   async function loadIssues() {
-    if (!ghToken) return;
-    try {
-      const resp = await fetch(`${GH_API}/issues?labels=feedback&state=all&per_page=50&sort=created&direction=desc`, {
-        headers: {
-          Authorization: `Bearer ${ghToken}`,
-          Accept: "application/vnd.github+json",
-        },
-      });
-      if (resp.ok) {
-        const data: GHIssue[] = await resp.json();
-        // Filter to issues mentioning this npub
-        const mine = data.filter(i =>
-          i.title.includes("[Feedback]") ||
-          i.labels.some(l => l.name === "feedback")
-        );
-        setIssues(mine);
-      }
-    } catch {
-      // GitHub API error — ignore
-    }
+    const data = await listTool.invoke({ npub });
+    if (data?.issues) setIssues(data.issues);
   }
+
+  useEffect(() => { loadIssues(); }, [npub]);
 
   async function handleSubmit() {
     if (!title.trim()) return;
-    setSubmitting(true);
     setSubmitResult(null);
-
-    const issueBody = `${body}\n\n---\n**Submitted by:** \`${npub.slice(0, 20)}...\`\n**Category:** ${category}\n**Source:** TaxSort App`;
-
-    if (ghToken) {
-      // Create via GitHub API
-      try {
-        const resp = await fetch(`${GH_API}/issues`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${ghToken}`,
-            Accept: "application/vnd.github+json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            title: `[Feedback] ${title.trim()}`,
-            body: issueBody,
-            labels: ["feedback", `cat:${category}`],
-          }),
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          setSubmitResult({ ok: true, message: `Issue #${data.number} created!`, url: data.html_url });
-          setTitle("");
-          setBody("");
-          loadIssues();
-        } else {
-          const errText = await resp.text();
-          setSubmitResult({ ok: false, message: `GitHub error: ${resp.status} ${errText.slice(0, 100)}` });
-        }
-      } catch (e) {
-        setSubmitResult({ ok: false, message: `Network error: ${e instanceof Error ? e.message : String(e)}` });
-      }
+    const data = await createTool.invoke({
+      title: title.trim(),
+      body,
+      category,
+      npub,
+    });
+    if (data?.created) {
+      setSubmitResult({ ok: true, message: data.message, url: data.url });
+      setTitle("");
+      setBody("");
+      loadIssues();
     } else {
-      // No token — open GitHub new issue page
-      const encoded = encodeURIComponent(`[Feedback] ${title.trim()}`);
-      const encodedBody = encodeURIComponent(issueBody);
-      const url = `https://github.com/${REPO}/issues/new?title=${encoded}&body=${encodedBody}&labels=feedback,cat:${category}`;
-      window.open(url, "_blank");
-      setSubmitResult({ ok: true, message: "Opened GitHub in a new tab.", url });
+      setSubmitResult({ ok: false, message: data?.error || data?.message || "Failed to create issue." });
     }
-
-    setSubmitting(false);
   }
 
   function catColor(cat: string): string {
@@ -135,7 +79,7 @@ export default function FeedbackPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="w-[85%] mx-auto">
       <h1 className="text-xl font-semibold mb-6 text-stone-800">Feedback</h1>
 
       {/* Submit form */}
@@ -144,8 +88,8 @@ export default function FeedbackPage() {
           Submit Feedback
         </div>
         <p className="text-xs text-stone-500 mb-4">
-          Bug reports, feature requests, and questions go directly to GitHub Issues.
-          {!ghToken && !tokenLoading && " No GitHub account required."}
+          Bug reports, feature requests, and questions are tracked as GitHub Issues.
+          No GitHub account required.
         </p>
 
         <div className="flex flex-wrap gap-2 mb-3">
@@ -180,20 +124,15 @@ export default function FeedbackPage() {
 
         <button
           onClick={handleSubmit}
-          disabled={submitting || !title.trim()}
+          disabled={createTool.loading || !title.trim()}
           className="bg-stone-900 text-white text-sm px-5 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
         >
-          {submitting ? "Submitting\u2026" : ghToken ? "Submit to GitHub" : "Open on GitHub"}
+          {createTool.loading ? "Submitting\u2026" : "Submit"}
         </button>
 
         {submitResult?.ok && (
           <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-700">
             {submitResult.message}
-            {submitResult.url && (
-              <a href={submitResult.url} target="_blank" rel="noopener noreferrer" className="block mt-1 underline">
-                View on GitHub &rarr;
-              </a>
-            )}
           </div>
         )}
 
@@ -210,64 +149,40 @@ export default function FeedbackPage() {
           <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
             Recent Issues
           </div>
-          {ghToken && (
-            <button
-              onClick={loadIssues}
-              className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded"
-            >
-              Refresh
-            </button>
-          )}
+          <button
+            onClick={loadIssues}
+            disabled={listTool.loading}
+            className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded"
+          >
+            {listTool.loading ? "\u2026" : "Refresh"}
+          </button>
         </div>
 
-        {tokenLoading && (
+        {listTool.loading && issues.length === 0 && (
           <p className="text-xs text-stone-400 text-center py-4">Loading&hellip;</p>
-        )}
-
-        {!tokenLoading && !ghToken && (
-          <div className="text-xs text-stone-400 text-center py-4">
-            <a
-              href={`https://github.com/${REPO}/issues?q=label%3Afeedback`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-800 underline"
-            >
-              View all feedback issues on GitHub &rarr;
-            </a>
-          </div>
         )}
 
         {issues.length > 0 && (
           <div className="divide-y divide-stone-100">
-            {issues.map(issue => (
-              <div key={issue.number} className="py-3 first:pt-0 last:pb-0">
+            {issues.map((issue, i) => (
+              <div key={issue.number ?? i} className="py-3 first:pt-0 last:pb-0">
                 <div className="flex items-start gap-2">
                   <div className="flex-1">
-                    <a
-                      href={issue.html_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-stone-700 hover:text-amber-700"
-                    >
+                    <div className="text-sm font-medium text-stone-700">
                       {issue.title.replace("[Feedback] ", "")}
-                    </a>
+                    </div>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${STATE_BADGE[issue.state] ?? STATE_BADGE.open}`}>
                         {issue.state}
                       </span>
-                      {issue.labels.filter(l => l.name.startsWith("cat:")).map(l => (
-                        <span key={l.name} className={`text-xs px-2 py-0.5 rounded-full ${catColor(l.name.replace("cat:", ""))}`}>
-                          {l.name.replace("cat:", "")}
+                      {issue.labels.filter(l => l.startsWith("cat:")).map(l => (
+                        <span key={l} className={`text-xs px-2 py-0.5 rounded-full ${catColor(l.replace("cat:", ""))}`}>
+                          {l.replace("cat:", "")}
                         </span>
                       ))}
-                      <a
-                        href={issue.html_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:text-blue-800 underline"
-                      >
-                        #{issue.number} &rarr; GitHub
-                      </a>
+                      {issue.number && (
+                        <span className="text-xs text-stone-400">#{issue.number}</span>
+                      )}
                       {issue.comments > 0 && (
                         <span className="text-xs text-blue-500">{issue.comments} comment{issue.comments > 1 ? "s" : ""}</span>
                       )}
@@ -282,7 +197,7 @@ export default function FeedbackPage() {
           </div>
         )}
 
-        {!tokenLoading && ghToken && issues.length === 0 && (
+        {!listTool.loading && issues.length === 0 && (
           <p className="text-xs text-stone-400 text-center py-4">No feedback issues yet.</p>
         )}
       </div>
