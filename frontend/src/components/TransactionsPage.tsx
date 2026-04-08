@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useSession } from "../App";
+import ReasonText from "./ReasonText";
 import { useToolCall } from "../hooks/useMCP";
 import SortableTable from "./SortableTable";
 import type { Column } from "./SortableTable";
@@ -282,7 +283,7 @@ export default function TransactionsPage() {
           )}
           {t.ambiguous && <div className="text-xs text-red-500">Indistinguishable duplicate</div>}
           {t.hint2 && <div className="text-xs text-blue-500">{t.hint1} &rsaquo; {t.hint2}</div>}
-          {t.reason && !t.hint2 && !t.merchant && <div className="text-xs text-stone-400 italic">{t.reason}</div>}
+          {t.reason && <div className="text-xs text-stone-400 italic"><ReasonText reason={t.reason} /></div>}
         </>
       ),
     },

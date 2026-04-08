@@ -3,6 +3,7 @@ import { useSession } from "../App";
 import SortableTable from "./SortableTable";
 import type { Column } from "./SortableTable";
 import { useToolCall } from "../hooks/useMCP";
+import ReasonText from "./ReasonText";
 import DonutChart from "./DonutChart";
 
 interface SummaryRow {
@@ -47,6 +48,7 @@ interface Transaction {
   merchant: string | null;
   subcategory: string | null;
   confidence: string | null;
+  reason: string | null;
 }
 
 interface TxResult {
@@ -251,7 +253,12 @@ export default function SummaryPage() {
                             {expandedTxns.map(t => (
                               <tr key={t.id} className="border-t border-stone-100">
                                 <td className="py-1.5 pr-3 text-stone-500 font-mono whitespace-nowrap">{t.date}</td>
-                                <td className="py-1.5 pr-3 text-stone-700">{t.merchant || t.description}</td>
+                                <td className="py-1.5 pr-3 text-stone-700">
+                                  {t.merchant || t.description}
+                                  {t.reason && (
+                                    <div className="text-xs text-stone-400 italic"><ReasonText reason={t.reason} /></div>
+                                  )}
+                                </td>
                                 <td className="py-1.5 pr-3 text-stone-400">{t.account}</td>
                                 <td className="py-1.5 text-right font-mono text-stone-700">
                                   {t.amount < 0 ? "-" : ""}${fmt$(Math.abs(t.amount))}

@@ -71,8 +71,10 @@ Duplicate — this charge is a duplicate from an overlapping CSV export.
   Also check OTHER TRANSACTIONS for already-classified neighbors that match.
   WHICH IS THE DUPLICATE: the entry from the less-descriptive or shorter account name.
   If a neighbor is already classified (not as Duplicate), THIS entry is the duplicate.
-  REFERENCING: For the Duplicate entry, set reason to "Dup of [account]:[date]".
-  For the surviving entry (classified normally), append " (kept, dup: [account]:[date])" to reason.
+  REFERENCING: Use the neighbor's id= value from OTHER TRANSACTIONS.
+  For the Duplicate entry, set reason to "dup:ID" where ID is the surviving transaction's id.
+  For the surviving entry (classified normally), append " (twin:ID)" where ID is the duplicate's id.
+  If the duplicate is in the current batch, use its batch index to find its id.
   Only ONE entry per real charge should survive — all others are Duplicate.
 
 Needs Review — ONLY if truly ambiguous after considering all signals.
@@ -104,7 +106,7 @@ Respond ONLY with a JSON array, no markdown or preamble:
 [{"idx":N,"category":"...",
   "subcategory":"...",
   "confidence":"high"|"medium"|"low",
-  "reason":"concise — for Duplicates: 'Dup of [acct]:[date]'; for kept entries: include '(kept, dup: [acct]:[date])'",
+  "reason":"concise — for Duplicates: 'dup:NEIGHBOR_ID'; for kept entries: include '(twin:DUPLICATE_ID)'",
   "merchant":"resolved full merchant name"}]
 
 The "merchant" field is the RESOLVED human-readable business name. Always provide it.`;
@@ -298,7 +300,7 @@ async function _runEngine(
         for (const nb of nbs) {
           const status = nb.category ? `[already: ${nb.category}/${nb.subcategory}]` : "[unclassified]";
           neighborLines.push(
-            `  $${nb.amount.toFixed(2)} | ${nb.date} | ${nb.description} | ${nb.account} ${status}`
+            `  id=${nb.id} | $${nb.amount.toFixed(2)} | ${nb.date} | ${nb.description} | ${nb.account} ${status}`
           );
         }
       }
