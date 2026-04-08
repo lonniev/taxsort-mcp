@@ -84,6 +84,7 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="import_csv", category="free", intent="Import CSV transactions"),
     ToolIdentity(capability="save_classifications", category="free", intent="Bulk write classifications from FE"),
     ToolIdentity(capability="delete_classification", category="free", intent="Remove a classification (revert to unclassified)"),
+    ToolIdentity(capability="clear_transactions", category="free", intent="Delete all transactions and classifications for a session"),
     ToolIdentity(capability="save_rule", category="free", intent="Save a classification rule"),
     ToolIdentity(capability="delete_rule", category="free", intent="Delete a classification rule"),
     ToolIdentity(capability="apply_rules", category="free", intent="Apply rules to unclassified transactions"),
@@ -379,6 +380,17 @@ async def delete_classification(
     """Remove a classification, reverting the transaction to unclassified."""
     from tools.transactions import delete_classification as _delete
     return await _delete(session_id=session_id, transaction_id=transaction_id)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("clear_transactions"))
+async def clear_transactions(
+    session_id: str,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Delete all transactions and classifications for a session, so CSVs can be re-imported."""
+    from tools.transactions import clear_transactions as _clear
+    return await _clear(session_id=session_id)
 
 
 @tool

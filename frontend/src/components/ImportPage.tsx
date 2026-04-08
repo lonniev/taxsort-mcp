@@ -15,6 +15,12 @@ interface ImportResult {
   total_in_session: number;
 }
 
+interface ClearResult {
+  session_id: string;
+  transactions_deleted: number;
+  classifications_deleted: number;
+}
+
 const FMT_LABELS: Record<string, string> = {
   sofi: "SoFi", schwab: "Schwab", usbank: "US Bank",
   paypal: "PayPal", chase: "Chase", coinbase: "Coinbase", generic: "CSV",
@@ -25,11 +31,14 @@ export default function ImportPage() {
   const navigate = useNavigate();
 
   const importTool = useToolCall<ImportResult>("import_csv");
+  const clearTool = useToolCall<ClearResult>("clear_transactions");
 
   const [files, setFiles] = useState<File[]>([]);
   const [results, setResults] = useState<ImportResult[]>([]);
   const [importing, setImporting] = useState(false);
   const [phase, setPhase] = useState("");
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearResult, setClearResult] = useState<ClearResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function addFiles(fl: FileList | null) {
@@ -84,11 +93,56 @@ export default function ImportPage() {
     navigate("/classify");
   }
 
+  async function handleClear() {
+    if (!sessionId) return;
+    const data = await clearTool.invoke({ session_id: sessionId, npub });
+    if (data) {
+      setClearResult(data);
+      setResults([]);
+      setFiles([]);
+    }
+    setConfirmClear(false);
+  }
+
   const hasResults = results.length > 0;
 
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-xl font-semibold mb-6 text-stone-800">Import transactions</h1>
+
+      {/* Clear session data */}
+      <div className="mb-4">
+        {!confirmClear ? (
+          <button
+            onClick={() => { setClearResult(null); setConfirmClear(true); }}
+            className="text-xs text-stone-400 hover:text-red-500 transition-colors"
+          >
+            Clear all transactions&hellip;
+          </button>
+        ) : (
+          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-center gap-3">
+            <span className="text-sm text-red-700">Delete all transactions and classifications?</span>
+            <button
+              onClick={handleClear}
+              disabled={clearTool.loading}
+              className="bg-red-600 text-white text-xs px-3 py-1.5 rounded hover:bg-red-500 disabled:opacity-40"
+            >
+              {clearTool.loading ? "Clearing\u2026" : "Yes, clear"}
+            </button>
+            <button
+              onClick={() => setConfirmClear(false)}
+              className="text-xs text-stone-400 hover:text-stone-600"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        {clearResult && (
+          <div className="mt-2 text-xs text-stone-500">
+            Cleared {clearResult.transactions_deleted} transactions and {clearResult.classifications_deleted} classifications.
+          </div>
+        )}
+      </div>
 
       {/* Drop zone */}
       <div

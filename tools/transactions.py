@@ -182,6 +182,23 @@ async def delete_classification(
     return {"deleted": deleted, "transaction_id": transaction_id}
 
 
+async def clear_transactions(session_id: str) -> dict:
+    """Delete all raw transactions and their classifications for a session."""
+    cls_result = await execute(
+        "DELETE FROM classifications WHERE session_id=$1", session_id,
+    )
+    tx_result = await execute(
+        "DELETE FROM raw_transactions WHERE session_id=$1", session_id,
+    )
+    cls_count = int(str(cls_result).split()[-1]) if cls_result else 0
+    tx_count = int(str(tx_result).split()[-1]) if tx_result else 0
+    return {
+        "session_id": session_id,
+        "transactions_deleted": tx_count,
+        "classifications_deleted": cls_count,
+    }
+
+
 async def get_summary(
     session_id: str,
     group_by: str = "taxline",
