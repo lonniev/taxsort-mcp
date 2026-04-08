@@ -249,9 +249,29 @@ async function _runEngine(
         typed.map(a => `  "${a.name}" → ${a.type}`).join("\n");
     }
 
+    // 2c. Get custom categories
+    const catResult = await mcpCall("get_custom_categories", { npub }) as {
+      categories: Array<{ category: string; subcategory: string }>;
+    } | null;
+    const customCats = catResult?.categories ?? [];
+
+    let customCatCtx = "";
+    if (customCats.length > 0) {
+      const grouped = new Map<string, string[]>();
+      for (const c of customCats) {
+        if (!grouped.has(c.category)) grouped.set(c.category, []);
+        grouped.get(c.category)!.push(c.subcategory);
+      }
+      const lines: string[] = [];
+      for (const [cat, subs] of grouped) {
+        lines.push(`\n${cat} (custom):\n  ${subs.join(", ")}`);
+      }
+      customCatCtx = "\n\nCUSTOM CATEGORIES (user-defined, treat the same as built-in):" + lines.join("");
+    }
+
     // 3. Create Anthropic client
     const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-    const systemPrompt = buildSystemPrompt(rulesCtx) + aliasCtx + acctTypeCtx;
+    const systemPrompt = buildSystemPrompt(rulesCtx) + aliasCtx + acctTypeCtx + customCatCtx;
 
     // 4. Total count for reclassify
     if (reclassifyAll) {

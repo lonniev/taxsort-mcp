@@ -68,11 +68,20 @@ export default function ClassifyPage() {
   const saveRuleTool = useToolCall<SaveRuleResult>("save_rule");
   const deleteRuleTool = useToolCall<unknown>("delete_rule");
   const applyRulesTool = useToolCall<ApplyResult>("apply_rules");
+  const customCatsTool = useToolCall<{ categories: Array<{ id: number; category: string; subcategory: string }> }>("get_custom_categories");
+  const saveCatTool = useToolCall<{ category: string; subcategory: string }>("save_custom_category");
+  const deleteCatTool = useToolCall<unknown>("delete_custom_category");
 
   const [resetMsg, setResetMsg] = useState<string | null>(null);
   const [rules, setRules] = useState<Rule[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
+
+  // Custom categories state
+  const [customCats, setCustomCats] = useState<Array<{ id: number; category: string; subcategory: string }>>([]);
+  const [showCatForm, setShowCatForm] = useState(false);
+  const [newCat, setNewCat] = useState("");
+  const [newSub, setNewSub] = useState("");
 
   // New rule form state
   const [formPattern, setFormPattern] = useState("");
@@ -92,10 +101,16 @@ export default function ClassifyPage() {
     if (data?.rules) setRules(data.rules);
   }
 
+  async function loadCustomCats() {
+    const data = await customCatsTool.invoke({ npub });
+    if (data?.categories) setCustomCats(data.categories);
+  }
+
   useEffect(() => {
     if (sessionId) {
       refreshCounts();
       loadRules();
+      loadCustomCats();
     }
   }, [sessionId]);
 
@@ -128,6 +143,20 @@ export default function ClassifyPage() {
     loadRules();
   }
 
+  async function handleSaveCat() {
+    if (!newCat || !newSub) return;
+    await saveCatTool.invoke({ category: newCat, subcategory: newSub, npub });
+    setNewCat("");
+    setNewSub("");
+    setShowCatForm(false);
+    loadCustomCats();
+  }
+
+  async function handleDeleteCat(id: number) {
+    await deleteCatTool.invoke({ category_id: id, npub });
+    loadCustomCats();
+  }
+
   async function handleApplyRules() {
     if (!sessionId) return;
     setApplyMsg(null);
@@ -138,7 +167,16 @@ export default function ClassifyPage() {
     }
   }
 
-  const subs = CAT_SUBS[formCategory] ?? [];
+  // Merge built-in + custom categories
+  const allCatSubs = { ...CAT_SUBS };
+  for (const c of customCats) {
+    if (!allCatSubs[c.category]) allCatSubs[c.category] = [];
+    if (!allCatSubs[c.category].includes(c.subcategory)) {
+      allCatSubs[c.category] = [...allCatSubs[c.category], c.subcategory];
+    }
+  }
+  const allCategories = [...new Set([...CATEGORIES, ...customCats.map(c => c.category)])];
+  const subs = allCatSubs[formCategory] ?? [];
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -340,7 +378,7 @@ export default function ClassifyPage() {
                   onChange={e => { setFormCategory(e.target.value); setFormSubcategory(""); }}
                   className="w-full text-sm border border-stone-200 rounded px-2 py-1.5 bg-white"
                 >
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
@@ -424,6 +462,83 @@ export default function ClassifyPage() {
                   onClick={() => handleDeleteRule(r.id)}
                   disabled={deleteRuleTool.loading}
                   className="text-stone-300 hover:text-red-500 transition-colors flex-shrink-0"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Custom Categories */}
+      <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
+            Custom Categories
+          </div>
+          <button
+            onClick={() => setShowCatForm(!showCatForm)}
+            className="text-xs text-stone-500 hover:text-stone-700 border border-stone-200 px-3 py-1 rounded hover:bg-stone-50 transition-colors"
+          >
+            {showCatForm ? "Cancel" : "+ New Category"}
+          </button>
+        </div>
+
+        <p className="text-xs text-stone-400 mb-3">
+          Add subcategories that don't exist in the built-in list. These are included in the AI classifier's vocabulary.
+        </p>
+
+        {showCatForm && (
+          <div className="bg-stone-50 border border-stone-200 rounded-lg p-4 mb-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Category</label>
+                <input
+                  value={newCat}
+                  onChange={e => setNewCat(e.target.value)}
+                  list="cat-suggestions"
+                  placeholder="e.g. Personal"
+                  className="w-full text-sm border border-stone-200 rounded px-3 py-1.5 bg-white focus:outline-none focus:border-stone-400"
+                />
+                <datalist id="cat-suggestions">
+                  {allCategories.map(c => <option key={c} value={c} />)}
+                </datalist>
+              </div>
+              <div>
+                <label className="text-xs text-stone-500 block mb-1">Subcategory</label>
+                <input
+                  value={newSub}
+                  onChange={e => setNewSub(e.target.value)}
+                  placeholder="e.g. Auto Gas"
+                  className="w-full text-sm border border-stone-200 rounded px-3 py-1.5 bg-white focus:outline-none focus:border-stone-400"
+                />
+              </div>
+            </div>
+            <button
+              onClick={handleSaveCat}
+              disabled={!newCat || !newSub || saveCatTool.loading}
+              className="bg-stone-900 text-white text-xs px-4 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
+            >
+              {saveCatTool.loading ? "Saving\u2026" : "Add Category"}
+            </button>
+          </div>
+        )}
+
+        {customCats.length === 0 && !showCatForm && (
+          <div className="text-xs text-stone-400 italic">No custom categories. Built-in categories cover most cases.</div>
+        )}
+        {customCats.length > 0 && (
+          <div className="space-y-1">
+            {customCats.map(c => (
+              <div key={c.id} className="flex items-center gap-3 bg-stone-50 border border-stone-100 rounded-lg px-3 py-1.5 text-xs">
+                <span className="text-amber-700 font-medium">{c.category}</span>
+                <span className="text-stone-400">/</span>
+                <span className="text-stone-600 flex-1">{c.subcategory}</span>
+                <button
+                  onClick={() => handleDeleteCat(c.id)}
+                  disabled={deleteCatTool.loading}
+                  className="text-stone-300 hover:text-red-500 transition-colors"
                 >
                   &times;
                 </button>

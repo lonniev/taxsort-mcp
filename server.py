@@ -90,6 +90,9 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="save_rule", category="free", intent="Save a classification rule"),
     ToolIdentity(capability="delete_rule", category="free", intent="Delete a classification rule"),
     ToolIdentity(capability="apply_rules", category="free", intent="Apply rules to unclassified transactions"),
+    ToolIdentity(capability="get_custom_categories", category="free", intent="Get custom categories"),
+    ToolIdentity(capability="save_custom_category", category="free", intent="Add a custom category/subcategory"),
+    ToolIdentity(capability="delete_custom_category", category="free", intent="Delete a custom category"),
     ToolIdentity(capability="create_share_token", category="free", intent="Create a session share token"),
     ToolIdentity(capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
     ToolIdentity(capability="check_unlock", category="free", intent="Check if session unlock was approved"),
@@ -529,6 +532,39 @@ async def apply_rules(
     """Apply rules to unclassified transactions in a session."""
     from tools.rules import apply_rules as _apply_rules
     return await _apply_rules(owner_npub=npub, session_id=session_id)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("get_custom_categories"))
+async def get_custom_categories(
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Get custom categories defined by this user."""
+    from tools.categories import get_custom_categories as _get
+    return await _get(owner_npub=npub)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("save_custom_category"))
+async def save_custom_category(
+    category: str,
+    subcategory: str,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Add a custom category/subcategory (e.g. Personal / Auto Gas)."""
+    from tools.categories import save_custom_category as _save
+    return await _save(owner_npub=npub, category=category, subcategory=subcategory)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("delete_custom_category"))
+async def delete_custom_category(
+    category_id: int,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Delete a custom category."""
+    from tools.categories import delete_custom_category as _del
+    return await _del(owner_npub=npub, category_id=category_id)
 
 
 # ── Sharing ───────────────────────────────────────────────────────────────
