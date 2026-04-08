@@ -46,7 +46,6 @@ mcp = FastMCP(
         "4. taxsort_save_classifications(session_id, classifications=[...]) → write back AI/manual results\n"
         "5. taxsort_get_transactions(session_id) → review classified results\n"
         "6. taxsort_get_summary(session_id, group_by='taxline') → IRS line totals\n"
-        "7. taxsort_detect_subscriptions(session_id) → find recurring charges\n"
         "8. taxsort_create_share_token(session_id) → share with spouse\n\n"
         "## Pricing\n"
         "Tool prices are set dynamically by the operator's pricing model. "
@@ -80,7 +79,6 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="load_share_token", category="free", intent="Load a shared session"),
     ToolIdentity(capability="get_transactions", category="free", intent="Get transactions with filters"),
     ToolIdentity(capability="get_summary", category="free", intent="Get grouped tax summary"),
-    ToolIdentity(capability="detect_subscriptions", category="free", intent="Detect recurring subscriptions"),
     ToolIdentity(capability="import_csv", category="free", intent="Import CSV transactions"),
     ToolIdentity(capability="save_classifications", category="free", intent="Bulk write classifications from FE"),
     ToolIdentity(capability="delete_classification", category="free", intent="Remove a classification (revert to unclassified)"),
@@ -474,19 +472,6 @@ async def get_summary(
     return await _get_summary(
         session_id=session_id, group_by=group_by, scope=scope, month=month,
     )
-
-
-# ── Subscriptions ─────────────────────────────────────────────────────────
-
-@tool
-@runtime.paid_tool(capability_uuid("detect_subscriptions"))
-async def detect_subscriptions(
-    session_id: str,
-    npub: NpubField = "",
-) -> dict[str, Any]:
-    """Scan transactions for recurring charges (subscriptions)."""
-    from tools.subscriptions import detect_subscriptions as _detect_subscriptions
-    return await _detect_subscriptions(session_id=session_id)
 
 
 # ── Rules ─────────────────────────────────────────────────────────────────
