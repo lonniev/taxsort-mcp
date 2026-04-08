@@ -300,11 +300,12 @@ async def import_csv(
     session_id: str,
     content: str,
     filename: str,
+    account_name: str = "",
     npub: NpubField = "",
 ) -> dict[str, Any]:
-    """Import a CSV file into a session. Content is the raw CSV text."""
+    """Import a CSV file into a session. Content is the raw CSV text. Optional account_name overrides the filename-derived account."""
     from tools.imports import import_csv as _import_csv
-    return await _import_csv(session_id=session_id, content=content, filename=filename)
+    return await _import_csv(session_id=session_id, content=content, filename=filename, account_name=account_name)
 
 
 @tool

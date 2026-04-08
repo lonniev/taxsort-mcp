@@ -60,7 +60,7 @@ def _content_hash(fmt: str, date: str, desc: str, amount: Decimal) -> str:
 
 # ── Main parser ───────────────────────────────────────────────────────────────
 
-def parse_csv(content: str, filename: str) -> tuple[list[dict], dict]:
+def parse_csv(content: str, filename: str, account_name: str = "") -> tuple[list[dict], dict]:
     """Parse a CSV string into (rows, metadata) where metadata has parse stats."""
     lines = [l for l in content.replace("\r\n", "\n").split("\n") if l.strip()]
     if len(lines) < 2:
@@ -68,7 +68,7 @@ def parse_csv(content: str, filename: str) -> tuple[list[dict], dict]:
 
     headers = _parse_row(lines[0])
     fmt = _detect_fmt(headers)
-    acct = re.sub(r"\.[^.]+$", "", filename)
+    acct = account_name or re.sub(r"\.[^.]+$", "", filename)
     rows = []
 
     base_counts: dict[str, int] = {}
@@ -257,9 +257,10 @@ async def import_csv(
     session_id: str,
     content: str,
     filename: str,
+    account_name: str = "",
 ) -> dict:
     """Import a CSV file into a session."""
-    rows, meta = parse_csv(content, filename)
+    rows, meta = parse_csv(content, filename, account_name=account_name)
     if not rows:
         return {
             "error": "No transactions parsed. Check file format.",

@@ -21,10 +21,53 @@ interface ClearResult {
   classifications_deleted: number;
 }
 
+interface FileEntry {
+  file: File;
+  accountName: string;
+  format: string;
+}
+
 const FMT_LABELS: Record<string, string> = {
   sofi: "SoFi", schwab: "Schwab", usbank: "US Bank",
   paypal: "PayPal", chase: "Chase", coinbase: "Coinbase", generic: "CSV",
 };
+
+function guessFormat(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("sofi") || n.includes("relay")) return "sofi";
+  if (n.includes("schwab")) return "schwab";
+  if (n.includes("usbank") || n.includes("us_bank") || n.includes("us bank")) return "usbank";
+  if (n.includes("paypal")) return "paypal";
+  if (n.includes("chase")) return "chase";
+  if (n.includes("coinbase")) return "coinbase";
+  return "generic";
+}
+
+function guessAccountName(filename: string): string {
+  // Strip extension
+  const base = filename.replace(/\.[^.]+$/, "");
+
+  // Try to extract a meaningful account name:
+  // "Chase8890_Activity20250101_20251231" → "Chase 8890"
+  // "United ClubSM Visa Infinite Card 8890" → "Chase 8890" (user edits)
+  // "Checking - 7131_01-01-2025_12-31-2025" → "US Bank 7131"
+  // "Household Joint 7131" → "US Bank 7131" (user edits)
+
+  const last4Match = base.match(/(\d{4})/);
+  const last4 = last4Match ? last4Match[1] : "";
+
+  const fmt = guessFormat(filename);
+  if (fmt !== "generic" && last4) {
+    return `${FMT_LABELS[fmt]} ${last4}`;
+  }
+  if (fmt !== "generic") {
+    return FMT_LABELS[fmt];
+  }
+  if (last4) {
+    return `Account ${last4}`;
+  }
+  return base.slice(0, 30);
+}
 
 export default function ImportPage() {
   const { sessionId, npub } = useSession();
@@ -33,7 +76,7 @@ export default function ImportPage() {
   const importTool = useToolCall<ImportResult>("import_csv");
   const clearTool = useToolCall<ClearResult>("clear_transactions");
 
-  const [files, setFiles] = useState<File[]>([]);
+  const [entries, setEntries] = useState<FileEntry[]>([]);
   const [results, setResults] = useState<ImportResult[]>([]);
   const [importing, setImporting] = useState(false);
   const [phase, setPhase] = useState("");
@@ -43,42 +86,39 @@ export default function ImportPage() {
 
   function addFiles(fl: FileList | null) {
     if (!fl) return;
-    const existing = new Set(files.map(f => `${f.name}|${f.size}|${f.lastModified}`));
-    const toAdd = Array.from(fl).filter(f => {
-      const key = `${f.name}|${f.size}|${f.lastModified}`;
-      return f.name.toLowerCase().endsWith(".csv") && !existing.has(key);
-    });
-    setFiles(prev => [...prev, ...toAdd]);
+    const existing = new Set(entries.map(e => `${e.file.name}|${e.file.size}|${e.file.lastModified}`));
+    const toAdd = Array.from(fl)
+      .filter(f => f.name.toLowerCase().endsWith(".csv") && !existing.has(`${f.name}|${f.size}|${f.lastModified}`))
+      .map(f => ({
+        file: f,
+        accountName: guessAccountName(f.name),
+        format: guessFormat(f.name),
+      }));
+    setEntries(prev => [...prev, ...toAdd]);
   }
 
-  function removeFile(i: number) {
-    setFiles(prev => prev.filter((_, j) => j !== i));
+  function removeEntry(i: number) {
+    setEntries(prev => prev.filter((_, j) => j !== i));
   }
 
-  function guessFormat(name: string): string {
-    const n = name.toLowerCase();
-    if (n.includes("sofi") || n.includes("relay")) return "sofi";
-    if (n.includes("schwab")) return "schwab";
-    if (n.includes("usbank") || n.includes("us_bank")) return "usbank";
-    if (n.includes("paypal")) return "paypal";
-    if (n.includes("chase")) return "chase";
-    if (n.includes("coinbase")) return "coinbase";
-    return "generic";
+  function setAccountName(i: number, name: string) {
+    setEntries(prev => prev.map((e, j) => j === i ? { ...e, accountName: name } : e));
   }
 
   async function handleImport() {
-    if (!files.length || !sessionId) return;
+    if (!entries.length || !sessionId) return;
     setImporting(true);
     const newResults: ImportResult[] = [];
 
-    for (const f of files) {
-      setPhase(`Reading ${f.name}…`);
-      const content = await f.text();
-      setPhase(`Importing ${f.name}…`);
+    for (const entry of entries) {
+      setPhase(`Reading ${entry.file.name}\u2026`);
+      const content = await entry.file.text();
+      setPhase(`Importing ${entry.file.name}\u2026`);
       const data = await importTool.invoke({
         session_id: sessionId,
         content,
-        filename: f.name,
+        filename: entry.file.name,
+        account_name: entry.accountName,
         npub,
       });
       if (data) newResults.push(data);
@@ -89,19 +129,21 @@ export default function ImportPage() {
     setImporting(false);
   }
 
-  function handleClassify() {
-    navigate("/classify");
-  }
-
   async function handleClear() {
     if (!sessionId) return;
     const data = await clearTool.invoke({ session_id: sessionId, npub });
     if (data) {
       setClearResult(data);
       setResults([]);
-      setFiles([]);
+      setEntries([]);
     }
     setConfirmClear(false);
+  }
+
+  // Collect unique account names for grouping hints
+  const accountGroups = new Map<string, number>();
+  for (const e of entries) {
+    accountGroups.set(e.accountName, (accountGroups.get(e.accountName) ?? 0) + 1);
   }
 
   const hasResults = results.length > 0;
@@ -166,21 +208,40 @@ export default function ImportPage() {
         />
       </div>
 
-      {/* File list */}
-      {files.length > 0 && (
+      {/* File list with account names */}
+      {entries.length > 0 && (
         <div className="space-y-2 mb-4">
-          {files.map((f, i) => {
-            const fmt = guessFormat(f.name);
+          <div className="text-xs text-stone-400 mb-1">
+            Assign each file to an account. Files with the same account name are treated as the same source.
+          </div>
+          {entries.map((entry, i) => {
+            const shared = accountGroups.get(entry.accountName)! > 1;
             return (
-              <div key={i} className="flex items-center gap-3 bg-white border border-stone-200 rounded-lg px-4 py-2.5 text-sm">
-                <span className="text-xs font-mono font-semibold bg-green-100 text-green-800 px-2 py-0.5 rounded">
-                  {FMT_LABELS[fmt] ?? "CSV"}
-                </span>
-                <span className="flex-1 truncate text-stone-700">{f.name}</span>
-                <span className="text-xs text-stone-400 font-mono">
-                  {(f.size / 1024).toFixed(1)} KB
-                </span>
-                <button onClick={() => removeFile(i)} className="text-stone-300 hover:text-red-400 text-sm">&times;</button>
+              <div key={i} className="bg-white border border-stone-200 rounded-lg px-4 py-3">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-xs font-mono font-semibold bg-green-100 text-green-800 px-2 py-0.5 rounded">
+                    {FMT_LABELS[entry.format] ?? "CSV"}
+                  </span>
+                  <span className="flex-1 truncate text-sm text-stone-700">{entry.file.name}</span>
+                  <span className="text-xs text-stone-400 font-mono">
+                    {(entry.file.size / 1024).toFixed(1)} KB
+                  </span>
+                  <button onClick={() => removeEntry(i)} className="text-stone-300 hover:text-red-400 text-sm">&times;</button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-stone-400 whitespace-nowrap">Account:</label>
+                  <input
+                    value={entry.accountName}
+                    onChange={e => setAccountName(i, e.target.value)}
+                    className="flex-1 text-sm border border-stone-200 rounded px-2 py-1 bg-stone-50 focus:outline-none focus:border-stone-400"
+                    placeholder="e.g. Chase 8890"
+                  />
+                  {shared && (
+                    <span className="text-xs text-blue-600" title="Multiple files share this account name">
+                      grouped
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -191,7 +252,7 @@ export default function ImportPage() {
               disabled={importing}
               className="bg-stone-900 text-white text-sm px-5 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
             >
-              {importing ? "Importing…" : "Import files"}
+              {importing ? "Importing\u2026" : "Import files"}
             </button>
             {phase && <span className="text-xs text-stone-400">{phase}</span>}
           </div>
@@ -208,7 +269,7 @@ export default function ImportPage() {
             <div key={i} className="text-sm mb-2 last:mb-0">
               <span className="font-medium text-stone-700">{r.filename}</span>
               <span className="text-stone-400 ml-2">
-                {r.added} new &middot; {r.updated} updated &middot; {r.preserved_edits} edits kept
+                {r.added} new
                 {r.deduped > 0 && (
                   <span className="text-blue-600 ml-1">&middot; {r.deduped} duplicates removed</span>
                 )}
@@ -224,11 +285,17 @@ export default function ImportPage() {
         </div>
       )}
 
-      {/* Classify */}
+      {/* Next steps */}
       {hasResults && (
         <div className="flex items-center gap-3">
           <button
-            onClick={handleClassify}
+            onClick={() => navigate("/accounts")}
+            className="bg-stone-700 text-white text-sm px-5 py-2 rounded-lg hover:bg-stone-600 transition-colors"
+          >
+            Review Accounts &rarr;
+          </button>
+          <button
+            onClick={() => navigate("/classify")}
             className="bg-amber-600 text-white text-sm px-5 py-2 rounded-lg hover:bg-amber-500 transition-colors"
           >
             Classify with Claude &rarr;
@@ -237,7 +304,7 @@ export default function ImportPage() {
             onClick={() => navigate("/transactions")}
             className="text-sm text-stone-400 hover:text-stone-600"
           >
-            Skip &mdash; view transactions
+            View transactions
           </button>
         </div>
       )}
