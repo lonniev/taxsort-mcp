@@ -327,6 +327,8 @@ export default function TransactionsPage() {
   const filters = ["all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate", "Unclassified"];
 
   return (
+    <div className="w-[85%] mx-auto">
+      <h1 className="text-xl font-semibold mb-5 text-stone-800">Transactions</h1>
     <div className="flex gap-4">
       {/* Main table */}
       <div className="flex-1 min-w-0">
@@ -581,6 +583,7 @@ export default function TransactionsPage() {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

@@ -201,7 +201,7 @@ export default function SummaryPage() {
   ], [groupBy, isNested]);
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-[85%] mx-auto">
       <h1 className="text-xl font-semibold mb-5 text-stone-800">Categorized</h1>
 
       {/* Filter buttons */}
