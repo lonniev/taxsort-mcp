@@ -32,13 +32,6 @@ const GROUP_OPTIONS = [
   ["category+month", "Category + Month"],
 ];
 
-const SCOPE_OPTIONS = [
-  ["tax", "Tax items (Sch A + C)"],
-  ["all", "All transactions"],
-  ["Schedule C", "Schedule C only"],
-  ["Schedule A", "Schedule A only"],
-];
-
 interface Transaction {
   id: string;
   date: string;
@@ -91,6 +84,36 @@ function fmt$(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Semantic icons for subcategories — makes categorized data visually distinct from raw
+const SUB_ICON: Record<string, string> = {
+  // Schedule C
+  "Advertising & Marketing": "\u{1F4E2}", "Business Meals (50%)": "\u{1F37D}",
+  "Business Software & Subscriptions": "\u{1F4BB}", "Home Office Utilities": "\u{1F3E0}",
+  "Office Supplies": "\u{1F4CE}", "Phone & Internet": "\u{1F4F1}",
+  "Professional Services": "\u{1F4BC}", "Travel & Transportation": "\u2708\uFE0F",
+  "Vehicle Expenses": "\u{1F697}", "Other Business Expense": "\u{1F4B3}",
+  // Schedule A
+  "Charitable Contributions": "\u{1F49D}", "Medical & Dental": "\u{1FA7A}",
+  "Mortgage Interest": "\u{1F3E1}", "Property Tax": "\u{1F3D8}\uFE0F",
+  "State & Local Tax": "\u{1F3DB}\uFE0F", "Other Itemized Deduction": "\u{1F4DD}",
+  // Personal
+  "Income": "\u{1F4B0}", "Salary": "\u{1F4B5}", "Bonus": "\u{1F389}", "Tax Refund": "\u{1F4B8}",
+  "Auto Insurance": "\u{1F6E1}\uFE0F", "Home Insurance": "\u{1F3E0}", "Life Insurance": "\u{1F9EC}",
+  "Health Insurance": "\u{1FA7A}", "Groceries": "\u{1F6D2}", "Dining Out": "\u{1F37D}",
+  "Clothing": "\u{1F455}", "Personal Care": "\u2728", "Entertainment": "\u{1F3AC}",
+  "Streaming & Subscriptions": "\u{1F4FA}", "Gym & Fitness": "\u{1F3CB}\uFE0F",
+  "Pet Care": "\u{1F43E}", "Childcare": "\u{1F476}", "Utilities (Personal)": "\u{1F4A1}",
+  "Rent": "\u{1F3E2}", "Auto Loan": "\u{1F697}", "Student Loan": "\u{1F393}",
+  "Cash & ATM": "\u{1F3E7}", "Shopping": "\u{1F6CD}\uFE0F", "Gifts": "\u{1F381}",
+  "Education": "\u{1F4DA}", "Travel (Personal)": "\u{1F30D}", "Other Personal": "\u{1F4B3}",
+  // Transfers
+  "Internal Transfer": "\u{1F500}", "Credit Card Payment": "\u{1F4B3}",
+  "Savings Transfer": "\u{1F3E6}", "Investment Transfer": "\u{1F4C8}",
+  "Loan Payment": "\u{1F4B8}",
+  // Duplicate
+  "Duplicate": "\u{1F4CB}",
+};
+
 export default function SummaryPage() {
   const { sessionId, npub } = useSession();
   const summaryTool = useToolCall<Summary>("get_summary");
@@ -140,12 +163,16 @@ export default function SummaryPage() {
       key: "label",
       label: GROUP_OPTIONS.find(([v]) => v === groupBy)?.[1] ?? "Group",
       sortValue: r => r.label ?? "",
-      render: r => (
-        <>
-          <div className="font-medium text-stone-700">{isNested ? (r.sublabel ?? r.label) : r.label}</div>
-          {r.irs_line && <div className="text-xs text-stone-400">{r.irs_line}</div>}
-        </>
-      ),
+      render: r => {
+        const label = isNested ? (r.sublabel ?? r.label) : r.label;
+        const icon = SUB_ICON[label] ?? "";
+        return (
+          <>
+            <div className="font-medium text-stone-700">{icon && <span className="mr-1.5">{icon}</span>}{label}</div>
+            {r.irs_line && <div className="text-xs text-stone-400">{r.irs_line}</div>}
+          </>
+        );
+      },
     },
     {
       key: "count",
@@ -177,6 +204,23 @@ export default function SummaryPage() {
     <div className="max-w-3xl mx-auto">
       <h1 className="text-xl font-semibold mb-5 text-stone-800">Categorized</h1>
 
+      {/* Filter buttons */}
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {["all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate"].map(f => (
+          <button
+            key={f}
+            onClick={() => setScope(f === "all" ? "all" : f)}
+            className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
+              scope === f || (f === "all" && scope === "all")
+                ? "bg-stone-900 text-white"
+                : "bg-stone-100 text-stone-500 hover:bg-stone-200"
+            }`}
+          >
+            {f === "all" ? "All" : f}
+          </button>
+        ))}
+      </div>
+
       <div className="bg-white border border-stone-200 rounded-xl px-5 py-4 mb-5 flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <label className="text-xs text-stone-400">Group by</label>
@@ -186,16 +230,6 @@ export default function SummaryPage() {
             className="text-sm border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50"
           >
             {GROUP_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-stone-400">Show</label>
-          <select
-            value={scope}
-            onChange={e => setScope(e.target.value)}
-            className="text-sm border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50"
-          >
-            {SCOPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
       </div>
@@ -298,6 +332,7 @@ export default function SummaryPage() {
                               >
                                 <td className="py-1.5 pr-3 text-stone-500 font-mono whitespace-nowrap">{t.date}</td>
                                 <td className="py-1.5 pr-3 text-stone-700">
+                                  <span className="mr-1.5">{SUB_ICON[t.subcategory ?? ""] ?? ""}</span>
                                   {t.merchant || t.description}
                                   {editingTx === t.id ? (
                                     <div className="flex items-center gap-2 mt-1" onClick={e => e.stopPropagation()}>

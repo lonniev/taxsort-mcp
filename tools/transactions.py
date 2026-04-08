@@ -265,7 +265,7 @@ async def get_summary(
     scope_where = "AND c.category != 'Duplicate'"
     if scope == "tax":
         scope_where = "AND c.category IN ('Schedule C', 'Schedule A')"
-    elif scope in ("Schedule C", "Schedule A"):
+    elif scope in ("Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate"):
         scope_where = f"AND c.category = '{scope}'"
 
     month_where = ""
