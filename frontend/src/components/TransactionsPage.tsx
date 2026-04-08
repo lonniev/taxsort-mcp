@@ -6,6 +6,66 @@ import { useToolCall } from "../hooks/useMCP";
 import SortableTable from "./SortableTable";
 import type { Column } from "./SortableTable";
 
+// ── Amount filter expression parser ──────────────────────────────────────
+// Supports: <-95, >=0.05, !33, not 25, neq 25, gt 50, lte 30,
+//           [0..10), (-3..7.56], 0..10  (bare range = inclusive both ends)
+
+function parseAmountFilter(expr: string): ((amount: number) => boolean) | null {
+  const s = expr.trim();
+  if (!s) return null;
+
+  // Range: [0..10), (-3..7.56], 0..10
+  const rangeRe = /^([[(]?)\s*(-?\d+\.?\d*)\s*\.\.\s*(-?\d+\.?\d*)\s*([\])]?)$/;
+  const rm = s.match(rangeRe);
+  if (rm) {
+    const loInc = rm[1] !== "(";   // [ or empty = inclusive, ( = exclusive
+    const lo = parseFloat(rm[2]);
+    const hi = parseFloat(rm[3]);
+    const hiInc = rm[4] !== ")";   // ] or empty = inclusive, ) = exclusive
+    return (a) => (loInc ? a >= lo : a > lo) && (hiInc ? a <= hi : a < hi);
+  }
+
+  // Operator + value: >=0.05, <-95, !=33, =10
+  const opRe = /^([<>!=]=?|<=|>=)\s*(-?\d+\.?\d*)$/;
+  const om = s.match(opRe);
+  if (om) {
+    const v = parseFloat(om[2]);
+    switch (om[1]) {
+      case "<":  return (a) => a < v;
+      case "<=": return (a) => a <= v;
+      case ">":  return (a) => a > v;
+      case ">=": return (a) => a >= v;
+      case "=":  case "==": return (a) => a === v;
+      case "!=": case "!":  return (a) => a !== v;
+    }
+  }
+
+  // Word operator: gt 50, lte 30, not 25, neq 25, eq 10
+  const wordRe = /^(lt|lte|gt|gte|eq|neq|not)\s+(-?\d+\.?\d*)$/i;
+  const wm = s.match(wordRe);
+  if (wm) {
+    const v = parseFloat(wm[2]);
+    switch (wm[1].toLowerCase()) {
+      case "lt":  return (a) => a < v;
+      case "lte": return (a) => a <= v;
+      case "gt":  return (a) => a > v;
+      case "gte": return (a) => a >= v;
+      case "eq":  return (a) => a === v;
+      case "neq": case "not": return (a) => a !== v;
+    }
+  }
+
+  // Shorthand: !33 (not equal)
+  const bangRe = /^!\s*(-?\d+\.?\d*)$/;
+  const bm = s.match(bangRe);
+  if (bm) {
+    const v = parseFloat(bm[1]);
+    return (a) => a !== v;
+  }
+
+  return null; // unparseable — no filter
+}
+
 interface Transaction {
   id: string;
   date: string;
@@ -90,8 +150,7 @@ export default function TransactionsPage() {
   const [subFilter, setSubFilter] = useState(searchParams.get("subcategory") ?? "");
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
-  const [amountMin, setAmountMin] = useState("");
-  const [amountMax, setAmountMax] = useState("");
+  const [amountExpr, setAmountExpr] = useState("");
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [editCat, setEditCat] = useState("");
@@ -255,16 +314,14 @@ export default function TransactionsPage() {
     }
   }
 
-  // Filter by scope + amount range
-  const minAmt = amountMin ? parseFloat(amountMin) : null;
-  const maxAmt = amountMax ? parseFloat(amountMax) : null;
+  // Filter by scope + amount expression
+  const amountFilter = parseAmountFilter(amountExpr);
 
   const scopedTxns = (scope === "all" ? txns
     : scope === "tax" ? txns.filter(t => t.category === "Schedule C" || t.category === "Schedule A")
     : txns.filter(t => t.category === scope)
   ).filter(t => {
-    if (minAmt !== null && t.amount < minAmt) return false;
-    if (maxAmt !== null && t.amount > maxAmt) return false;
+    if (amountFilter && !amountFilter(t.amount)) return false;
     return true;
   });
 
@@ -408,23 +465,12 @@ export default function TransactionsPage() {
               if (e.key === "Enter") { setSearch(searchInput); setOffset(0); }
             }}
           />
-          <span className="text-xs text-stone-400 ml-2">Amount:</span>
           <input
-            className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 w-20 font-mono"
-            placeholder="min"
-            type="number"
-            step="0.01"
-            value={amountMin}
-            onChange={e => setAmountMin(e.target.value)}
-          />
-          <span className="text-xs text-stone-300">..</span>
-          <input
-            className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 w-20 font-mono"
-            placeholder="max"
-            type="number"
-            step="0.01"
-            value={amountMax}
-            onChange={e => setAmountMax(e.target.value)}
+            className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 w-36 font-mono"
+            placeholder="e.g. <-95, [0..10), !33"
+            title="Amount filter: <, <=, >, >=, =, !=, !N, not N, gt/gte/lt/lte/eq/neq N, [lo..hi), (lo..hi], lo..hi"
+            value={amountExpr}
+            onChange={e => setAmountExpr(e.target.value)}
           />
           {searchInput && (
             <button
@@ -434,9 +480,9 @@ export default function TransactionsPage() {
               Search
             </button>
           )}
-          {(search || subFilter || amountMin || amountMax) && (
+          {(search || subFilter || amountExpr) && (
             <button
-              onClick={() => { setSearch(""); setSearchInput(""); setSubFilter(""); setAmountMin(""); setAmountMax(""); setOffset(0); }}
+              onClick={() => { setSearch(""); setSearchInput(""); setSubFilter(""); setAmountExpr(""); setOffset(0); }}
               className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded"
             >
               Clear filters
