@@ -27,7 +27,7 @@ export default function Nav() {
     };
 
     beat();
-    timerRef.current = setInterval(beat, 30_000);
+    timerRef.current = setInterval(beat, 120_000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };

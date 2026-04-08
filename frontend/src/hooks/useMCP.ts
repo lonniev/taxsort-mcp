@@ -72,8 +72,11 @@ async function getClient(): Promise<Client> {
   return client!;
 }
 
+const QUIET_TOOLS = new Set(["session_heartbeat"]);
+
 async function mcpCall(toolName: string, args: Record<string, unknown>): Promise<unknown> {
-  debugPush("call", `taxsort_${toolName}(${JSON.stringify(args).slice(0, 120)})`);
+  const quiet = QUIET_TOOLS.has(toolName);
+  if (!quiet) debugPush("call", `taxsort_${toolName}(${JSON.stringify(args).slice(0, 120)})`);
   const c = await getClient();
   let result;
   try {
@@ -84,10 +87,10 @@ async function mcpCall(toolName: string, args: Record<string, unknown>): Promise
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    debugPush("error", `taxsort_${toolName}: ${msg}`);
+    if (!quiet) debugPush("error", `taxsort_${toolName}: ${msg}`);
     throw e;
   }
-  debugPush("result", `taxsort_${toolName} → ${JSON.stringify(result).slice(0, 200)}`);
+  if (!quiet) debugPush("result", `taxsort_${toolName} → ${JSON.stringify(result).slice(0, 200)}`);
 
   if (result.isError) {
     const content = result.content as Array<Record<string, unknown>> | undefined;
