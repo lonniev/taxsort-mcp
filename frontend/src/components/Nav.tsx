@@ -13,7 +13,9 @@ export default function Nav() {
   const loc = useLocation();
   const heartbeatTool = useToolCall<HeartbeatResult>("session_heartbeat");
   const [others, setOthers] = useState<{ npub: string }[]>([]);
+  const [profileOpen, setProfileOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!sessionId || !npub) {
@@ -33,7 +35,19 @@ export default function Nav() {
     };
   }, [sessionId, npub]);
 
-  const link = (to: string, icon: string, label: string, tip?: string) => (
+  // Close profile dropdown on outside click
+  useEffect(() => {
+    if (!profileOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [profileOpen]);
+
+  const link = (to: string, icon: string, label: string, tip: string) => (
     <Link
       to={to}
       title={tip}
@@ -44,6 +58,21 @@ export default function Nav() {
       }`}
     >
       <span className="mr-1">{icon}</span>{label}
+    </Link>
+  );
+
+  const dropLink = (to: string, icon: string, label: string, tip: string) => (
+    <Link
+      to={to}
+      title={tip}
+      onClick={() => setProfileOpen(false)}
+      className={`block px-3 py-2 text-sm transition-colors ${
+        loc.pathname === to
+          ? "bg-amber-50 text-amber-800"
+          : "text-stone-600 hover:bg-stone-50"
+      }`}
+    >
+      <span className="mr-2">{icon}</span>{label}
     </Link>
   );
 
@@ -61,28 +90,53 @@ export default function Nav() {
         {sessionId && (
           <>
             {link("/import", "\u{1F4E5}", "Import", "Upload bank CSV files")}
-            {link("/accounts", "\u{1F3E6}", "Accounts", "Tag account types, view aliases")}
+            {link("/accounts", "\u{1F3E6}", "Accounts", "Tag account types, view aliases and transactions")}
             {link("/transactions", "\u{1F4C4}", "Transactions", "Browse and search raw transaction data")}
             {link("/classify", "\u{1F916}", "Classify", "Run Claude AI classification and manage rules")}
             {link("/summary", "\u2705", "Categorized", "View classified totals with semantic categories")}
             {link("/subscriptions", "\u{1F501}", "Subscriptions", "Find recurring charges and money leaks")}
-            {link("/advisor", "\u{1F4AC}", "Advisor", "Ask the Financial Advisor")}
-            {link("/tax-research", "\u{1F4D6}", "Tax Code", "IRS code sections — chapter and verse")}
-            {link("/feedback", "\u{1F4E8}", "Feedback", "Report bugs, request features")}
+            {link("/advisor", "\u{1F4AC}", "Advisor", "Ask the Financial Advisor about TaxSort")}
+            {link("/tax-research", "\u{1F4D6}", "Tax Code", "Look up IRS code sections — chapter and verse")}
+            {link("/feedback", "\u{1F4E8}", "Feedback", "Report bugs, request features, ask questions")}
           </>
         )}
 
-        <div className="ml-auto flex items-center gap-1">
-          {link("/wallet", "\u{1F4B0}", "Wallet", "Credit balance and Lightning purchases")}
-          {link("/settings", "\u2699\uFE0F", "Settings", "Session timeout, sharing, and about")}
-          {link("/privacy", "\u{1F512}", "Privacy", "How your data is protected")}
+        {/* Profile dropdown — right side */}
+        <div className="ml-auto relative" ref={profileRef}>
           <button
-            onClick={logOut}
-            title="Log out — clears session and requires re-verification"
-            className="px-2.5 py-1.5 rounded text-sm font-medium text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors whitespace-nowrap"
+            onClick={() => setProfileOpen(!profileOpen)}
+            title={npub || "Profile"}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-sm font-medium transition-colors ${
+              profileOpen ? "bg-stone-100 text-stone-800" : "text-stone-500 hover:text-stone-900 hover:bg-stone-100"
+            }`}
           >
-            <span className="mr-1">{"\u{1F6AA}"}</span>Log out
+            <span className="w-6 h-6 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-xs">
+              {npub ? npub.slice(5, 7).toUpperCase() : "\u{1F464}"}
+            </span>
+            <span className="hidden sm:inline">Profile</span>
           </button>
+
+          {profileOpen && (
+            <div className="absolute right-0 top-full mt-1 w-56 bg-white border border-stone-200 rounded-xl shadow-lg overflow-hidden z-40">
+              {/* npub display */}
+              {npub && (
+                <div className="px-3 py-2 border-b border-stone-100 bg-stone-50">
+                  <div className="text-xs text-stone-400">Nostr identity</div>
+                  <div className="text-xs font-mono text-stone-600 truncate" title={npub}>{npub}</div>
+                </div>
+              )}
+              {dropLink("/wallet", "\u{1F4B0}", "Wallet", "Credit balance and Lightning purchases")}
+              {dropLink("/settings", "\u2699\uFE0F", "Settings", "Session timeout, sharing, and about")}
+              {dropLink("/privacy", "\u{1F512}", "Privacy", "How your data is protected")}
+              <button
+                onClick={() => { setProfileOpen(false); logOut(); }}
+                title="Log out — clears session and requires re-verification"
+                className="w-full text-left px-3 py-2 text-sm text-stone-600 hover:bg-red-50 hover:text-red-600 transition-colors"
+              >
+                <span className="mr-2">{"\u{1F6AA}"}</span>Log out
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -117,10 +171,6 @@ export default function Nav() {
               </span>
             </div>
           )}
-
-          <span className="ml-auto text-stone-400 font-mono truncate max-w-40" title={npub}>
-            {npub.slice(0, 16)}&hellip;
-          </span>
         </div>
       )}
     </>
