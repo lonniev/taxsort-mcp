@@ -46,10 +46,41 @@ interface Transaction {
   amount: number;
   account: string;
   merchant: string | null;
+  category: string | null;
   subcategory: string | null;
   confidence: string | null;
   reason: string | null;
 }
+
+const CATEGORIES = [
+  "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate",
+];
+const CAT_SUBS: Record<string, string[]> = {
+  "Schedule C": [
+    "Advertising & Marketing", "Business Meals (50%)", "Business Software & Subscriptions",
+    "Home Office Utilities", "Office Supplies", "Phone & Internet", "Professional Services",
+    "Travel & Transportation", "Vehicle Expenses", "Other Business Expense",
+  ],
+  "Schedule A": [
+    "Charitable Contributions", "Medical & Dental", "Mortgage Interest",
+    "Property Tax", "State & Local Tax", "Other Itemized Deduction",
+  ],
+  "Internal Transfer": [
+    "Internal Transfer", "Credit Card Payment", "Savings Transfer",
+    "Investment Transfer", "Loan Payment",
+  ],
+  "Personal": [
+    "Income", "Salary", "Bonus", "Tax Refund",
+    "Auto Insurance", "Home Insurance", "Life Insurance", "Health Insurance",
+    "Groceries", "Dining Out", "Clothing",
+    "Personal Care", "Entertainment", "Streaming & Subscriptions",
+    "Gym & Fitness", "Pet Care", "Childcare",
+    "Utilities (Personal)", "Rent", "Auto Loan", "Student Loan",
+    "Cash & ATM", "Shopping", "Gifts",
+    "Education", "Travel (Personal)", "Other Personal",
+  ],
+  "Duplicate": ["Duplicate"],
+};
 
 interface TxResult {
   total: number;
@@ -64,6 +95,7 @@ export default function SummaryPage() {
   const { sessionId, npub } = useSession();
   const summaryTool = useToolCall<Summary>("get_summary");
   const txTool = useToolCall<TxResult>("get_transactions");
+  const saveTool = useToolCall<{ saved: number }>("save_classifications");
 
   const [summary, setSummary] = useState<Summary | null>(null);
   const [classifyStatus, setClassifyStatus] = useState<{ total: number; classified: number; needs_review: number } | null>(null);
@@ -72,6 +104,9 @@ export default function SummaryPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [expandedTxns, setExpandedTxns] = useState<Transaction[]>([]);
   const [expandLoading, setExpandLoading] = useState(false);
+  const [editingTx, setEditingTx] = useState<string | null>(null);
+  const [editCat, setEditCat] = useState("");
+  const [editSub, setEditSub] = useState("");
   async function fetchSummary() {
     const data = await summaryTool.invoke({
       session_id: sessionId,
@@ -251,12 +286,82 @@ export default function SummaryPage() {
                           </thead>
                           <tbody>
                             {expandedTxns.map(t => (
-                              <tr key={t.id} className="border-t border-stone-100">
+                              <tr
+                                key={t.id}
+                                className="border-t border-stone-100 hover:bg-stone-100 cursor-pointer transition-colors"
+                                onClick={() => {
+                                  if (editingTx === t.id) return;
+                                  setEditingTx(t.id);
+                                  setEditCat(t.category ?? "Personal");
+                                  setEditSub(t.subcategory ?? "");
+                                }}
+                              >
                                 <td className="py-1.5 pr-3 text-stone-500 font-mono whitespace-nowrap">{t.date}</td>
                                 <td className="py-1.5 pr-3 text-stone-700">
                                   {t.merchant || t.description}
-                                  {t.reason && (
-                                    <div className="text-xs text-stone-400 italic"><ReasonText reason={t.reason} /></div>
+                                  {editingTx === t.id ? (
+                                    <div className="flex items-center gap-2 mt-1" onClick={e => e.stopPropagation()}>
+                                      <select
+                                        value={editCat}
+                                        onChange={e => { setEditCat(e.target.value); setEditSub(""); }}
+                                        className="text-xs border border-stone-200 rounded px-1.5 py-1 bg-white"
+                                      >
+                                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                      </select>
+                                      <select
+                                        value={editSub}
+                                        onChange={e => setEditSub(e.target.value)}
+                                        className="text-xs border border-stone-200 rounded px-1.5 py-1 bg-white"
+                                      >
+                                        <option value="">--</option>
+                                        {(CAT_SUBS[editCat] ?? []).map(s => <option key={s} value={s}>{s}</option>)}
+                                      </select>
+                                      <button
+                                        onClick={async () => {
+                                          if (!sessionId || !editSub) return;
+                                          await saveTool.invoke({
+                                            session_id: sessionId,
+                                            classifications: JSON.stringify([{
+                                              id: t.id,
+                                              category: editCat,
+                                              subcategory: editSub,
+                                              confidence: "manual",
+                                              reason: "manual reclassification",
+                                              merchant: t.merchant || t.description,
+                                              classified_by: "manual",
+                                            }]),
+                                            npub,
+                                          });
+                                          setEditingTx(null);
+                                          // Refresh summary and expanded transactions
+                                          fetchSummary();
+                                          fetchStatus();
+                                          // Re-fetch expanded list
+                                          const data = await txTool.invoke({
+                                            session_id: sessionId,
+                                            subcategory: expanded?.split("|")[0],
+                                            limit: 500,
+                                            offset: 0,
+                                            npub,
+                                          });
+                                          setExpandedTxns(data?.transactions ?? []);
+                                        }}
+                                        disabled={!editSub || saveTool.loading}
+                                        className="text-xs bg-amber-600 text-white px-2 py-1 rounded hover:bg-amber-500 disabled:opacity-40"
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingTx(null)}
+                                        className="text-xs text-stone-400 hover:text-stone-600"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    t.reason && (
+                                      <div className="text-xs text-stone-400 italic"><ReasonText reason={t.reason} /></div>
+                                    )
                                   )}
                                 </td>
                                 <td className="py-1.5 pr-3 text-stone-400">{t.account}</td>
