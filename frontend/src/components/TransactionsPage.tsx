@@ -394,11 +394,11 @@ export default function TransactionsPage() {
   const filters = ["all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate", "Unclassified"];
 
   return (
-    <div className="w-[85%] mx-auto">
+    <div className="w-[85%] mx-auto relative">
       <h1 className="text-xl font-semibold mb-5 text-stone-800">Transactions</h1>
-    <div className="flex gap-4">
+    <div>
       {/* Main table */}
-      <div className="flex-1 min-w-0">
+      <div>
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-sm text-red-700 break-all">
             {error}
@@ -520,10 +520,10 @@ export default function TransactionsPage() {
         )}
       </div>
 
-      {/* Side panel */}
+      {/* Side panel — fixed flyout on right edge */}
       {selected && (
-        <div className="w-80 flex-shrink-0">
-          <div className="bg-white border border-stone-200 rounded-xl overflow-hidden sticky top-4">
+        <div className="fixed top-24 right-4 w-80 z-30">
+          <div className="bg-white border border-stone-200 rounded-xl overflow-hidden shadow-lg max-h-[80vh] overflow-y-auto">
             <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
               <span className="text-sm font-medium text-stone-700 truncate max-w-56">{selected.description}</span>
               <button onClick={() => setSelected(null)} className="text-stone-300 hover:text-stone-600 text-sm ml-2">&times;</button>
