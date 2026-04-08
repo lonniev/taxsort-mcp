@@ -38,7 +38,7 @@ async def create_issue(
     if contact:
         issue_body += f"**Contact:** {contact}\n"
     issue_body += f"**Category:** {category}\n"
-    issue_body += f"**Source:** TaxSort App\n"
+    issue_body += "**Source:** TaxSort App\n"
 
     labels = ["feedback", f"cat:{category}"]
 
@@ -109,7 +109,7 @@ async def list_my_issues(npub: str) -> dict:
         # Search GitHub for issues with this npub
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(
-                f"https://api.github.com/search/issues",
+                "https://api.github.com/search/issues",
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Accept": "application/vnd.github+json",
@@ -130,7 +130,7 @@ async def list_my_issues(npub: str) -> dict:
                         "created_at": item["created_at"],
                         "updated_at": item["updated_at"],
                         "url": item["html_url"],
-                        "labels": [l["name"] for l in item.get("labels", [])],
+                        "labels": [lb["name"] for lb in item.get("labels", [])],
                         "comments": item.get("comments", 0),
                     })
 

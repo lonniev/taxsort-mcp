@@ -2,7 +2,7 @@
 
 import re
 from decimal import Decimal
-from db.neon import fetch, execute, executemany, fetchrow
+from db.neon import fetch, executemany, fetchrow
 
 
 # ── Format detection ──────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ def _content_hash(fmt: str, date: str, desc: str, amount: Decimal) -> str:
 
 def parse_csv(content: str, filename: str, account_name: str = "") -> tuple[list[dict], dict]:
     """Parse a CSV string into (rows, metadata) where metadata has parse stats."""
-    lines = [l for l in content.replace("\r\n", "\n").split("\n") if l.strip()]
+    lines = [ln for ln in content.replace("\r\n", "\n").split("\n") if ln.strip()]
     if len(lines) < 2:
         return []
 

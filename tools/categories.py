@@ -22,7 +22,7 @@ async def save_custom_category(owner_npub: str, category: str, subcategory: str)
     if not category or not subcategory:
         return {"error": "Both category and subcategory are required."}
 
-    result = await execute(
+    await execute(
         """
         INSERT INTO tax_categories (owner_npub, category, subcategory)
         VALUES ($1, $2, $3)
