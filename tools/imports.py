@@ -169,7 +169,7 @@ def parse_csv(content: str, filename: str, account_name: str = "") -> tuple[list
             elif fmt == "checkbook":
                 raw_date = cols[0].strip()
                 check_num = cols[1].strip() if len(cols) > 1 else ""
-                amount = -abs(_pa(cols[2] if len(cols) > 2 else ""))
+                amount = _pa(cols[2] if len(cols) > 2 else "")
                 desc = (cols[3] if len(cols) > 3 else "").strip()
                 hint1 = f"Check #{check_num}" if check_num else None
                 hint2 = (cols[4] if len(cols) > 4 else "").strip() or None
