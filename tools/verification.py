@@ -42,6 +42,21 @@ async def store_verification(npub: str, passphrase: str) -> dict:
     return {"verified": True, "npub": npub}
 
 
+async def verify_passphrase(npub: str, passphrase: str) -> dict:
+    """Check if a passphrase matches the stored hash for this npub."""
+    row = await fetchrow(
+        "SELECT passphrase_hash FROM tax_verifications WHERE npub = $1",
+        npub,
+    )
+    if not row or not row.get("passphrase_hash"):
+        return {"verified": False, "error": "No verification on record."}
+
+    ph = hashlib.sha256(f"{npub}:{passphrase}".encode()).hexdigest()
+    if ph == row["passphrase_hash"]:
+        return {"verified": True, "npub": npub}
+    return {"verified": False, "error": "Incorrect passphrase."}
+
+
 async def require_verified(npub: str) -> dict | None:
     """Return an error dict if npub is not verified, else None."""
     status = await get_verification_status(npub)

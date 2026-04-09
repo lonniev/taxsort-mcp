@@ -121,157 +121,110 @@ function NpubGate({ children, npub, setNpub }: {
   const [verified, setVerified] = useState(
     sessionStorage.getItem("taxsort_verified") === "true",
   );
-  const [verifyPhase, setVerifyPhase] = useState<"enter" | "waiting" | "checking">("enter");
+  const [dmSent, setDmSent] = useState(false);
 
   const verifyTool = useToolCall<VerifyResult>("verify_npub");
   const checkTool = useToolCall<VerifyResult>("check_verification");
 
-  // No auto-check — every new browser session requires explicit Secure Courier login
-
-  // If npub is set and verified, show the app
   if (npub && verified) return <>{children}</>;
 
-  // If npub is set but not verified, show verification UI
-  if (npub && !verified) {
-    return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
-        <div className="bg-white border border-stone-200 rounded-xl p-8 max-w-md w-full shadow-sm">
-          <h1 className="text-lg font-semibold text-stone-800 mb-2">{"\u{1F512}"} Log In</h1>
-          <p className="text-xs text-stone-400 font-mono mb-4 break-all">{npub}</p>
-
-          {verifyPhase === "enter" && (
-            <>
-              <p className="text-sm text-stone-500 mb-5">
-                We&apos;ll send a Nostr DM to verify you own this npub.
-                Reply with any passphrase to log in.
-              </p>
-              <button
-                onClick={async () => {
-                  setVerifyPhase("waiting");
-                  await verifyTool.invoke({ npub });
-                }}
-                disabled={verifyTool.loading}
-                className="w-full bg-amber-600 text-white text-sm py-2.5 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors mb-3"
-              >
-                {verifyTool.loading ? "Sending\u2026" : "Send Login DM"}
-              </button>
-              <button
-                onClick={() => {
-                  // Check if already verified (e.g. from previous session)
-                  setVerifyPhase("checking");
-                  checkTool.invoke({ npub }).then((r) => {
-                    if (r?.verified) {
-                      sessionStorage.setItem("taxsort_verified", "true");
-                      setVerified(true);
-                    } else {
-                      setVerifyPhase("enter");
-                    }
-                  });
-                }}
-                className="w-full text-sm text-stone-400 hover:text-stone-700 py-1"
-              >
-                Already logged in? Check status
-              </button>
-            </>
-          )}
-
-          {verifyPhase === "waiting" && (
-            <>
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-5">
-                <p className="text-sm text-amber-800 mb-2">
-                  Check your Nostr client for a DM from TaxSort.
-                </p>
-                <p className="text-xs text-amber-600">
-                  Reply with any passphrase to prove you own this npub.
-                  Your passphrase protects your tax data.
-                </p>
-              </div>
-              <button
-                onClick={async () => {
-                  setVerifyPhase("checking");
-                  const r = await checkTool.invoke({ npub });
-                  if (r?.verified) {
-                    sessionStorage.setItem("taxsort_verified", "true");
-                    setVerified(true);
-                  } else {
-                    setVerifyPhase("waiting");
-                  }
-                }}
-                disabled={checkTool.loading}
-                className="w-full bg-stone-900 text-white text-sm py-2.5 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors mb-3"
-              >
-                {checkTool.loading ? "Checking\u2026" : "I\u2019ve Replied \u2014 Finish Login"}
-              </button>
-              {checkTool.error && (
-                <p className="text-xs text-red-500 mt-2">{checkTool.error}</p>
-              )}
-            </>
-          )}
-
-          {verifyPhase === "checking" && checkTool.loading && (
-            <p className="text-sm text-stone-400 text-center py-4">Checking\u2026</p>
-          )}
-
-          {verifyTool.error && (
-            <p className="text-xs text-red-500 mt-2">{verifyTool.error}</p>
-          )}
-
-          <button
-            onClick={() => {
-              localStorage.removeItem("taxsort_npub");
-              sessionStorage.removeItem("taxsort_verified");
-              setNpub("");
-              setVerified(false);
-              setVerifyPhase("enter");
-            }}
-            className="w-full text-xs text-stone-400 hover:text-red-500 mt-4 py-1"
-          >
-            Use a different npub
-          </button>
-        </div>
-      </div>
-    );
+  async function handleBeginLogin() {
+    const target = input.trim();
+    if (!target.startsWith("npub1")) return;
+    localStorage.setItem("taxsort_npub", target);
+    setNpub(target);
+    setDmSent(false);
+    await verifyTool.invoke({ npub: target });
+    setDmSent(true);
   }
 
-  // No npub yet — enter one
+  async function handleFinishLogin() {
+    const target = npub || input.trim();
+    const r = await checkTool.invoke({ npub: target });
+    if (r?.verified) {
+      sessionStorage.setItem("taxsort_verified", "true");
+      setVerified(true);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-stone-50 flex items-center justify-center">
       <div className="bg-white border border-stone-200 rounded-xl p-8 max-w-md w-full shadow-sm">
         <h1 className="text-lg font-semibold text-stone-800 mb-2">{"\u{1F4CA}"} TaxSort</h1>
         <p className="text-sm text-stone-500 mb-5">
           Log in with your Nostr identity. We&apos;ll send a DM
-          to verify you own this npub &mdash; no password needed.
+          to verify you own this npub &mdash; reply with any passphrase.
         </p>
+
         <input
           className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm font-mono bg-stone-50 focus:outline-none focus:border-stone-400 mb-3"
           placeholder="npub1..."
           value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === "Enter" && input.startsWith("npub1")) {
-              localStorage.setItem("taxsort_npub", input.trim());
-              setNpub(input.trim());
-            }
-          }}
+          onKeyDown={e => { if (e.key === "Enter") handleBeginLogin(); }}
         />
-        <button
-          onClick={() => {
-            if (input.startsWith("npub1")) {
-              localStorage.setItem("taxsort_npub", input.trim());
-              setNpub(input.trim());
-            }
-          }}
-          disabled={!input.startsWith("npub1")}
-          className="w-full bg-stone-900 text-white text-sm py-2.5 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
-        >
-          Begin Login
-        </button>
-        <p className="text-xs text-stone-400 mt-3">
-          Don&apos;t have one? Get a Nostr keypair from any Nostr client.
-        </p>
-        <p className="text-xs text-stone-400 mt-2">
+
+        {!dmSent ? (
+          <button
+            onClick={handleBeginLogin}
+            disabled={!input.startsWith("npub1") || verifyTool.loading}
+            className="w-full bg-amber-600 text-white text-sm py-2.5 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors"
+          >
+            {verifyTool.loading ? "Sending DM\u2026" : "Begin Login"}
+          </button>
+        ) : (
+          <>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-amber-800 mb-1">
+                DM sent! Check your Nostr client.
+              </p>
+              <p className="text-xs text-amber-600">
+                Reply with any passphrase, then tap Finish Login below.
+              </p>
+            </div>
+            <button
+              onClick={handleFinishLogin}
+              disabled={checkTool.loading}
+              className="w-full bg-stone-900 text-white text-sm py-2.5 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors mb-2"
+            >
+              {checkTool.loading ? "Checking\u2026" : "Finish Login"}
+            </button>
+            <button
+              onClick={handleBeginLogin}
+              disabled={verifyTool.loading}
+              className="w-full text-xs text-stone-400 hover:text-stone-600 py-1"
+            >
+              Resend DM
+            </button>
+          </>
+        )}
+
+        {checkTool.error && (
+          <p className="text-xs text-red-500 mt-2">{checkTool.error}</p>
+        )}
+        {verifyTool.error && (
+          <p className="text-xs text-red-500 mt-2">{verifyTool.error}</p>
+        )}
+
+        {npub && (
+          <button
+            onClick={() => {
+              localStorage.removeItem("taxsort_npub");
+              sessionStorage.removeItem("taxsort_verified");
+              setNpub("");
+              setVerified(false);
+              setDmSent(false);
+              setInput("");
+            }}
+            className="w-full text-xs text-stone-400 hover:text-red-500 mt-4 py-1"
+          >
+            Use a different npub
+          </button>
+        )}
+
+        <p className="text-xs text-stone-400 mt-4">
           No email. No password. No KYC.{" "}
-          <a href="/privacy" className="text-amber-600 hover:text-amber-800 underline">Read our Privacy Policy</a>
+          <a href="/privacy" className="text-amber-600 hover:text-amber-800 underline">Privacy Policy</a>
         </p>
       </div>
     </div>

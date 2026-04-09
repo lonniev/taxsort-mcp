@@ -71,6 +71,7 @@ NpubField = Annotated[
 _DOMAIN_TOOLS = [
     ToolIdentity(capability="verify_npub", category="free", intent="Start npub verification via Secure Courier"),
     ToolIdentity(capability="check_verification", category="free", intent="Check if npub verification completed"),
+    ToolIdentity(capability="verify_passphrase", category="free", intent="Verify passphrase for timeout unlock"),
     ToolIdentity(capability="create_session", category="free", intent="Create a tax session"),
     ToolIdentity(capability="get_session", category="free", intent="Get session details"),
     ToolIdentity(capability="list_sessions", category="free", intent="List patron sessions"),
@@ -261,6 +262,17 @@ async def check_verification(
         **stored,
         "message": "Npub verified! Your tax data is now protected.",
     }
+
+
+@tool
+@runtime.paid_tool(capability_uuid("verify_passphrase"))
+async def verify_passphrase(
+    passphrase: str,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Verify a passphrase to unlock a timed-out session."""
+    from tools.verification import verify_passphrase as _verify
+    return await _verify(npub=npub, passphrase=passphrase)
 
 
 # ── Sessions ──────────────────────────────────────────────────────────────
