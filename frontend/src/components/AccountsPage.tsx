@@ -26,6 +26,7 @@ interface Transaction {
   date: string;
   description: string;
   amount: number;
+  account: string;
   category: string | null;
   subcategory: string | null;
 }
@@ -104,17 +105,14 @@ export default function AccountsPage() {
     setExpanded(accountName);
     setExpandedTxns([]);
     setExpandLoading(true);
-    // Use search to filter by account — the BE doesn't have an account filter,
-    // so we fetch all and filter client-side (accounts typically have <500 txns)
     const data = await txTool.invoke({
       session_id: sessionId,
+      account: accountName,
       limit: 500,
       offset: 0,
       npub,
     });
-    const all = (data?.transactions ?? []) as Array<Transaction & { account: string }>;
-    const filtered = all.filter(t => t.account === accountName);
-    setExpandedTxns(filtered);
+    setExpandedTxns((data?.transactions ?? []) as Transaction[]);
     setExpandLoading(false);
   }
 

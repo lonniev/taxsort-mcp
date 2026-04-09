@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
@@ -17,6 +17,24 @@ interface ImportResult {
 
 interface ClearResult {
   session_id: string;
+  transactions_deleted: number;
+  classifications_deleted: number;
+}
+
+interface ImportSource {
+  format: string;
+  account: string;
+  count: number;
+  date_range: string;
+  ambiguous: number;
+}
+
+interface ImportStatsResult {
+  sources: ImportSource[];
+}
+
+interface DeleteAccountResult {
+  account: string;
   transactions_deleted: number;
   classifications_deleted: number;
 }
@@ -75,6 +93,8 @@ export default function ImportPage() {
 
   const importTool = useToolCall<ImportResult>("import_csv");
   const clearTool = useToolCall<ClearResult>("clear_transactions");
+  const statsTool = useToolCall<ImportStatsResult>("get_import_stats");
+  const deleteAcctTool = useToolCall<DeleteAccountResult>("delete_account_transactions");
 
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [results, setResults] = useState<ImportResult[]>([]);
@@ -82,7 +102,16 @@ export default function ImportPage() {
   const [phase, setPhase] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearResult, setClearResult] = useState<ClearResult | null>(null);
+  const [sources, setSources] = useState<ImportSource[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  async function loadStats() {
+    if (!sessionId) return;
+    const data = await statsTool.invoke({ session_id: sessionId, npub });
+    if (data?.sources) setSources(data.sources);
+  }
+
+  useEffect(() => { loadStats(); }, [sessionId]);
 
   function addFiles(fl: FileList | null) {
     if (!fl) return;
@@ -127,6 +156,7 @@ export default function ImportPage() {
     setResults(newResults);
     setPhase("");
     setImporting(false);
+    loadStats();
   }
 
   async function handleClear() {
@@ -136,6 +166,7 @@ export default function ImportPage() {
       setClearResult(data);
       setResults([]);
       setEntries([]);
+      setSources([]);
     }
     setConfirmClear(false);
   }
@@ -185,6 +216,40 @@ export default function ImportPage() {
           </div>
         )}
       </div>
+
+      {/* Imported sources */}
+      {sources.length > 0 && (
+        <div className="bg-white border border-stone-200 rounded-xl p-5 mb-4">
+          <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
+            Imported Sources
+          </div>
+          <div className="space-y-2">
+            {sources.map((s, i) => (
+              <div key={i} className="flex items-center gap-3 bg-stone-50 border border-stone-100 rounded-lg px-3 py-2 text-xs">
+                <span className="font-mono font-semibold bg-green-100 text-green-800 px-1.5 py-0.5 rounded">
+                  {FMT_LABELS[s.format] ?? s.format}
+                </span>
+                <span className="font-medium text-stone-700 flex-1">{s.account}</span>
+                <span className="text-stone-400">{s.count} txns</span>
+                <span className="text-stone-400">{s.date_range}</span>
+                <button
+                  onClick={async () => {
+                    if (!sessionId) return;
+                    if (!confirm(`Remove all ${s.count} transactions from "${s.account}"?\nClassifications for these transactions will also be deleted.`)) return;
+                    const r = await deleteAcctTool.invoke({ session_id: sessionId, account: s.account, npub });
+                    if (r) loadStats();
+                  }}
+                  disabled={deleteAcctTool.loading}
+                  title={`Remove all transactions from ${s.account}`}
+                  className="text-stone-300 hover:text-red-500 transition-colors"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Drop zone */}
       <div

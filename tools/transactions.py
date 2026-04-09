@@ -28,6 +28,7 @@ async def get_transactions(
     subcategory: str = "",
     month: str = "",
     search: str = "",
+    account: str = "",
     unclassified_only: bool = False,
     limit: int = 200,
     offset: int = 0,
@@ -45,6 +46,11 @@ async def get_transactions(
     elif category:
         where.append(f"c.category = ${idx}")
         params.append(category)
+        idx += 1
+
+    if account:
+        where.append(f"r.account = ${idx}")
+        params.append(account)
         idx += 1
 
     if subcategory:
@@ -180,6 +186,29 @@ async def delete_classification(
     )
     deleted = str(result).split()[-1] != "0" if result else False
     return {"deleted": deleted, "transaction_id": transaction_id}
+
+
+async def delete_account_transactions(session_id: str, account: str) -> dict:
+    """Delete all transactions (and their classifications) for a specific account."""
+    cls_result = await execute(
+        """DELETE FROM classifications WHERE session_id=$1
+           AND raw_transaction_id IN (
+             SELECT id FROM raw_transactions WHERE session_id=$1 AND account=$2
+           )""",
+        session_id, account,
+    )
+    tx_result = await execute(
+        "DELETE FROM raw_transactions WHERE session_id=$1 AND account=$2",
+        session_id, account,
+    )
+    cls_count = int(str(cls_result).split()[-1]) if cls_result else 0
+    tx_count = int(str(tx_result).split()[-1]) if tx_result else 0
+    return {
+        "session_id": session_id,
+        "account": account,
+        "transactions_deleted": tx_count,
+        "classifications_deleted": cls_count,
+    }
 
 
 async def reset_classifications(session_id: str) -> dict:

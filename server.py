@@ -83,6 +83,7 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="save_classifications", category="free", intent="Bulk write classifications from FE"),
     ToolIdentity(capability="delete_classification", category="free", intent="Remove a classification (revert to unclassified)"),
     ToolIdentity(capability="reset_classifications", category="free", intent="Delete all classifications, keeping transactions"),
+    ToolIdentity(capability="delete_account_transactions", category="free", intent="Delete all transactions for a specific account"),
     ToolIdentity(capability="clear_transactions", category="free", intent="Delete all transactions and classifications for a session"),
     ToolIdentity(capability="get_amount_neighbors", category="free", intent="Fetch transactions with same amount near a date"),
     ToolIdentity(capability="get_accounts", category="free", intent="List accounts in session with their types"),
@@ -334,6 +335,7 @@ async def get_transactions(
     subcategory: str = "",
     month: str = "",
     search: str = "",
+    account: str = "",
     unclassified_only: bool = False,
     limit: int = 200,
     offset: int = 0,
@@ -348,7 +350,7 @@ async def get_transactions(
     from tools.transactions import get_transactions as _get_transactions
     return await _get_transactions(
         session_id=session_id, category=category, subcategory=subcategory,
-        month=month, search=search,
+        month=month, search=search, account=account,
         unclassified_only=unclassified_only, limit=limit, offset=offset,
     )
 
@@ -399,6 +401,18 @@ async def clear_transactions(
     """Delete all transactions and classifications for a session, so CSVs can be re-imported."""
     from tools.transactions import clear_transactions as _clear
     return await _clear(session_id=session_id)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("delete_account_transactions"))
+async def delete_account_transactions(
+    session_id: str,
+    account: str,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Delete all transactions and classifications for a specific imported account."""
+    from tools.transactions import delete_account_transactions as _del
+    return await _del(session_id=session_id, account=account)
 
 
 @tool
