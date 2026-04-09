@@ -72,7 +72,7 @@ async function getClient(): Promise<Client> {
   return client!;
 }
 
-const QUIET_TOOLS = new Set(["session_heartbeat"]);
+const QUIET_TOOLS = new Set(["session_heartbeat", "get_amount_neighbors"]);
 
 export async function mcpCall(toolName: string, args: Record<string, unknown>): Promise<unknown> {
   const quiet = QUIET_TOOLS.has(toolName);

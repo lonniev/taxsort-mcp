@@ -306,23 +306,29 @@ async function _runEngine(
 
       const txns = batch.transactions;
 
-      // Fetch neighbors for dedup context
+      // Fetch neighbors for dedup context — parallel requests
       const seenAmounts = new Set<string>();
-      const neighborLines: string[] = [];
+      type NbResult = { neighbors: Array<{ id: string; date: string; description: string; amount: number; account: string; category: string | null; subcategory: string | null }> };
+      const nbRequests: Array<Promise<NbResult | null>> = [];
       for (const t of txns) {
         const amtKey = `${t.amount.toFixed(2)}|${t.date}`;
         if (seenAmounts.has(amtKey)) continue;
         seenAmounts.add(amtKey);
-        const nbResult = await mcpCall("get_amount_neighbors", {
-          session_id: sessionId,
-          amount: t.amount,
-          date: t.date,
-          days: 14,
-          exclude_id: t.id,
-          npub,
-        }) as { neighbors: Array<{ id: string; date: string; description: string; amount: number; account: string; category: string | null; subcategory: string | null }> } | null;
-        const nbs = nbResult?.neighbors ?? [];
-        for (const nb of nbs) {
+        nbRequests.push(
+          mcpCall("get_amount_neighbors", {
+            session_id: sessionId,
+            amount: t.amount,
+            date: t.date,
+            days: 14,
+            exclude_id: t.id,
+            npub,
+          }) as Promise<NbResult | null>
+        );
+      }
+      const nbResults = await Promise.all(nbRequests);
+      const neighborLines: string[] = [];
+      for (const nbResult of nbResults) {
+        for (const nb of nbResult?.neighbors ?? []) {
           const status = nb.category ? `[already: ${nb.category}/${nb.subcategory}]` : "[unclassified]";
           neighborLines.push(
             `  id=${nb.id} | $${nb.amount.toFixed(2)} | ${nb.date} | ${nb.description} | ${nb.account} ${status}`
