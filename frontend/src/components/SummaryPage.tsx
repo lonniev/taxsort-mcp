@@ -206,7 +206,7 @@ export default function SummaryPage() {
 
       {/* Filter buttons */}
       <div className="flex flex-wrap gap-1.5 mb-4">
-        {["all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate"].map(f => (
+        {["all", "Schedule A", "Schedule C", "Internal Transfer", "Personal", "Duplicate"].map(f => (
           <button
             key={f}
             onClick={() => setScope(f === "all" ? "all" : f)}

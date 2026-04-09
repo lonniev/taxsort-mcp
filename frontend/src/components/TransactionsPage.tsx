@@ -391,7 +391,7 @@ export default function TransactionsPage() {
     },
   ], []);
 
-  const filters = ["all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate", "Unclassified"];
+  const filters = ["all", "Schedule A", "Schedule C", "Internal Transfer", "Personal", "Duplicate", "Unclassified"];
 
   return (
     <div className="w-[85%] mx-auto relative">
