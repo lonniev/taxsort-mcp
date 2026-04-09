@@ -125,6 +125,7 @@ export default function Nav() {
                   <div className="text-xs font-mono text-stone-600 truncate" title={npub}>{npub}</div>
                 </div>
               )}
+              {dropLink("/profile", "\u{1F4CA}", "Usage & Costs", "AI usage stats and estimated costs")}
               {dropLink("/wallet", "\u{1F4B0}", "Wallet", "Credit balance and Lightning purchases")}
               {dropLink("/settings", "\u2699\uFE0F", "Settings", "Session timeout, sharing, and about")}
               {dropLink("/privacy", "\u{1F512}", "Privacy", "How your data is protected")}

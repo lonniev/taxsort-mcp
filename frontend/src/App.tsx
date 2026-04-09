@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import SessionsPage from "./components/SessionsPage";
 import ImportPage from "./components/ImportPage";
 import AccountsPage from "./components/AccountsPage";
+import ProfilePage from "./components/ProfilePage";
 import TransactionsPage from "./components/TransactionsPage";
 import ClassifyPage from "./components/ClassifyPage";
 import SummaryPage from "./components/SummaryPage";
@@ -336,6 +337,7 @@ export default function App() {
                   element={sessionId ? <SummaryPage /> : <Navigate to="/" />}
                 />
                 <Route path="/subscriptions" element={<SubscriptionsPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/wallet" element={<WalletPage />} />
                 <Route path="/advisor" element={<AdvisorPage />} />
                 <Route path="/tax-research" element={<TaxResearcherPage />} />
