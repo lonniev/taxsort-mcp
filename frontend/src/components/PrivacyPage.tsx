@@ -161,7 +161,7 @@ You can audit exactly what data is collected, how it's stored, and what gets sen
 
 export default function PrivacyPage() {
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-[85%] mx-auto">
       <div className="bg-white border border-stone-200 rounded-xl p-8 prose prose-sm prose-stone max-w-none">
         <Markdown remarkPlugins={[remarkGfm]}>{PRIVACY_CONTENT}</Markdown>
       </div>

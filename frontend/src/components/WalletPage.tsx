@@ -93,7 +93,7 @@ export default function WalletPage() {
   const bal = balance?.balance_api_sats ?? 0;
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="w-[85%] mx-auto">
       <h1 className="text-xl font-semibold mb-6 text-stone-800">Wallet</h1>
 
       {/* Balance card */}

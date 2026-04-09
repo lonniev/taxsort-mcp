@@ -97,7 +97,7 @@ export default function AdvisorPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="w-[85%] mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <span className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-sm font-bold">FA</span>
         <div>

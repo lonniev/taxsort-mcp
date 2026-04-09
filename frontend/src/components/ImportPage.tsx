@@ -182,7 +182,7 @@ export default function ImportPage() {
   const hasResults = results.length > 0;
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="w-[85%] mx-auto">
       <h1 className="text-xl font-semibold mb-6 text-stone-800">Import transactions</h1>
 
       {/* Clear session data */}

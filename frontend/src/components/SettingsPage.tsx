@@ -23,7 +23,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-xl mx-auto">
+    <div className="w-[85%] mx-auto">
       <h1 className="text-xl font-semibold mb-6 text-stone-800">Settings</h1>
 
       {/* Session timeout */}

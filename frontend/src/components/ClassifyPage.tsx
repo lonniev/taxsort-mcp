@@ -179,7 +179,7 @@ export default function ClassifyPage() {
   const subs = allCatSubs[formCategory] ?? [];
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="w-[85%] mx-auto">
       <h1 className="text-xl font-semibold mb-6 text-stone-800">Classification</h1>
 
       {/* Status card */}

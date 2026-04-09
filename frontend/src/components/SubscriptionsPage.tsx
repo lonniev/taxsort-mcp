@@ -46,7 +46,7 @@ export default function SubscriptionsPage() {
   const loading = phase === "fetching" || phase === "analyzing" || phase === "enriching";
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-[85%] mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-stone-800">Subscriptions</h1>
