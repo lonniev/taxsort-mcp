@@ -29,6 +29,8 @@ async def get_transactions(
     month: str = "",
     search: str = "",
     account: str = "",
+    date_from: str = "",
+    date_to: str = "",
     unclassified_only: bool = False,
     limit: int = 200,
     offset: int = 0,
@@ -61,6 +63,16 @@ async def get_transactions(
     if month:
         where.append(f"TO_CHAR(r.date, 'YYYY-MM') = ${idx}")
         params.append(month)
+        idx += 1
+
+    if date_from:
+        where.append(f"r.date >= ${idx}::date")
+        params.append(date_from)
+        idx += 1
+
+    if date_to:
+        where.append(f"r.date <= ${idx}::date")
+        params.append(date_to)
         idx += 1
 
     if search:

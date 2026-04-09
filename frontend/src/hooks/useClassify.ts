@@ -37,7 +37,6 @@ const TRANSFER = [
   "Investment Transfer", "Loan Payment",
 ];
 
-const BATCH_SIZE = 30;
 
 // ── System prompt ────────────────────────────────────────────────────────
 
@@ -273,161 +272,167 @@ async function _runEngine(
     const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
     const systemPrompt = buildSystemPrompt(rulesCtx) + aliasCtx + acctTypeCtx + customCatCtx;
 
-    // 4. Total count for reclassify
-    if (reclassifyAll) {
-      const countResult = await mcpCall("get_transactions", {
-        session_id: sessionId, npub, limit: 1, offset: 0,
-      }) as { total: number } | null;
-      _setState(s => ({ ...s, total: countResult?.total ?? 0 }));
+    // 4. Get total count
+    const countResult = await mcpCall("get_transactions", {
+      session_id: sessionId, npub, limit: 1, offset: 0,
+      ...(reclassifyAll ? {} : { unclassified_only: true }),
+    }) as { total: number } | null;
+    const totalToProcess = countResult?.total ?? 0;
+    _setState(s => ({ ...s, total: totalToProcess }));
+
+    if (totalToProcess === 0) {
+      _setState(s => ({ ...s, phase: "complete" }));
+      _running = false;
+      return;
     }
 
-    // 5. Process batches
+    // 5. Find the date range by fetching first transaction (sorted ASC)
+    const firstBatch = await mcpCall("get_transactions", {
+      session_id: sessionId, npub, limit: 1, offset: 0,
+      ...(reclassifyAll ? {} : { unclassified_only: true }),
+    }) as { transactions: RawTransaction[] } | null;
+
+    if (!firstBatch?.transactions?.length) {
+      _setState(s => ({ ...s, phase: "complete" }));
+      _running = false;
+      return;
+    }
+
+    // 6. Sliding window: 7 days at a time, 3-day overlap
+    const WINDOW_DAYS = 7;
+    const OVERLAP_DAYS = 3;
+    const STEP_DAYS = WINDOW_DAYS - OVERLAP_DAYS; // 4 days forward each step
     let totalClassified = 0;
-    let offset = 0;
+
+    // Start from the first transaction's date
+    let windowStart = new Date(firstBatch.transactions[0].date + "T00:00:00");
 
     while (!_abort) {
-      const batch = await mcpCall("get_transactions", {
-        session_id: sessionId,
-        npub,
-        limit: BATCH_SIZE,
-        offset: reclassifyAll ? offset : 0,
-        unclassified_only: !reclassifyAll,
+      const windowEnd = new Date(windowStart);
+      windowEnd.setDate(windowEnd.getDate() + WINDOW_DAYS - 1);
+
+      const dateFrom = windowStart.toISOString().slice(0, 10);
+      const dateTo = windowEnd.toISOString().slice(0, 10);
+
+      // Fetch ALL transactions in this window (classified + unclassified)
+      const windowBatch = await mcpCall("get_transactions", {
+        session_id: sessionId, npub,
+        date_from: dateFrom, date_to: dateTo,
+        limit: 1000, offset: 0,
       }) as { total: number; transactions: RawTransaction[] } | null;
 
-      if (!batch?.transactions?.length) {
+      const allInWindow = windowBatch?.transactions ?? [];
+
+      // Split into unclassified (to classify) and classified (context)
+      const toClassify = reclassifyAll
+        ? allInWindow
+        : allInWindow.filter(t => !t.classified);
+      const alreadyClassified = reclassifyAll
+        ? []
+        : allInWindow.filter(t => t.classified);
+
+      if (toClassify.length > 0) {
+        // Build batch text — only unclassified get indices
+        const batchText = toClassify.map((t, i) => {
+          let line = `${i}: ${t.date} | ${t.raw_description || t.description} | $${t.amount.toFixed(2)} | ${t.account}`;
+          if (t.hint1) {
+            line += ` | Bank: ${t.hint1}`;
+            if (t.hint2) line += ` > ${t.hint2}`;
+          }
+          return line;
+        }).join("\n");
+
+        // Context: already-classified transactions in this window
+        let contextBlock = "";
+        if (alreadyClassified.length > 0) {
+          const ctxLines = alreadyClassified.map(t => {
+            const cat = `[${t.classified ? "classified" : "unclassified"}]`;
+            return `  id=${t.id} | $${t.amount.toFixed(2)} | ${t.date} | ${t.raw_description || t.description} | ${t.account} ${cat}`;
+          });
+          contextBlock = `\n\nOTHER TRANSACTIONS IN THIS DATE WINDOW (for duplicate/transfer detection):\n${ctxLines.join("\n")}`;
+        }
+
+        try {
+          const message = await client.messages.create({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 4096,
+            system: systemPrompt,
+            messages: [{ role: "user", content: `Classify:\n${batchText}${contextBlock}` }],
+          });
+
+          const text = (message.content[0]?.type === "text" ? message.content[0].text : "[]")
+            .replace(/```json/g, "").replace(/```/g, "").trim();
+
+          let results: Array<{
+            idx: number; category: string; subcategory: string;
+            confidence: string; reason: string; merchant: string;
+          }>;
+          try {
+            results = JSON.parse(text);
+          } catch {
+            _setState(s => ({
+              ...s,
+              errors: [...s.errors, `Failed to parse Claude response for window ${dateFrom}..${dateTo}`],
+            }));
+            // Advance window anyway
+            windowStart.setDate(windowStart.getDate() + STEP_DAYS);
+            continue;
+          }
+
+          const classifications: ClassificationResult[] = [];
+          for (const r of results) {
+            const idx = r.idx;
+            if (idx >= 0 && idx < toClassify.length) {
+              classifications.push({
+                id: toClassify[idx].id,
+                category: r.category,
+                subcategory: r.subcategory,
+                confidence: r.confidence,
+                reason: r.reason,
+                merchant: r.merchant,
+                classified_by: "ai",
+              });
+            }
+          }
+
+          if (classifications.length > 0) {
+            await mcpCall("save_classifications", {
+              session_id: sessionId,
+              classifications: JSON.stringify(classifications),
+              npub,
+            });
+
+            totalClassified += classifications.length;
+            _setState(s => ({
+              ...s,
+              classified: totalClassified,
+              recentUpdates: [...classifications.slice(0, 10), ...s.recentUpdates].slice(0, 20),
+            }));
+          }
+
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          _setState(s => ({
+            ...s,
+            errors: [...s.errors, `Window ${dateFrom}..${dateTo} error: ${msg}`],
+          }));
+        }
+      }
+
+      // Advance window by STEP_DAYS
+      windowStart.setDate(windowStart.getDate() + STEP_DAYS);
+
+      // Check if we've passed the end — fetch one more to see if anything remains
+      const remaining = await mcpCall("get_transactions", {
+        session_id: sessionId, npub, limit: 1, offset: 0,
+        date_from: windowStart.toISOString().slice(0, 10),
+        ...(reclassifyAll ? {} : { unclassified_only: true }),
+      }) as { total: number } | null;
+
+      if (!remaining?.total) {
         _setState(s => ({ ...s, phase: "complete" }));
         _running = false;
         return;
-      }
-
-      if (totalClassified === 0 && !reclassifyAll) {
-        _setState(s => ({ ...s, total: batch.total }));
-      }
-
-      const txns = batch.transactions;
-
-      // Fetch neighbors for dedup context — parallel requests
-      const seenAmounts = new Set<string>();
-      type NbResult = { neighbors: Array<{ id: string; date: string; description: string; amount: number; account: string; category: string | null; subcategory: string | null }> };
-      const nbRequests: Array<Promise<NbResult | null>> = [];
-      for (const t of txns) {
-        const amtKey = `${t.amount.toFixed(2)}|${t.date}`;
-        if (seenAmounts.has(amtKey)) continue;
-        seenAmounts.add(amtKey);
-        nbRequests.push(
-          mcpCall("get_amount_neighbors", {
-            session_id: sessionId,
-            amount: t.amount,
-            date: t.date,
-            days: 14,
-            exclude_id: t.id,
-            npub,
-          }) as Promise<NbResult | null>
-        );
-      }
-      const nbResults = await Promise.all(nbRequests);
-      const neighborLines: string[] = [];
-      for (const nbResult of nbResults) {
-        for (const nb of nbResult?.neighbors ?? []) {
-          const status = nb.category ? `[already: ${nb.category}/${nb.subcategory}]` : "[unclassified]";
-          neighborLines.push(
-            `  id=${nb.id} | $${nb.amount.toFixed(2)} | ${nb.date} | ${nb.description} | ${nb.account} ${status}`
-          );
-        }
-      }
-
-      // Build batch text
-      const batchText = txns.map((t, i) => {
-        let line = `${i}: ${t.date} | ${t.raw_description || t.description} | $${t.amount.toFixed(2)} | ${t.account}`;
-        if (t.hint1) {
-          line += ` | Bank: ${t.hint1}`;
-          if (t.hint2) line += ` > ${t.hint2}`;
-        }
-        return line;
-      }).join("\n");
-
-      const neighborCtx = neighborLines.length > 0
-        ? `\n\nOTHER TRANSACTIONS WITH SAME AMOUNTS (for duplicate detection):\n${neighborLines.join("\n")}`
-        : "";
-
-      try {
-        const message = await client.messages.create({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 4096,
-          system: systemPrompt,
-          messages: [{ role: "user", content: `Classify:\n${batchText}${neighborCtx}` }],
-        });
-
-        const text = (message.content[0]?.type === "text" ? message.content[0].text : "[]")
-          .replace(/```json/g, "").replace(/```/g, "").trim();
-
-        let results: Array<{
-          idx: number; category: string; subcategory: string;
-          confidence: string; reason: string; merchant: string;
-        }>;
-        try {
-          results = JSON.parse(text);
-        } catch {
-          _setState(s => ({
-            ...s,
-            errors: [...s.errors, `Failed to parse Claude response for batch at offset ${offset}`],
-          }));
-          offset += BATCH_SIZE;
-          continue;
-        }
-
-        const classifications: ClassificationResult[] = [];
-        for (const r of results) {
-          const idx = r.idx;
-          if (idx >= 0 && idx < txns.length) {
-            classifications.push({
-              id: txns[idx].id,
-              category: r.category,
-              subcategory: r.subcategory,
-              confidence: r.confidence,
-              reason: r.reason,
-              merchant: r.merchant,
-              classified_by: "ai",
-            });
-          }
-        }
-
-        if (classifications.length > 0) {
-          await mcpCall("save_classifications", {
-            session_id: sessionId,
-            classifications: JSON.stringify(classifications),
-            npub,
-          });
-
-          totalClassified += classifications.length;
-          _setState(s => ({
-            ...s,
-            classified: totalClassified,
-            recentUpdates: [...classifications.slice(0, 10), ...s.recentUpdates].slice(0, 20),
-          }));
-        }
-
-        offset += BATCH_SIZE;
-
-        if (!reclassifyAll && txns.length < BATCH_SIZE) {
-          _setState(s => ({ ...s, phase: "complete" }));
-          _running = false;
-          return;
-        }
-
-        if (reclassifyAll && offset >= (batch.total ?? 0)) {
-          _setState(s => ({ ...s, phase: "complete" }));
-          _running = false;
-          return;
-        }
-
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        _setState(s => ({
-          ...s,
-          errors: [...s.errors, `Batch error: ${msg}`],
-        }));
-        offset += BATCH_SIZE;
       }
     }
 

@@ -336,6 +336,8 @@ async def get_transactions(
     month: str = "",
     search: str = "",
     account: str = "",
+    date_from: str = "",
+    date_to: str = "",
     unclassified_only: bool = False,
     limit: int = 200,
     offset: int = 0,
@@ -345,12 +347,13 @@ async def get_transactions(
 
     Returns raw transactions LEFT JOINed with their classifications.
     Use unclassified_only=true to fetch pages of transactions needing
-    classification by the FE.
+    classification by the FE. Use date_from/date_to for date range queries.
     """
     from tools.transactions import get_transactions as _get_transactions
     return await _get_transactions(
         session_id=session_id, category=category, subcategory=subcategory,
         month=month, search=search, account=account,
+        date_from=date_from, date_to=date_to,
         unclassified_only=unclassified_only, limit=limit, offset=offset,
     )
 
