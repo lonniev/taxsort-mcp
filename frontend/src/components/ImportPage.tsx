@@ -47,7 +47,8 @@ interface FileEntry {
 
 const FMT_LABELS: Record<string, string> = {
   sofi: "SoFi", schwab: "Schwab", usbank: "US Bank",
-  paypal: "PayPal", chase: "Chase", coinbase: "Coinbase", generic: "CSV",
+  paypal: "PayPal", chase: "Chase", coinbase: "Coinbase",
+  checkbook: "Checkbook", generic: "CSV",
 };
 
 function guessFormat(name: string): string {
@@ -58,6 +59,7 @@ function guessFormat(name: string): string {
   if (n.includes("paypal")) return "paypal";
   if (n.includes("chase")) return "chase";
   if (n.includes("coinbase")) return "coinbase";
+  if (n.includes("checkbook") || n.includes("check register")) return "checkbook";
   return "generic";
 }
 
@@ -261,7 +263,7 @@ export default function ImportPage() {
         <div className="text-2xl mb-2 text-stone-300">&uarr;</div>
         <p className="text-sm text-stone-500">Drop CSV files or click to browse</p>
         <p className="text-xs text-stone-400 mt-1">
-          SoFi Relay &middot; US Bank &middot; Schwab &middot; PayPal &middot; Chase &middot; Coinbase
+          SoFi Relay &middot; US Bank &middot; Schwab &middot; PayPal &middot; Chase &middot; Coinbase &middot; Checkbook
         </p>
         <input
           ref={inputRef}

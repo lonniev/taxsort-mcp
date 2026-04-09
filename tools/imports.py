@@ -21,6 +21,8 @@ def _detect_fmt(headers: list[str]) -> str:
         return "schwab"
     if "transaction" in h and "memo" in h:
         return "usbank"
+    if "check #" in h and "name" in h:
+        return "checkbook"
     return "generic"
 
 
@@ -116,6 +118,24 @@ def parse_csv(content: str, filename: str, account_name: str = "") -> tuple[list
                 date = cols[0][:10]
                 desc = " ".join(filter(None, [cols[2], cols[3] if len(cols) > 3 else ""]))
                 amount = _pa(cols[4])
+            elif fmt == "checkbook":
+                # Date is "Jan 27" — needs year from filename or default
+                raw_date = cols[0].strip()
+                check_num = cols[1].strip() if len(cols) > 1 else ""
+                amount = -abs(_pa(cols[2] if len(cols) > 2 else ""))
+                desc = (cols[3] if len(cols) > 3 else "").strip()
+                hint1 = f"Check #{check_num}" if check_num else None
+                hint2 = (cols[4] if len(cols) > 4 else "").strip() or None
+                # Parse "Jan 27" with year from filename (e.g. "Checkbook 2025.csv")
+                year_match = re.search(r'(20\d{2})', filename)
+                year = year_match.group(1) if year_match else "2025"
+                try:
+                    from datetime import datetime as _dt
+                    parsed = _dt.strptime(f"{raw_date} {year}", "%b %d %Y")
+                    date = parsed.strftime("%Y-%m-%d")
+                except ValueError:
+                    date = f"{year}-01-01"
+                src_id = f"chk-{check_num}" if check_num else None
             else:
                 hi = {h.lower().strip(): idx for idx, h in enumerate(headers)}
                 date = cols[hi.get("date", hi.get("transaction date", 0))][:10]
@@ -269,11 +289,16 @@ async def import_csv(
 
     stats = await _merge_raw_transactions(session_id, rows)
 
+    # Enrich bank transactions with checkbook details (check # matching)
+    enriched = 0
+    if meta.get("format") == "checkbook":
+        enriched = await _enrich_from_checkbook(session_id, rows)
+
     total = await fetchrow(
         "SELECT COUNT(*) as n FROM raw_transactions WHERE session_id=$1", session_id
     )
 
-    return {
+    result: dict = {
         "filename": filename,
         "format": meta.get("format", ""),
         "parsed": len(rows),
@@ -283,6 +308,44 @@ async def import_csv(
         "ambiguous": sum(1 for r in rows if r["ambiguous"]),
         "total_in_session": int(total["n"]) if total else 0,
     }
+    if enriched:
+        result["enriched"] = enriched
+    return result
+
+
+async def _enrich_from_checkbook(session_id: str, checkbook_rows: list[dict]) -> int:
+    """Match checkbook entries to bank transactions by check number and update descriptions.
+
+    Bank CSVs often show checks as "CHECK #1856" with no payee info.
+    The checkbook register has the payee name and category. This updates
+    the bank transaction's hint1/hint2 fields so the classifier has
+    richer context.
+    """
+    enriched = 0
+    for row in checkbook_rows:
+        src_id = row.get("src_id", "")
+        if not src_id or not src_id.startswith("chk-"):
+            continue
+        check_num = src_id.replace("chk-", "")
+        name = row.get("description", "")
+        category_hint = row.get("hint2", "")
+
+        # Find bank transactions matching this check number
+        bank_rows = await fetch(
+            """SELECT id FROM raw_transactions
+               WHERE session_id=$1 AND description ~* $2 AND id != $3""",
+            session_id, f"(check|chk).*{check_num}", row.get("id", ""),
+        )
+
+        for br in bank_rows:
+            await executemany(
+                """UPDATE raw_transactions SET hint1=$1, hint2=$2
+                   WHERE id=$3 AND session_id=$4""",
+                [(f"Payee: {name}", category_hint, br["id"], session_id)],
+            )
+            enriched += 1
+
+    return enriched
 
 
 async def get_import_stats(session_id: str) -> dict:
