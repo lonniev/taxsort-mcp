@@ -416,6 +416,12 @@ async function _runEngine(
             ...s,
             errors: [...s.errors, `Window ${dateFrom}..${dateTo} error: ${msg}`],
           }));
+          // Stop on billing/auth errors — don't burn through all windows
+          if (msg.includes("credit balance") || msg.includes("401") || msg.includes("403") || msg.includes("billing")) {
+            _setState(s => ({ ...s, phase: "error" }));
+            _running = false;
+            return;
+          }
         }
       }
 
