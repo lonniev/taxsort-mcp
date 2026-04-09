@@ -121,27 +121,12 @@ function NpubGate({ children, npub, setNpub }: {
   const [verified, setVerified] = useState(
     sessionStorage.getItem("taxsort_verified") === "true",
   );
-  const [verifyPhase, setVerifyPhase] = useState<"enter" | "waiting" | "checking">(
-    // If we have an npub but aren't verified, auto-check on mount
-    npub && !sessionStorage.getItem("taxsort_verified") ? "checking" : "enter",
-  );
+  const [verifyPhase, setVerifyPhase] = useState<"enter" | "waiting" | "checking">("enter");
 
   const verifyTool = useToolCall<VerifyResult>("verify_npub");
   const checkTool = useToolCall<VerifyResult>("check_verification");
 
-  // Auto-check verification on mount if we have an npub but no session token
-  useEffect(() => {
-    if (npub && !verified) {
-      checkTool.invoke({ npub }).then((r) => {
-        if (r?.verified) {
-          sessionStorage.setItem("taxsort_verified", "true");
-          setVerified(true);
-        } else {
-          setVerifyPhase("enter");
-        }
-      });
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // No auto-check — every new browser session requires explicit Secure Courier login
 
   // If npub is set and verified, show the app
   if (npub && verified) return <>{children}</>;
@@ -151,14 +136,14 @@ function NpubGate({ children, npub, setNpub }: {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center">
         <div className="bg-white border border-stone-200 rounded-xl p-8 max-w-md w-full shadow-sm">
-          <h1 className="text-lg font-semibold text-stone-800 mb-2">Verify Your Identity</h1>
+          <h1 className="text-lg font-semibold text-stone-800 mb-2">{"\u{1F512}"} Log In</h1>
           <p className="text-xs text-stone-400 font-mono mb-4 break-all">{npub}</p>
 
           {verifyPhase === "enter" && (
             <>
               <p className="text-sm text-stone-500 mb-5">
-                To protect your tax data, we need to verify you own this npub.
-                We&apos;ll send a Nostr DM &mdash; reply with any passphrase.
+                We&apos;ll send a Nostr DM to verify you own this npub.
+                Reply with any passphrase to log in.
               </p>
               <button
                 onClick={async () => {
@@ -168,7 +153,7 @@ function NpubGate({ children, npub, setNpub }: {
                 disabled={verifyTool.loading}
                 className="w-full bg-amber-600 text-white text-sm py-2.5 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors mb-3"
               >
-                {verifyTool.loading ? "Sending\u2026" : "Send Verification DM"}
+                {verifyTool.loading ? "Sending\u2026" : "Send Login DM"}
               </button>
               <button
                 onClick={() => {
@@ -185,7 +170,7 @@ function NpubGate({ children, npub, setNpub }: {
                 }}
                 className="w-full text-sm text-stone-400 hover:text-stone-700 py-1"
               >
-                Already verified? Check status
+                Already logged in? Check status
               </button>
             </>
           )}
@@ -215,7 +200,7 @@ function NpubGate({ children, npub, setNpub }: {
                 disabled={checkTool.loading}
                 className="w-full bg-stone-900 text-white text-sm py-2.5 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors mb-3"
               >
-                {checkTool.loading ? "Checking\u2026" : "I\u2019ve Replied \u2014 Check Verification"}
+                {checkTool.loading ? "Checking\u2026" : "I\u2019ve Replied \u2014 Finish Login"}
               </button>
               {checkTool.error && (
                 <p className="text-xs text-red-500 mt-2">{checkTool.error}</p>
@@ -252,10 +237,10 @@ function NpubGate({ children, npub, setNpub }: {
   return (
     <div className="min-h-screen bg-stone-50 flex items-center justify-center">
       <div className="bg-white border border-stone-200 rounded-xl p-8 max-w-md w-full shadow-sm">
-        <h1 className="text-lg font-semibold text-stone-800 mb-2">TaxSort</h1>
+        <h1 className="text-lg font-semibold text-stone-800 mb-2">{"\u{1F4CA}"} TaxSort</h1>
         <p className="text-sm text-stone-500 mb-5">
-          Enter your Nostr public key (npub) to get started.
-          You&apos;ll verify ownership via a signed Nostr DM.
+          Log in with your Nostr identity. We&apos;ll send a DM
+          to verify you own this npub &mdash; no password needed.
         </p>
         <input
           className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm font-mono bg-stone-50 focus:outline-none focus:border-stone-400 mb-3"
@@ -279,7 +264,7 @@ function NpubGate({ children, npub, setNpub }: {
           disabled={!input.startsWith("npub1")}
           className="w-full bg-stone-900 text-white text-sm py-2.5 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
         >
-          Continue
+          Begin Login
         </button>
         <p className="text-xs text-stone-400 mt-3">
           Don&apos;t have one? Get a Nostr keypair from any Nostr client.
