@@ -51,6 +51,7 @@ interface ServiceStatus {
   version?: string;
   tollbooth_dpyc_version?: string;
   vault_configured?: boolean;
+  operator_npub_hash?: string;
 }
 
 function StatusBanner() {
@@ -94,6 +95,11 @@ function StatusBanner() {
           Connected to <strong>{status.service}</strong> v{status.version}
           {" "}&middot; tollbooth-dpyc v{status.tollbooth_dpyc_version}
           {" "}&middot; FE v{APP_VERSION}
+          {status.operator_npub_hash && (
+            <span className="ml-2 font-mono text-green-600" title="Operator npub fingerprint — verify this matches DMs from TaxSort">
+              {"\u{1F512}"} {status.operator_npub_hash}
+            </span>
+          )}
           {status.vault_configured === false && (
             <span className="text-amber-600 ml-2">(vault not yet configured)</span>
           )}
@@ -123,9 +129,18 @@ function NpubGate({ children, npub, setNpub }: {
     sessionStorage.getItem("taxsort_verified") === "true",
   );
   const [dmSent, setDmSent] = useState(false);
+  const [opHash, setOpHash] = useState("");
 
   const verifyTool = useToolCall<VerifyResult>("verify_npub");
   const checkTool = useToolCall<VerifyResult>("check_verification");
+  const statusTool = useToolCall<ServiceStatus>("service_status");
+
+  // Fetch operator hash on mount for DM verification hint
+  useEffect(() => {
+    statusTool.invoke({}).then(s => {
+      if (s?.operator_npub_hash) setOpHash(s.operator_npub_hash);
+    });
+  }, []);
 
   if (npub && verified) return <>{children}</>;
 
@@ -179,9 +194,14 @@ function NpubGate({ children, npub, setNpub }: {
               <p className="text-sm text-amber-800 mb-1">
                 DM sent! Check your Nostr client.
               </p>
-              <p className="text-xs text-amber-600">
+              <p className="text-xs text-amber-600 mb-2">
                 Reply with any passphrase, then tap Finish Login below.
               </p>
+              {opHash && (
+                <p className="text-xs text-amber-500">
+                  Verify the DM sender&apos;s fingerprint: <span className="font-mono font-medium text-amber-700">{"\u{1F512}"} {opHash}</span>
+                </p>
+              )}
             </div>
             <button
               onClick={handleFinishLogin}
