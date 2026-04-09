@@ -418,7 +418,15 @@ async function _runEngine(
           }));
           // Stop on billing/auth errors — don't burn through all windows
           if (msg.includes("credit balance") || msg.includes("401") || msg.includes("403") || msg.includes("billing")) {
-            _setState(s => ({ ...s, phase: "error" }));
+            _setState(s => ({
+              ...s,
+              phase: "error",
+              errors: [...s.errors,
+                "The AI classification service is out of credits. " +
+                "Please ask the TaxSort operator to renew their Anthropic API balance. " +
+                "Your toll credits pay for this service — the operator provisions the upstream AI capacity."
+              ],
+            }));
             _running = false;
             return;
           }
