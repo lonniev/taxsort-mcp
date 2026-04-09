@@ -26,6 +26,54 @@ def _detect_fmt(headers: list[str]) -> str:
     return "generic"
 
 
+def _guess_date(raw: str, fallback_year: str = "") -> str:
+    """Parse a date string flexibly, adding the current year if absent.
+
+    Handles: "2025-01-27", "01/27/2025", "Jan 27", "Jan 27, 2025",
+    "1/27", "January 27", etc.
+    """
+    from datetime import datetime as _dt, date as _date
+
+    s = raw.strip().rstrip(",").strip()
+    if not s:
+        return ""
+
+    year = fallback_year or str(_date.today().year)
+
+    # Already ISO format
+    if re.match(r'^\d{4}-\d{2}-\d{2}', s):
+        return s[:10]
+
+    # MM/DD/YYYY or M/D/YYYY
+    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})$', s)
+    if m:
+        return f"{m.group(3)}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
+
+    # MM/DD or M/D (no year)
+    m = re.match(r'^(\d{1,2})/(\d{1,2})$', s)
+    if m:
+        return f"{year}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
+
+    # Try common text formats with and without year
+    for fmt in ["%b %d %Y", "%b %d, %Y", "%B %d %Y", "%B %d, %Y",
+                "%b %d", "%B %d"]:
+        try:
+            parsed = _dt.strptime(s if " " in s and any(c.isdigit() and int(c) > 2 for c in s.split()[-1]) else f"{s} {year}", fmt)
+            return parsed.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+
+    # Last resort: append year and try month-day patterns
+    for fmt in ["%b %d %Y", "%B %d %Y"]:
+        try:
+            parsed = _dt.strptime(f"{s} {year}", fmt)
+            return parsed.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+
+    return ""
+
+
 def _pa(s: str) -> Decimal:
     if not s:
         return Decimal(0)
@@ -119,22 +167,15 @@ def parse_csv(content: str, filename: str, account_name: str = "") -> tuple[list
                 desc = " ".join(filter(None, [cols[2], cols[3] if len(cols) > 3 else ""]))
                 amount = _pa(cols[4])
             elif fmt == "checkbook":
-                # Date is "Jan 27" — needs year from filename or default
                 raw_date = cols[0].strip()
                 check_num = cols[1].strip() if len(cols) > 1 else ""
                 amount = -abs(_pa(cols[2] if len(cols) > 2 else ""))
                 desc = (cols[3] if len(cols) > 3 else "").strip()
                 hint1 = f"Check #{check_num}" if check_num else None
                 hint2 = (cols[4] if len(cols) > 4 else "").strip() or None
-                # Parse "Jan 27" with year from filename (e.g. "Checkbook 2025.csv")
                 year_match = re.search(r'(20\d{2})', filename)
-                year = year_match.group(1) if year_match else "2025"
-                try:
-                    from datetime import datetime as _dt
-                    parsed = _dt.strptime(f"{raw_date} {year}", "%b %d %Y")
-                    date = parsed.strftime("%Y-%m-%d")
-                except ValueError:
-                    date = f"{year}-01-01"
+                year = year_match.group(1) if year_match else ""
+                date = _guess_date(raw_date, fallback_year=year)
                 src_id = f"chk-{check_num}" if check_num else None
             else:
                 hi = {h.lower().strip(): idx for idx, h in enumerate(headers)}
@@ -314,27 +355,32 @@ async def import_csv(
 
 
 async def _enrich_from_checkbook(session_id: str, checkbook_rows: list[dict]) -> int:
-    """Match checkbook entries to bank transactions by check number and update descriptions.
+    """Match checkbook entries to bank transactions by date + amount.
 
-    Bank CSVs often show checks as "CHECK #1856" with no payee info.
-    The checkbook register has the payee name and category. This updates
-    the bank transaction's hint1/hint2 fields so the classifier has
-    richer context.
+    The checkbook register provides payee names and categories for
+    transactions that appear as generic entries in bank CSVs.
+    Matches on same date (±1 day) and same amount from different accounts.
+    Updates the bank transaction's hint1/hint2 with the payee and category.
     """
     enriched = 0
     for row in checkbook_rows:
-        src_id = row.get("src_id", "")
-        if not src_id or not src_id.startswith("chk-"):
-            continue
-        check_num = src_id.replace("chk-", "")
+        date = row.get("date", "")
+        amount = row.get("amount")
         name = row.get("description", "")
         category_hint = row.get("hint2", "")
+        row_id = row.get("id", "")
 
-        # Find bank transactions matching this check number
+        if not date or amount is None or not name:
+            continue
+
+        # Find bank transactions with same amount within ±1 day, different account
         bank_rows = await fetch(
-            """SELECT id FROM raw_transactions
-               WHERE session_id=$1 AND description ~* $2 AND id != $3""",
-            session_id, f"(check|chk).*{check_num}", row.get("id", ""),
+            """SELECT id, account FROM raw_transactions
+               WHERE session_id=$1
+                 AND amount = $2
+                 AND date BETWEEN ($3::date - INTERVAL '1 day') AND ($3::date + INTERVAL '1 day')
+                 AND id != $4""",
+            session_id, amount, date, row_id,
         )
 
         for br in bank_rows:
