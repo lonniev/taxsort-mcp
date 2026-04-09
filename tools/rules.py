@@ -30,16 +30,28 @@ def _amount_matches(tx_amount: float, operator: str, threshold: float) -> bool:
 
 async def get_rules(owner_npub: str, session_id: str = "") -> dict:
     """Get all rules for the current patron (global + session-specific)."""
-    rows = await fetch(
-        """
-        SELECT id, session_id, description_pattern, amount_operator,
-               amount_value, category, subcategory, new_description
-        FROM rules
-        WHERE owner_npub=$1 AND (session_id=$2 OR session_id IS NULL OR $2='')
-        ORDER BY id
-        """,
-        owner_npub, session_id or "",
-    )
+    if session_id:
+        rows = await fetch(
+            """
+            SELECT id, session_id, description_pattern, amount_operator,
+                   amount_value, category, subcategory, new_description
+            FROM rules
+            WHERE owner_npub=$1 AND (session_id=$2 OR session_id IS NULL)
+            ORDER BY id
+            """,
+            owner_npub, session_id,
+        )
+    else:
+        rows = await fetch(
+            """
+            SELECT id, session_id, description_pattern, amount_operator,
+                   amount_value, category, subcategory, new_description
+            FROM rules
+            WHERE owner_npub=$1
+            ORDER BY id
+            """,
+            owner_npub,
+        )
 
     return {
         "rules": [
