@@ -171,20 +171,31 @@ export interface ClassificationResult {
 
 export type ClassifyPhase = "idle" | "running" | "paused" | "complete" | "error";
 
+export interface ApiUsage {
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  model: string;
+}
+
 export interface ClassifyState {
   phase: ClassifyPhase;
   total: number;
   classified: number;
   errors: string[];
   recentUpdates: ClassificationResult[];
+  usage: ApiUsage;
 }
 
 // ── Module-level singleton engine ────────────────────────────────────────
 
 type McpCallFn = (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
 
+const _emptyUsage: ApiUsage = { calls: 0, input_tokens: 0, output_tokens: 0, model: "" };
+
 let _state: ClassifyState = {
   phase: "idle", total: 0, classified: 0, errors: [], recentUpdates: [],
+  usage: { ..._emptyUsage },
 };
 let _abort = false;
 let _listeners: Set<() => void> = new Set();
@@ -208,7 +219,7 @@ async function _runEngine(
   if (_running) return;
   _running = true;
   _abort = false;
-  _setState(s => ({ ...s, phase: "running", classified: 0, errors: [], recentUpdates: [] }));
+  _setState(s => ({ ...s, phase: "running", classified: 0, errors: [], recentUpdates: [], usage: { ..._emptyUsage } }));
 
   try {
     // 1. Get API key
@@ -271,6 +282,23 @@ async function _runEngine(
     // 3. Create Anthropic client
     const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
     const systemPrompt = buildSystemPrompt(rulesCtx) + aliasCtx + acctTypeCtx + customCatCtx;
+
+    // Helper: report usage to BE and mark complete
+    async function _reportAndComplete() {
+      const u = _state.usage;
+      if (u.calls > 0) {
+        await mcpCall("report_api_usage", {
+          session_id: sessionId,
+          npub,
+          calls: u.calls,
+          input_tokens: u.input_tokens,
+          output_tokens: u.output_tokens,
+          model: u.model,
+        }).catch(() => {}); // best-effort
+      }
+      _setState(s => ({ ...s, phase: "complete" }));
+      _running = false;
+    }
 
     // 4. Get total count
     const countResult = await mcpCall("get_transactions", {
@@ -360,6 +388,20 @@ async function _runEngine(
             messages: [{ role: "user", content: `Classify:\n${batchText}${contextBlock}` }],
           });
 
+          // Accumulate API usage
+          const mu = message.usage;
+          if (mu) {
+            _setState(s => ({
+              ...s,
+              usage: {
+                calls: s.usage.calls + 1,
+                input_tokens: s.usage.input_tokens + (mu.input_tokens ?? 0),
+                output_tokens: s.usage.output_tokens + (mu.output_tokens ?? 0),
+                model: message.model || s.usage.model,
+              },
+            }));
+          }
+
           const text = (message.content[0]?.type === "text" ? message.content[0].text : "[]")
             .replace(/```json/g, "").replace(/```/g, "").trim();
 
@@ -444,8 +486,7 @@ async function _runEngine(
       }) as { total: number } | null;
 
       if (!remaining?.total) {
-        _setState(s => ({ ...s, phase: "complete" }));
-        _running = false;
+        await _reportAndComplete();
         return;
       }
     }

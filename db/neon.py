@@ -19,6 +19,7 @@ _DOMAIN_TABLES = {
     "classifications": "tax_classifications",
     "rules": "tax_rules",
     "tax_categories": "tax_categories",
+    "tax_api_usage": "tax_api_usage",
     "tax_verifications": "tax_verifications",
     "tax_unlock_challenges": "tax_unlock_challenges",
     "tax_locks": "tax_locks",
@@ -122,6 +123,16 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "subcategory TEXT NOT NULL, "
         "created_at TIMESTAMPTZ DEFAULT NOW(), "
         "UNIQUE (owner_npub, category, subcategory))",
+
+        f"CREATE TABLE IF NOT EXISTS {t('tax_api_usage')} ("
+        "id SERIAL PRIMARY KEY, "
+        "session_id TEXT, "
+        "npub TEXT NOT NULL, "
+        "calls INTEGER NOT NULL DEFAULT 0, "
+        "input_tokens INTEGER NOT NULL DEFAULT 0, "
+        "output_tokens INTEGER NOT NULL DEFAULT 0, "
+        "model TEXT NOT NULL DEFAULT '', "
+        "created_at TIMESTAMPTZ DEFAULT NOW())",
 
         f"CREATE TABLE IF NOT EXISTS {t('tax_share_tokens')} ("
         "token TEXT PRIMARY KEY, "

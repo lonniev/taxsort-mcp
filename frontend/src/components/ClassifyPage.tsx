@@ -91,7 +91,7 @@ export default function ClassifyPage() {
   const [formAmountVal, setFormAmountVal] = useState("");
   const [formNewDesc, setFormNewDesc] = useState("");
 
-  const { phase, total, classified, errors, recentUpdates } = state;
+  const { phase, total, classified, errors, recentUpdates, usage } = state;
   const needsReview = Math.max(0, total - classified);
   const pct = total > 0 ? Math.round((classified / total) * 100) : 0;
 
@@ -221,6 +221,18 @@ export default function ClassifyPage() {
           </div>
         </div>
       </div>
+
+      {/* API Usage */}
+      {usage.calls > 0 && (
+        <div className="bg-stone-50 border border-stone-200 rounded-xl px-5 py-3 mb-5 flex items-center gap-6 text-xs">
+          <span className="text-stone-400">AI usage:</span>
+          <span className="font-mono text-stone-600">{usage.calls} calls</span>
+          <span className="font-mono text-stone-600">{usage.input_tokens.toLocaleString()} in</span>
+          <span className="font-mono text-stone-600">{usage.output_tokens.toLocaleString()} out</span>
+          <span className="font-mono text-stone-600">{(usage.input_tokens + usage.output_tokens).toLocaleString()} total tokens</span>
+          {usage.model && <span className="text-stone-400">{usage.model}</span>}
+        </div>
+      )}
 
       {/* Actions */}
       <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">

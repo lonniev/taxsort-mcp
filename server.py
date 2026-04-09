@@ -102,6 +102,8 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="create_feedback_issue", category="free", intent="Create a GitHub issue for feedback"),
     ToolIdentity(capability="list_feedback_issues", category="free", intent="List feedback issues for this patron"),
     ToolIdentity(capability="get_anthropic_key", category="free", intent="Get Anthropic API key for FE classification"),
+    ToolIdentity(capability="report_api_usage", category="free", intent="Report Anthropic API usage from FE classification"),
+    ToolIdentity(capability="get_api_usage_stats", category="free", intent="Get aggregated API usage statistics"),
     ToolIdentity(capability="session_heartbeat", category="free", intent="Presence heartbeat — who's active in this session"),
     ToolIdentity(capability="ask_advisor", category="free", intent="Ask the Financial Advisor about TaxSort"),
     ToolIdentity(capability="ask_tax_researcher", category="free", intent="Ask the Tax Code Researcher about IRS provisions"),
@@ -662,6 +664,38 @@ async def get_anthropic_key(
         return {"key": None, "message": "No Anthropic API key configured. Deliver one via Secure Courier."}
     except Exception as e:
         return {"key": None, "error": str(e)}
+
+
+# ── API Usage Reporting ──────────────────────────────────────────────────
+
+@tool
+@runtime.paid_tool(capability_uuid("report_api_usage"))
+async def report_api_usage(
+    session_id: str,
+    calls: int,
+    input_tokens: int,
+    output_tokens: int,
+    model: str = "",
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Report Anthropic API usage from FE classification for cost tracking."""
+    from tools.usage import report_usage
+    return await report_usage(
+        session_id=session_id, npub=npub,
+        calls=calls, input_tokens=input_tokens,
+        output_tokens=output_tokens, model=model,
+    )
+
+
+@tool
+@runtime.paid_tool(capability_uuid("get_api_usage_stats"))
+async def get_api_usage_stats(
+    session_id: str = "",
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Get aggregated API usage statistics for cost analysis."""
+    from tools.usage import get_usage_stats
+    return await get_usage_stats(session_id=session_id, npub=npub)
 
 
 # ── Feedback ─────────────────────────────────────────────────────────────
