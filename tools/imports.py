@@ -49,6 +49,13 @@ def _guess_date(raw: str, fallback_year: str = "") -> str:
     if m:
         return f"{m.group(3)}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
 
+    # MM/DD/YY or M/D/YY (two-digit year)
+    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{2})$', s)
+    if m:
+        yy = int(m.group(3))
+        full_year = 2000 + yy if yy < 80 else 1900 + yy
+        return f"{full_year}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
+
     # MM/DD or M/D (no year)
     m = re.match(r'^(\d{1,2})/(\d{1,2})$', s)
     if m:
