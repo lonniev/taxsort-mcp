@@ -91,18 +91,25 @@ def _pa(s: str) -> Decimal:
         return Decimal(0)
 
 
-def _parse_row(line: str) -> list[str]:
+def _parse_row(line: str, delimiter: str = ",") -> list[str]:
     result, cur, in_q = [], [], False
     for ch in line:
         if ch == '"':
             in_q = not in_q
-        elif ch == "," and not in_q:
+        elif ch == delimiter and not in_q:
             result.append("".join(cur).strip().strip('"'))
             cur = []
         else:
             cur.append(ch)
     result.append("".join(cur).strip().strip('"'))
     return result
+
+
+def _detect_delimiter(line: str) -> str:
+    """Detect whether a CSV line uses tabs or commas as delimiter."""
+    tabs = line.count("\t")
+    commas = line.count(",")
+    return "\t" if tabs > commas else ","
 
 
 # ── Stable ID ────────────────────────────────────────────────────────────────
@@ -123,14 +130,15 @@ def parse_csv(content: str, filename: str, account_name: str = "") -> tuple[list
     if len(lines) < 2:
         return []
 
-    headers = _parse_row(lines[0])
+    delim = _detect_delimiter(lines[0])
+    headers = _parse_row(lines[0], delim)
     fmt = _detect_fmt(headers)
     acct = account_name or re.sub(r"\.[^.]+$", "", filename)
     rows = []
 
     base_counts: dict[str, int] = {}
     for i, line in enumerate(lines[1:], 1):
-        cols = _parse_row(line)
+        cols = _parse_row(line, delim)
         if len(cols) < 2:
             continue
 
