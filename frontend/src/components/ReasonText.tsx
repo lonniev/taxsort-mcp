@@ -2,7 +2,7 @@
  * ReasonText — renders classification reason with clickable dup/twin links.
  *
  * Parses patterns like "dup:tx-abc123" or "(twin:tx-def456)" and renders
- * them as links that navigate to the Transactions page filtered to that ID.
+ * them as navigable links showing the full transaction ID.
  */
 
 import { useNavigate } from "react-router-dom";
@@ -45,10 +45,11 @@ export default function ReasonText({ reason }: { reason: string }) {
               e.stopPropagation();
               navigate(`/transactions?search=${encodeURIComponent(p.id!)}`);
             }}
-            className="text-blue-600 hover:text-blue-800 underline cursor-pointer"
-            title={`Go to ${p.label}: ${p.id}`}
+            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 underline cursor-pointer"
+            title={`Navigate to transaction ${p.id}`}
           >
-            {p.text}
+            <span className="text-blue-400">{p.label}:</span>
+            <span className="font-mono">{p.id}</span>
           </button>
         ) : (
           <span key={i}>{p.text}</span>
