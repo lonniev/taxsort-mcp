@@ -1,9 +1,11 @@
 /**
- * useClassify — FE-driven transaction classification using Anthropic API.
+ * useClassify — FE-driven transaction classification via rule generation.
  *
- * The classification engine is a module-level singleton so it survives
- * component unmount (e.g. navigating away from the Classify tab).
- * The React hook is a thin subscriber to the engine's state.
+ * The LLM is a RULE GENERATOR, not a transaction tagger. It produces
+ * regex-based classification rules; the frontend applies them in bulk
+ * via the existing apply_rules MCP tool.
+ *
+ * Target: ~12K tokens for 2000 statements (vs ~200K with per-txn tagging).
  */
 
 import { useState, useCallback, useEffect } from "react";
@@ -37,17 +39,9 @@ const TRANSFER = [
   "Investment Transfer", "Loan Payment",
 ];
 
+// ── System prompt for rule generation ───────────────────────────────────
 
-// ── System prompt ────────────────────────────────────────────────────────
-
-function buildSystemPrompt(rulesContext: string): string {
-  return `You are a US personal finance and tax classifier AND a merchant name resolver.
-
-TWO JOBS per transaction:
-1. Classify into category + subcategory
-2. Resolve cryptic merchant names into their real full business names
-
-${rulesContext}
+const RULE_GEN_SYSTEM = `You are a US personal finance RULE GENERATOR. Given a list of merchant patterns seen in bank transactions, produce classification RULES that match those merchants to the correct tax category.
 
 CATEGORIES AND SUBCATEGORIES:
 
@@ -63,60 +57,27 @@ Personal (non-deductible personal spending):
 Internal Transfer (money moving between own accounts):
   ${TRANSFER.join(", ")}
 
-Duplicate — this charge is a duplicate from an overlapping CSV export.
-  DETECTION: same merchant (semantically — "JetBrains Americas Inc" = "JetBrains Americas Inc."),
-  same amount, dates within ±2 days, from different account names.
-  The ACCOUNT ALIASES section tells you which names are the same underlying account.
-  Also check OTHER TRANSACTIONS for already-classified neighbors that match.
-  WHICH IS THE DUPLICATE: the entry from the less-descriptive or shorter account name.
-  If a neighbor is already classified (not as Duplicate), THIS entry is the duplicate.
-  REFERENCING: Use the neighbor's id= value from OTHER TRANSACTIONS.
-  For the Duplicate entry, set reason to "dup:ID" where ID is the surviving transaction's id.
-  For the surviving entry (classified normally), append " (twin:ID)" where ID is the duplicate's id.
-  If the duplicate is in the current batch, use its batch index to find its id.
-  Only ONE entry per real charge should survive — all others are Duplicate.
+Duplicate — same merchant, same amount, dates within ±2 days, different account name.
 
 Needs Review — ONLY if truly ambiguous after considering all signals.
 
-CLASSIFICATION RULES:
-1. Bank category hints (after "Bank:") are STRONG signals. Use them for precise subcategory:
-   "Insurance > Auto" → Auto Insurance, "Insurance > Home" → Home Insurance,
-   "Insurance > Other" → determine from merchant (State Farm auto? home? life?).
-2. RESOLVE MERCHANT NAMES: Banks abbreviate merchants cryptically. Decode them:
-   "Nat*Groc Midd VT" → "Natural Groceries Middlebury Co-op, VT" → Groceries
-   "SQ *JOES DINER" → "Joe's Diner (Square)" → Dining Out
-   "AMZN MKTP US" → "Amazon Marketplace" → Shopping
-   "GEICO *AUTO" → "GEICO Auto Insurance" → Auto Insurance
-   "WM SUPERCENTER" → "Walmart Supercenter" → Groceries
-   "TST* BLUE MOON" → "Blue Moon Restaurant (Toast POS)" → Dining Out
-   "SP * SOME STORE" → "Some Store (Shopify)" → Shopping
-3. Use ALL available signals: merchant name, amount, bank category, account name, date patterns.
-   A $4.99 monthly charge is likely a subscription. A $50-150 weekly charge at a grocery merchant is groceries.
-4. Pick the MOST SPECIFIC subcategory. Don't use "Other Personal" when a better fit exists.
-   Insurance → which kind? Shopping → could it be Clothing, Electronics, Gifts?
-   Streaming → name the service. Subscriptions → what kind?
-5. If something could be business OR personal, classify as Personal unless clearly business.
-6. Transfers between own accounts (credit card payments, savings moves) are Internal Transfer.
-8. MORTGAGE PAYMENTS: A payment to a mortgage servicer (e.g. "Mr Cooper", "Nationstar", "Wells Fargo Mortgage",
-   "Rocket Mortgage") is Personal / Loan Payment, NOT Schedule A / Mortgage Interest.
-   The full payment includes principal, escrow, and interest — only the interest portion is deductible,
-   and that amount comes from the lender's 1098 form, not from the transaction amount.
-   Only classify as Mortgage Interest if the description explicitly says "interest" or "1098".
-7. INCOME: Positive amounts with words like "salary", "payroll", "direct deposit",
-   "wage", "bonus", "tax refund", "IRS" → Personal / Income (or Salary, Bonus, Tax Refund).
-   NEVER classify income as "Other Personal". Use the specific income subcategory.
+RULE FORMAT:
+Return ONLY a JSON array (no markdown, no preamble):
+[{"description_pattern": "regex", "category": "...", "subcategory": "...", "new_description": "Resolved Merchant Name"}]
 
-Respond ONLY with a JSON array, no markdown or preamble:
-[{"idx":N,"category":"...",
-  "subcategory":"...",
-  "confidence":"high"|"medium"|"low",
-  "reason":"concise — for Duplicates: 'dup:NEIGHBOR_ID'; for kept entries: include '(twin:DUPLICATE_ID)'",
-  "merchant":"resolved full merchant name"}]
+GUIDELINES:
+1. Make patterns broad enough to catch variants: "amzn mktp|amazon\\\\.com|amz\\\\*"
+2. Use case-insensitive regex (patterns are matched with re.IGNORECASE)
+3. Resolve cryptic bank abbreviations into full merchant names in new_description
+4. INCOME: Positive amounts with payroll/salary/deposit keywords → Personal / Income or Salary
+5. Transfers between own accounts (credit card payments, savings moves) → Internal Transfer
+6. MORTGAGE PAYMENTS to servicers (Mr Cooper, Nationstar) → Personal / Loan Payment, NOT Mortgage Interest
+7. Pick the MOST SPECIFIC subcategory. Insurance → which kind? Shopping → what kind?
+8. If something could be business OR personal, classify as Personal unless clearly business.
+9. One rule per merchant group. Combine alternations with |
+10. Do NOT output rules for merchants already covered by EXISTING RULES below.`;
 
-The "merchant" field is the RESOLVED human-readable business name. Always provide it.`;
-}
-
-// ── Build rules context from FE-fetched rules ────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────
 
 export interface Rule {
   id: number;
@@ -127,23 +88,6 @@ export interface Rule {
   subcategory: string;
   new_description: string | null;
 }
-
-function buildRulesContext(rules: Rule[]): string {
-  if (!rules.length) return "No custom rules defined.";
-  const lines = ["User-defined classification rules (apply these when the pattern matches):"];
-  for (const r of rules) {
-    let parts = `  description matches /${r.description_pattern}/i`;
-    if (r.amount_operator && r.amount_value != null) {
-      parts += ` AND amount ${r.amount_operator} ${r.amount_value}`;
-    }
-    let arrow = ` → ${r.category} / ${r.subcategory}`;
-    if (r.new_description) arrow += ` (rename to "${r.new_description}")`;
-    lines.push(parts + arrow);
-  }
-  return lines.join("\n");
-}
-
-// ── Transaction type (from get_transactions) ─────────────────────────────
 
 export interface RawTransaction {
   id: string;
@@ -164,10 +108,8 @@ export interface ClassificationResult {
   confidence: string;
   reason: string;
   merchant: string;
-  classified_by: "ai";
+  classified_by: "ai" | "rule";
 }
-
-// ── Engine state ─────────────────────────────────────────────────────────
 
 export type ClassifyPhase = "idle" | "running" | "paused" | "complete" | "error";
 
@@ -187,6 +129,56 @@ export interface ClassifyState {
   usage: ApiUsage;
 }
 
+// ── Merchant grouping (pure frontend, no LLM) ───────────────────────────
+
+interface MerchantGroup {
+  key: string;
+  examples: string[];
+  count: number;
+  amountMin: number;
+  amountMax: number;
+  hints: string[];
+  accounts: string[];
+}
+
+/** Strip common POS prefixes and trailing reference numbers. */
+function normalizeMerchant(desc: string): string {
+  let s = (desc || "").toLowerCase().trim();
+  // Strip common POS/payment prefixes
+  s = s.replace(/^(sq \*|tst\*|sp \*|py \*|cke\*|pos |ach |chk |wm |int )/i, "");
+  // Strip trailing reference/store numbers
+  s = s.replace(/\s*[#*]\s*\d+\s*$/, "");
+  s = s.replace(/\s+/g, " ").trim();
+  return s;
+}
+
+function groupMerchants(transactions: RawTransaction[]): MerchantGroup[] {
+  const groups = new Map<string, MerchantGroup>();
+
+  for (const t of transactions) {
+    const key = normalizeMerchant(t.raw_description || t.description);
+    if (!key) continue;
+
+    let g = groups.get(key);
+    if (!g) {
+      g = { key, examples: [], count: 0, amountMin: Infinity, amountMax: -Infinity, hints: [], accounts: [] };
+      groups.set(key, g);
+    }
+    g.count++;
+    g.amountMin = Math.min(g.amountMin, t.amount);
+    g.amountMax = Math.max(g.amountMax, t.amount);
+    if (g.examples.length < 3) {
+      const raw = t.raw_description || t.description;
+      if (!g.examples.includes(raw)) g.examples.push(raw);
+    }
+    if (t.hint1 && !g.hints.includes(t.hint1)) g.hints.push(t.hint1);
+    if (!g.accounts.includes(t.account)) g.accounts.push(t.account);
+  }
+
+  // Sort by count descending — most common merchants first
+  return Array.from(groups.values()).sort((a, b) => b.count - a.count);
+}
+
 // ── Module-level singleton engine ────────────────────────────────────────
 
 type McpCallFn = (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
@@ -197,6 +189,7 @@ let _state: ClassifyState = {
   phase: "idle", total: 0, classified: 0, errors: [], recentUpdates: [],
   usage: { ..._emptyUsage },
 };
+
 let _abort = false;
 let _listeners: Set<() => void> = new Set();
 let _running = false;
@@ -209,6 +202,45 @@ function _setState(updater: (s: ClassifyState) => ClassifyState) {
   _state = updater(_state);
   _notify();
 }
+
+// ── Build user message for rule generation ───────────────────────────────
+
+function buildRuleGenPrompt(
+  existingRules: Rule[],
+  merchants: MerchantGroup[],
+  aliasCtx: string,
+  acctTypeCtx: string,
+  customCatCtx: string,
+): string {
+  const rulesLines = existingRules.length > 0
+    ? existingRules.map(r => {
+        let line = `  /${r.description_pattern}/i → ${r.category} / ${r.subcategory}`;
+        if (r.new_description) line += ` ("${r.new_description}")`;
+        return line;
+      }).join("\n")
+    : "  (none yet)";
+
+  const merchantLines = merchants.map((g, i) => {
+    let line = `${i + 1}. "${g.examples[0]}"`;
+    if (g.examples.length > 1) line += ` (also: "${g.examples.slice(1).join('", "')}")`;
+    line += ` — ${g.count} txns, $${g.amountMin.toFixed(0)}–$${g.amountMax.toFixed(0)}`;
+    if (g.hints.length > 0) line += ` [Bank: ${g.hints.join(", ")}]`;
+    if (g.accounts.length > 1) line += ` [${g.accounts.length} accounts]`;
+    return line;
+  }).join("\n");
+
+  return `EXISTING RULES (already applied — do NOT duplicate these):
+${rulesLines}
+${aliasCtx}${acctTypeCtx}${customCatCtx}
+
+UNMATCHED MERCHANTS (generate rules for these):
+${merchantLines}`;
+}
+
+// ── Main engine ──────────────────────────────────────────────────────────
+
+const MAX_ITERATIONS = 4;
+const MERCHANTS_PER_BATCH = 80;
 
 async function _runEngine(
   sessionId: string,
@@ -231,12 +263,7 @@ async function _runEngine(
       return;
     }
 
-    // 2. Get rules
-    const rulesResult = await mcpCall("get_rules", { npub, session_id: sessionId }) as { rules: Rule[] } | null;
-    const rules = rulesResult?.rules ?? [];
-    const rulesCtx = buildRulesContext(rules);
-
-    // 2b. Get account aliases
+    // 2. Get context: aliases, account types, custom categories
     const acctResult = await mcpCall("get_accounts", { session_id: sessionId, npub }) as {
       accounts: Array<{ name: string; type: string; last4: string | null }>;
       alias_groups: string[][];
@@ -247,24 +274,19 @@ async function _runEngine(
     let aliasCtx = "";
     if (aliasGroups.length > 0) {
       const lines = aliasGroups.map(group => `  Same account: ${group.join(" = ")}`);
-      aliasCtx = "\n\nACCOUNT ALIASES (these account names refer to the SAME underlying account — " +
-        "transactions from different names in the same group are duplicates, not transfers):\n" +
-        lines.join("\n");
+      aliasCtx = "\n\nACCOUNT ALIASES (same underlying account — not transfers):\n" + lines.join("\n");
     }
 
     let acctTypeCtx = "";
     const typed = accounts.filter(a => a.type !== "unknown");
     if (typed.length > 0) {
-      acctTypeCtx = "\n\nACCOUNT TYPES:\n" +
-        typed.map(a => `  "${a.name}" → ${a.type}`).join("\n");
+      acctTypeCtx = "\n\nACCOUNT TYPES:\n" + typed.map(a => `  "${a.name}" → ${a.type}`).join("\n");
     }
 
-    // 2c. Get custom categories
     const catResult = await mcpCall("get_custom_categories", { npub }) as {
       categories: Array<{ category: string; subcategory: string }>;
     } | null;
     const customCats = catResult?.categories ?? [];
-
     let customCatCtx = "";
     if (customCats.length > 0) {
       const grouped = new Map<string, string[]>();
@@ -276,37 +298,30 @@ async function _runEngine(
       for (const [cat, subs] of grouped) {
         lines.push(`\n${cat} (custom):\n  ${subs.join(", ")}`);
       }
-      customCatCtx = "\n\nCUSTOM CATEGORIES (user-defined, treat the same as built-in):" + lines.join("");
+      customCatCtx = "\n\nCUSTOM CATEGORIES:" + lines.join("");
     }
 
-    // 3. Create Anthropic client
-    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-    const systemPrompt = buildSystemPrompt(rulesCtx) + aliasCtx + acctTypeCtx + customCatCtx;
+    // 3. Apply existing rules first (covers already-known merchants)
+    const rulesResult = await mcpCall("get_rules", { npub, session_id: sessionId }) as { rules: Rule[] } | null;
+    let rules = rulesResult?.rules ?? [];
 
-    // Helper: report usage to BE and mark complete
-    async function _reportAndComplete() {
-      const u = _state.usage;
-      if (u.calls > 0) {
-        await mcpCall("report_api_usage", {
-          session_id: sessionId,
-          npub,
-          calls: u.calls,
-          input_tokens: u.input_tokens,
-          output_tokens: u.output_tokens,
-          model: u.model,
-        }).catch(() => {}); // best-effort
-      }
-      _setState(s => ({ ...s, phase: "complete" }));
-      _running = false;
+    if (rules.length > 0 && !reclassifyAll) {
+      await mcpCall("apply_rules", { session_id: sessionId, npub });
     }
 
-    // 4. Get total count
+    // 4. Get unclassified count
     const countResult = await mcpCall("get_transactions", {
       session_id: sessionId, npub, limit: 1, offset: 0,
       ...(reclassifyAll ? {} : { unclassified_only: true }),
     }) as { total: number } | null;
     const totalToProcess = countResult?.total ?? 0;
-    _setState(s => ({ ...s, total: totalToProcess }));
+
+    // Also get total count for display
+    const allCount = await mcpCall("get_transactions", {
+      session_id: sessionId, npub, limit: 1, offset: 0,
+    }) as { total: number } | null;
+    const totalAll = allCount?.total ?? totalToProcess;
+    _setState(s => ({ ...s, total: totalAll, classified: totalAll - totalToProcess }));
 
     if (totalToProcess === 0) {
       _setState(s => ({ ...s, phase: "complete" }));
@@ -314,189 +329,178 @@ async function _runEngine(
       return;
     }
 
-    // 5. Find the date range by fetching first transaction (sorted ASC)
-    const firstBatch = await mcpCall("get_transactions", {
-      session_id: sessionId, npub, limit: 1, offset: 0,
-      ...(reclassifyAll ? {} : { unclassified_only: true }),
-    }) as { transactions: RawTransaction[] } | null;
+    // 5. Create Anthropic client
+    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 
-    if (!firstBatch?.transactions?.length) {
-      _setState(s => ({ ...s, phase: "complete" }));
-      _running = false;
-      return;
-    }
+    // 6. Iterative rule generation loop
+    let prevUnclassified = totalToProcess;
 
-    // 6. Sliding window: 7 days at a time, 3-day overlap
-    const WINDOW_DAYS = 7;
-    const OVERLAP_DAYS = 3;
-    const STEP_DAYS = WINDOW_DAYS - OVERLAP_DAYS; // 4 days forward each step
-    let totalClassified = 0;
-
-    // Start from the first transaction's date
-    let windowStart = new Date(firstBatch.transactions[0].date + "T00:00:00");
-
-    while (!_abort) {
-      const windowEnd = new Date(windowStart);
-      windowEnd.setDate(windowEnd.getDate() + WINDOW_DAYS - 1);
-
-      const dateFrom = windowStart.toISOString().slice(0, 10);
-      const dateTo = windowEnd.toISOString().slice(0, 10);
-
-      // Fetch ALL transactions in this window (classified + unclassified)
-      const windowBatch = await mcpCall("get_transactions", {
-        session_id: sessionId, npub,
-        date_from: dateFrom, date_to: dateTo,
-        limit: 1000, offset: 0,
+    for (let iteration = 0; iteration < MAX_ITERATIONS && !_abort; iteration++) {
+      // Fetch unclassified transactions
+      const batchResult = await mcpCall("get_transactions", {
+        session_id: sessionId, npub, limit: 2000, offset: 0,
+        ...(reclassifyAll && iteration === 0 ? {} : { unclassified_only: true }),
       }) as { total: number; transactions: RawTransaction[] } | null;
 
-      const allInWindow = windowBatch?.transactions ?? [];
+      const unclassified = batchResult?.transactions ?? [];
+      if (unclassified.length === 0) break;
 
-      // Split into unclassified (to classify) and classified (context)
-      const toClassify = reclassifyAll
-        ? allInWindow
-        : allInWindow.filter(t => !t.classified);
-      const alreadyClassified = reclassifyAll
-        ? []
-        : allInWindow.filter(t => t.classified);
+      // Group by merchant
+      const merchants = groupMerchants(unclassified);
+      if (merchants.length === 0) break;
 
-      if (toClassify.length > 0) {
-        // Build batch text — only unclassified get indices
-        const batchText = toClassify.map((t, i) => {
-          let line = `${i}: ${t.date} | ${t.raw_description || t.description} | $${t.amount.toFixed(2)} | ${t.account}`;
-          if (t.hint1) {
-            line += ` | Bank: ${t.hint1}`;
-            if (t.hint2) line += ` > ${t.hint2}`;
-          }
-          return line;
-        }).join("\n");
+      // Take top N merchants for this batch
+      const batch = merchants.slice(0, MERCHANTS_PER_BATCH);
 
-        // Context: already-classified transactions in this window
-        let contextBlock = "";
-        if (alreadyClassified.length > 0) {
-          const ctxLines = alreadyClassified.map(t => {
-            const cat = `[${t.classified ? "classified" : "unclassified"}]`;
-            return `  id=${t.id} | $${t.amount.toFixed(2)} | ${t.date} | ${t.raw_description || t.description} | ${t.account} ${cat}`;
-          });
-          contextBlock = `\n\nOTHER TRANSACTIONS IN THIS DATE WINDOW (for duplicate/transfer detection):\n${ctxLines.join("\n")}`;
-        }
+      // Build prompt
+      const userMessage = buildRuleGenPrompt(rules, batch, aliasCtx, acctTypeCtx, customCatCtx);
 
+      // Call LLM
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096,
+        system: RULE_GEN_SYSTEM,
+        messages: [{ role: "user", content: userMessage }],
+      });
+
+      // Track usage
+      const mu = message.usage;
+      if (mu) {
+        _setState(s => ({
+          ...s,
+          usage: {
+            calls: s.usage.calls + 1,
+            input_tokens: s.usage.input_tokens + (mu.input_tokens ?? 0),
+            output_tokens: s.usage.output_tokens + (mu.output_tokens ?? 0),
+            model: message.model || s.usage.model,
+          },
+        }));
+      }
+
+      // Parse rules from response
+      const text = (message.content[0]?.type === "text" ? message.content[0].text : "[]")
+        .replace(/```json/g, "").replace(/```/g, "").trim();
+
+      let newRules: Array<{
+        description_pattern: string;
+        category: string;
+        subcategory: string;
+        new_description?: string;
+        amount_operator?: string;
+        amount_value?: number;
+      }>;
+      try {
+        newRules = JSON.parse(text);
+      } catch {
+        _setState(s => ({
+          ...s,
+          errors: [...s.errors, `Iteration ${iteration + 1}: failed to parse LLM response`],
+        }));
+        break;
+      }
+
+      if (!Array.isArray(newRules) || newRules.length === 0) break;
+
+      // Save each rule
+      let savedCount = 0;
+      for (const r of newRules) {
+        if (!r.description_pattern || !r.category || !r.subcategory) continue;
         try {
-          const message = await client.messages.create({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 4096,
-            system: systemPrompt,
-            messages: [{ role: "user", content: `Classify:\n${batchText}${contextBlock}` }],
+          await mcpCall("save_rule", {
+            npub,
+            session_id: sessionId,
+            description_pattern: r.description_pattern,
+            category: r.category,
+            subcategory: r.subcategory,
+            new_description: r.new_description || "",
+            amount_operator: r.amount_operator || "",
+            amount_value: r.amount_value ?? null,
           });
-
-          // Accumulate API usage
-          const mu = message.usage;
-          if (mu) {
-            _setState(s => ({
-              ...s,
-              usage: {
-                calls: s.usage.calls + 1,
-                input_tokens: s.usage.input_tokens + (mu.input_tokens ?? 0),
-                output_tokens: s.usage.output_tokens + (mu.output_tokens ?? 0),
-                model: message.model || s.usage.model,
-              },
-            }));
-          }
-
-          const text = (message.content[0]?.type === "text" ? message.content[0].text : "[]")
-            .replace(/```json/g, "").replace(/```/g, "").trim();
-
-          let results: Array<{
-            idx: number; category: string; subcategory: string;
-            confidence: string; reason: string; merchant: string;
-          }>;
-          try {
-            results = JSON.parse(text);
-          } catch {
-            _setState(s => ({
-              ...s,
-              errors: [...s.errors, `Failed to parse Claude response for window ${dateFrom}..${dateTo}`],
-            }));
-            // Advance window anyway
-            windowStart.setDate(windowStart.getDate() + STEP_DAYS);
-            continue;
-          }
-
-          const classifications: ClassificationResult[] = [];
-          for (const r of results) {
-            const idx = r.idx;
-            if (idx >= 0 && idx < toClassify.length) {
-              classifications.push({
-                id: toClassify[idx].id,
-                category: r.category,
-                subcategory: r.subcategory,
-                confidence: r.confidence,
-                reason: r.reason,
-                merchant: r.merchant,
-                classified_by: "ai",
-              });
-            }
-          }
-
-          if (classifications.length > 0) {
-            await mcpCall("save_classifications", {
-              session_id: sessionId,
-              classifications: JSON.stringify(classifications),
-              npub,
-            });
-
-            totalClassified += classifications.length;
-            _setState(s => ({
-              ...s,
-              classified: totalClassified,
-              recentUpdates: [...classifications.slice(0, 10), ...s.recentUpdates].slice(0, 20),
-            }));
-          }
-
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          _setState(s => ({
-            ...s,
-            errors: [...s.errors, `Window ${dateFrom}..${dateTo} error: ${msg}`],
-          }));
-          // Stop on billing/auth errors — don't burn through all windows
-          if (msg.includes("credit balance") || msg.includes("401") || msg.includes("403") || msg.includes("billing")) {
-            _setState(s => ({
-              ...s,
-              phase: "error",
-              errors: [...s.errors,
-                "The AI classification service is out of credits. " +
-                "Please ask the TaxSort operator to renew their Anthropic API balance. " +
-                "Your toll credits pay for this service — the operator provisions the upstream AI capacity."
-              ],
-            }));
-            _running = false;
-            return;
-          }
+          savedCount++;
+        } catch {
+          // Skip invalid rules (bad regex, etc.)
         }
       }
 
-      // Advance window by STEP_DAYS
-      windowStart.setDate(windowStart.getDate() + STEP_DAYS);
+      if (savedCount === 0) break; // LLM produced nothing usable
 
-      // Check if we've passed the end — fetch one more to see if anything remains
-      const remaining = await mcpCall("get_transactions", {
-        session_id: sessionId, npub, limit: 1, offset: 0,
-        date_from: windowStart.toISOString().slice(0, 10),
-        ...(reclassifyAll ? {} : { unclassified_only: true }),
+      // Apply all rules in bulk
+      const applyResult = await mcpCall("apply_rules", { session_id: sessionId, npub }) as { updated: number } | null;
+      const applied = applyResult?.updated ?? 0;
+
+      // Update state
+      _setState(s => ({
+        ...s,
+        classified: s.classified + applied,
+        recentUpdates: newRules.slice(0, 10).map(r => ({
+          id: "",
+          category: r.category,
+          subcategory: r.subcategory,
+          confidence: "high",
+          reason: `rule: /${r.description_pattern}/`,
+          merchant: r.new_description || "",
+          classified_by: "rule" as const,
+        })),
+      }));
+
+      // Refresh rules for next iteration
+      const updatedRules = await mcpCall("get_rules", { npub, session_id: sessionId }) as { rules: Rule[] } | null;
+      rules = updatedRules?.rules ?? rules;
+
+      // Convergence check
+      const remainingResult = await mcpCall("get_transactions", {
+        session_id: sessionId, npub, limit: 1, offset: 0, unclassified_only: true,
       }) as { total: number } | null;
+      const remaining = remainingResult?.total ?? 0;
 
-      if (!remaining?.total) {
-        await _reportAndComplete();
-        return;
-      }
+      if (remaining === 0) break;
+      // If we didn't reduce by at least 5%, stop — diminishing returns
+      if (remaining >= prevUnclassified * 0.95) break;
+      prevUnclassified = remaining;
+    }
+
+    // 7. Report usage and complete
+    const u = _state.usage;
+    if (u.calls > 0) {
+      await mcpCall("report_api_usage", {
+        session_id: sessionId, npub,
+        calls: u.calls,
+        input_tokens: u.input_tokens,
+        output_tokens: u.output_tokens,
+        model: u.model,
+      }).catch(() => {});
     }
 
     if (_abort) {
       _setState(s => ({ ...s, phase: "paused" }));
+    } else {
+      // Final count refresh
+      const finalAll = await mcpCall("get_transactions", {
+        session_id: sessionId, npub, limit: 1, offset: 0,
+      }) as { total: number } | null;
+      const finalUnclassified = await mcpCall("get_transactions", {
+        session_id: sessionId, npub, limit: 1, offset: 0, unclassified_only: true,
+      }) as { total: number } | null;
+      _setState(s => ({
+        ...s,
+        phase: "complete",
+        total: finalAll?.total ?? s.total,
+        classified: (finalAll?.total ?? s.total) - (finalUnclassified?.total ?? 0),
+      }));
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     _setState(s => ({ ...s, phase: "error", errors: [...s.errors, msg] }));
+    // Stop on billing/auth errors
+    if (msg.includes("credit balance") || msg.includes("401") || msg.includes("403")) {
+      _setState(s => ({
+        ...s,
+        errors: [...s.errors,
+          "The AI classification service is out of credits. " +
+          "Please ask the TaxSort operator to renew their Anthropic API balance."
+        ],
+      }));
+    }
   }
 
   _running = false;
