@@ -5,66 +5,7 @@ import ReasonText from "./ReasonText";
 import { useToolCall } from "../hooks/useMCP";
 import SortableTable from "./SortableTable";
 import type { Column } from "./SortableTable";
-
-// ── Amount filter expression parser ──────────────────────────────────────
-// Supports: <-95, >=0.05, !33, not 25, neq 25, gt 50, lte 30,
-//           [0..10), (-3..7.56], 0..10  (bare range = inclusive both ends)
-
-function parseAmountFilter(expr: string): ((amount: number) => boolean) | null {
-  const s = expr.trim();
-  if (!s) return null;
-
-  // Range: [0..10), (-3..7.56], 0..10
-  const rangeRe = /^([[(]?)\s*(-?\d+\.?\d*)\s*\.\.\s*(-?\d+\.?\d*)\s*([\])]?)$/;
-  const rm = s.match(rangeRe);
-  if (rm) {
-    const loInc = rm[1] !== "(";   // [ or empty = inclusive, ( = exclusive
-    const lo = parseFloat(rm[2]);
-    const hi = parseFloat(rm[3]);
-    const hiInc = rm[4] !== ")";   // ] or empty = inclusive, ) = exclusive
-    return (a) => (loInc ? a >= lo : a > lo) && (hiInc ? a <= hi : a < hi);
-  }
-
-  // Operator + value: >=0.05, <-95, !=33, =10
-  const opRe = /^([<>!=]=?|<=|>=)\s*(-?\d+\.?\d*)$/;
-  const om = s.match(opRe);
-  if (om) {
-    const v = parseFloat(om[2]);
-    switch (om[1]) {
-      case "<":  return (a) => a < v;
-      case "<=": return (a) => a <= v;
-      case ">":  return (a) => a > v;
-      case ">=": return (a) => a >= v;
-      case "=":  case "==": return (a) => a === v;
-      case "!=": case "!":  return (a) => a !== v;
-    }
-  }
-
-  // Word operator: gt 50, lte 30, not 25, neq 25, eq 10
-  const wordRe = /^(lt|lte|gt|gte|eq|neq|not)\s+(-?\d+\.?\d*)$/i;
-  const wm = s.match(wordRe);
-  if (wm) {
-    const v = parseFloat(wm[2]);
-    switch (wm[1].toLowerCase()) {
-      case "lt":  return (a) => a < v;
-      case "lte": return (a) => a <= v;
-      case "gt":  return (a) => a > v;
-      case "gte": return (a) => a >= v;
-      case "eq":  return (a) => a === v;
-      case "neq": case "not": return (a) => a !== v;
-    }
-  }
-
-  // Shorthand: !33 (not equal)
-  const bangRe = /^!\s*(-?\d+\.?\d*)$/;
-  const bm = s.match(bangRe);
-  if (bm) {
-    const v = parseFloat(bm[1]);
-    return (a) => a !== v;
-  }
-
-  return null; // unparseable — no filter
-}
+import { parseAmountFilter } from "../utils/amountFilter";
 
 interface Transaction {
   id: string;

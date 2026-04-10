@@ -15,9 +15,9 @@ export default function DonutChart({ total, classified, needsReview }: DonutChar
   const pct = total > 0 ? Math.round((classified / total) * 100) : 0;
 
   const slices: Slice[] = [
-    { label: "Classified", count: classified, color: "#d97706" },
+    { label: "Classified", count: classified, color: "#f59e0b" },
     { label: "Needs Review", count: needsReview, color: "#ef4444" },
-    { label: "Other", count: other, color: "#d6d3d1" },
+    { label: "Other", count: other, color: "#57534e" },
   ].filter(s => s.count > 0);
 
   let cumAngle = 0;
@@ -41,11 +41,11 @@ export default function DonutChart({ total, classified, needsReview }: DonutChar
     <div className="flex-shrink-0">
       <div className="relative w-32 h-32">
         <svg viewBox="0 0 100 100" className="w-full h-full">
-          <circle cx="50" cy="50" r="40" fill="none" stroke="#e7e5e4" strokeWidth="2" />
+          <circle cx="50" cy="50" r="40" fill="none" className="stroke-stone-200 dark:stroke-stone-700" strokeWidth="2" />
           {paths.map((p, i) => (
-            <path key={i} d={p.d} fill={p.color} opacity="0.85" />
+            <path key={i} d={p.d} fill={p.color} opacity="0.9" />
           ))}
-          <circle cx="50" cy="50" r="22" fill="white" />
+          <circle cx="50" cy="50" r="22" className="fill-white dark:fill-stone-800" />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="text-2xl font-bold text-stone-800">{pct}%</span>
@@ -54,7 +54,7 @@ export default function DonutChart({ total, classified, needsReview }: DonutChar
       <div className="mt-2 space-y-1">
         {slices.map(s => (
           <div key={s.label} className="flex items-center gap-1.5 text-xs">
-            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
             <span className="text-stone-500">{s.label}</span>
             <span className="ml-auto font-mono text-stone-600">{s.count}</span>
           </div>

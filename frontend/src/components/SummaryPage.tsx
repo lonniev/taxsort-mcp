@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useSession } from "../App";
 import SortableTable from "./SortableTable";
+import { parseAmountFilter } from "../utils/amountFilter";
 import type { Column } from "./SortableTable";
 import { useToolCall } from "../hooks/useMCP";
 import ReasonText from "./ReasonText";
@@ -130,6 +131,9 @@ export default function SummaryPage() {
   const [editingTx, setEditingTx] = useState<string | null>(null);
   const [editCat, setEditCat] = useState("");
   const [editSub, setEditSub] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [amountExpr, setAmountExpr] = useState("");
   async function fetchSummary() {
     const data = await summaryTool.invoke({
       session_id: sessionId,
@@ -232,6 +236,28 @@ export default function SummaryPage() {
             {GROUP_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
+        <input
+          className="text-xs border border-stone-200 rounded-lg px-3 py-1.5 bg-stone-50 w-40"
+          placeholder="Search description..."
+          value={searchInput}
+          onChange={e => setSearchInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") setSearch(searchInput); }}
+        />
+        <input
+          className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 w-36 font-mono"
+          placeholder="Amount: <-95, [0..10)"
+          title="Amount filter expression"
+          value={amountExpr}
+          onChange={e => setAmountExpr(e.target.value)}
+        />
+        {(search || amountExpr) && (
+          <button
+            onClick={() => { setSearch(""); setSearchInput(""); setAmountExpr(""); }}
+            className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {summary && (
@@ -308,7 +334,15 @@ export default function SummaryPage() {
                       {!expandLoading && expandedTxns.length === 0 && (
                         <div className="text-xs text-stone-400 py-2">No transactions found.</div>
                       )}
-                      {!expandLoading && expandedTxns.length > 0 && (
+                      {!expandLoading && expandedTxns.length > 0 && (() => {
+                        const amtFn = parseAmountFilter(amountExpr);
+                        const searchRe = search ? new RegExp(search, "i") : null;
+                        const filtered = expandedTxns.filter(t => {
+                          if (searchRe && !searchRe.test(t.merchant || t.description)) return false;
+                          if (amtFn && !amtFn(t.amount)) return false;
+                          return true;
+                        });
+                        return filtered.length > 0 ? (
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="text-stone-400 uppercase tracking-wider">
@@ -319,7 +353,7 @@ export default function SummaryPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {expandedTxns.map(t => (
+                            {filtered.map(t => (
                               <tr
                                 key={t.id}
                                 className="border-t border-stone-100 hover:bg-stone-100 cursor-pointer transition-colors"
@@ -407,7 +441,10 @@ export default function SummaryPage() {
                             ))}
                           </tbody>
                         </table>
-                      )}
+                        ) : (
+                          <div className="text-xs text-stone-400 py-2">No matching transactions.</div>
+                        );
+                      })()}
                     </div>
                   </td>
                 </tr>
