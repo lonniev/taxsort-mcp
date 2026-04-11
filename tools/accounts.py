@@ -26,7 +26,7 @@ async def get_accounts(session_id: str) -> dict:
                MIN(r.date) as earliest, MAX(r.date) as latest,
                ARRAY_AGG(DISTINCT r.format) as formats
         FROM raw_transactions r
-        LEFT JOIN tax_accounts a
+        LEFT JOIN accounts a
           ON a.session_id = r.session_id AND a.account_name = r.account
         WHERE r.session_id = $1
         GROUP BY r.account, a.account_type
@@ -73,7 +73,7 @@ async def set_account_type(
 
     await execute(
         """
-        INSERT INTO tax_accounts (session_id, account_name, account_type)
+        INSERT INTO accounts (session_id, account_name, account_type)
         VALUES ($1, $2, $3)
         ON CONFLICT (session_id, account_name)
         DO UPDATE SET account_type = $3

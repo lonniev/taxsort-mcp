@@ -6,7 +6,7 @@ from db.neon import fetch, execute
 async def get_custom_categories(owner_npub: str) -> dict:
     """Get all custom categories for a user."""
     rows = await fetch(
-        "SELECT id, category, subcategory FROM tax_categories WHERE owner_npub=$1 ORDER BY category, subcategory",
+        "SELECT id, category, subcategory FROM categories WHERE owner_npub=$1 ORDER BY category, subcategory",
         owner_npub,
     )
     return {
@@ -24,7 +24,7 @@ async def save_custom_category(owner_npub: str, category: str, subcategory: str)
 
     await execute(
         """
-        INSERT INTO tax_categories (owner_npub, category, subcategory)
+        INSERT INTO categories (owner_npub, category, subcategory)
         VALUES ($1, $2, $3)
         ON CONFLICT (owner_npub, category, subcategory) DO NOTHING
         """,
@@ -36,7 +36,7 @@ async def save_custom_category(owner_npub: str, category: str, subcategory: str)
 async def delete_custom_category(owner_npub: str, category_id: int) -> dict:
     """Delete a custom category."""
     await execute(
-        "DELETE FROM tax_categories WHERE id=$1 AND owner_npub=$2",
+        "DELETE FROM categories WHERE id=$1 AND owner_npub=$2",
         category_id, owner_npub,
     )
     return {"deleted": category_id}

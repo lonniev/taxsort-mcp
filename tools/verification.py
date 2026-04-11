@@ -18,7 +18,7 @@ from db.neon import fetchrow, execute
 async def get_verification_status(npub: str) -> dict:
     """Check if an npub has been verified."""
     row = await fetchrow(
-        "SELECT npub, verified_at, passphrase_hash FROM tax_verifications WHERE npub = $1",
+        "SELECT npub, verified_at, passphrase_hash FROM verifications WHERE npub = $1",
         npub,
     )
     if row and row.get("passphrase_hash"):
@@ -34,7 +34,7 @@ async def store_verification(npub: str, passphrase: str) -> dict:
     """Store verification proof for an npub."""
     ph = hashlib.sha256(f"{npub}:{passphrase}".encode()).hexdigest()
     await execute(
-        "INSERT INTO tax_verifications (npub, passphrase_hash, verified_at) "
+        "INSERT INTO verifications (npub, passphrase_hash, verified_at) "
         "VALUES ($1, $2, NOW()) "
         "ON CONFLICT (npub) DO UPDATE SET passphrase_hash = $2, verified_at = NOW()",
         npub, ph,
@@ -45,7 +45,7 @@ async def store_verification(npub: str, passphrase: str) -> dict:
 async def verify_passphrase(npub: str, passphrase: str) -> dict:
     """Check if a passphrase matches the stored hash for this npub."""
     row = await fetchrow(
-        "SELECT passphrase_hash FROM tax_verifications WHERE npub = $1",
+        "SELECT passphrase_hash FROM verifications WHERE npub = $1",
         npub,
     )
     if not row or not row.get("passphrase_hash"):

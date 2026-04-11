@@ -12,7 +12,7 @@ from db.neon import fetchrow, execute
 async def lock_session(npub: str) -> dict:
     """Lock this npub's access. All data tools will be rejected."""
     await execute(
-        "INSERT INTO tax_locks (npub, locked_at) "
+        "INSERT INTO locks (npub, locked_at) "
         "VALUES ($1, NOW()) "
         "ON CONFLICT (npub) DO UPDATE SET locked_at = NOW(), unlocked = FALSE",
         npub,
@@ -23,7 +23,7 @@ async def lock_session(npub: str) -> dict:
 async def is_locked(npub: str) -> bool:
     """Check if this npub is currently locked."""
     row = await fetchrow(
-        "SELECT unlocked FROM tax_locks WHERE npub = $1",
+        "SELECT unlocked FROM locks WHERE npub = $1",
         npub,
     )
     if not row:
@@ -50,7 +50,7 @@ async def request_unlock(npub: str) -> dict:
     """Generate an unlock challenge."""
     code = secrets.token_urlsafe(8)
     await execute(
-        "INSERT INTO tax_unlock_challenges (npub, code, created_at) "
+        "INSERT INTO unlock_challenges (npub, code, created_at) "
         "VALUES ($1, $2, NOW()) "
         "ON CONFLICT (npub) DO UPDATE SET code = $2, created_at = NOW(), used = FALSE",
         npub, code,
@@ -65,7 +65,7 @@ async def request_unlock(npub: str) -> dict:
 async def check_unlock(npub: str, response: str) -> dict:
     """Check if the patron's unlock response is valid and unlock if so."""
     row = await fetchrow(
-        "SELECT code, used FROM tax_unlock_challenges WHERE npub = $1",
+        "SELECT code, used FROM unlock_challenges WHERE npub = $1",
         npub,
     )
     if not row:
@@ -77,12 +77,12 @@ async def check_unlock(npub: str, response: str) -> dict:
     if response.strip().lower() == "approve unlock":
         # Mark challenge used
         await execute(
-            "UPDATE tax_unlock_challenges SET used = TRUE WHERE npub = $1",
+            "UPDATE unlock_challenges SET used = TRUE WHERE npub = $1",
             npub,
         )
         # Unlock the session
         await execute(
-            "UPDATE tax_locks SET unlocked = TRUE WHERE npub = $1",
+            "UPDATE locks SET unlocked = TRUE WHERE npub = $1",
             npub,
         )
         return {"unlocked": True, "npub": npub}

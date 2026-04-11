@@ -13,7 +13,7 @@ async def report_usage(
 ) -> dict:
     """Record Anthropic API usage for a classification run."""
     await execute(
-        """INSERT INTO tax_api_usage
+        """INSERT INTO api_usage
            (session_id, npub, calls, input_tokens, output_tokens, model, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, NOW())""",
         session_id, npub, calls, input_tokens, output_tokens, model,
@@ -49,7 +49,7 @@ async def get_usage_stats(session_id: str = "", npub: str = "") -> dict:
                    SUM(input_tokens) as total_input_tokens,
                    SUM(output_tokens) as total_output_tokens,
                    COUNT(*) as runs
-            FROM tax_api_usage {where_clause}
+            FROM api_usage {where_clause}
             GROUP BY model
             ORDER BY total_input_tokens DESC""",
         *params,

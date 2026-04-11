@@ -65,7 +65,7 @@ async def create_issue(
 
                 # Store reference locally
                 await execute(
-                    "INSERT INTO tax_feedback (npub, github_issue_number, title, category, created_at) "
+                    "INSERT INTO feedback (npub, github_issue_number, title, category, created_at) "
                     "VALUES ($1, $2, $3, $4, NOW()) "
                     "ON CONFLICT DO NOTHING",
                     npub, issue_number, title, category,
@@ -136,7 +136,7 @@ async def list_my_issues(npub: str) -> dict:
 
     # Also include locally stored feedback
     local = await fetch(
-        "SELECT title, category, created_at, github_issue_number FROM tax_feedback "
+        "SELECT title, category, created_at, github_issue_number FROM feedback "
         "WHERE npub = $1 ORDER BY created_at DESC",
         npub,
     )

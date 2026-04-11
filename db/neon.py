@@ -17,15 +17,15 @@ _DOMAIN_TABLES = {
     "sessions": "tax_sessions",
     "raw_transactions": "tax_raw_transactions",
     "classifications": "tax_classifications",
-    "rules": "rules",
-    "tax_categories": "tax_categories",
-    "tax_api_usage": "tax_api_usage",
-    "tax_verifications": "tax_verifications",
-    "tax_unlock_challenges": "tax_unlock_challenges",
-    "tax_locks": "tax_locks",
-    "tax_presence": "tax_presence",
-    "tax_feedback": "tax_feedback",
-    "tax_accounts": "tax_accounts",
+    "rules": "tax_rules",
+    "categories": "tax_categories",
+    "api_usage": "tax_api_usage",
+    "verifications": "tax_verifications",
+    "unlock_challenges": "tax_unlock_challenges",
+    "locks": "tax_locks",
+    "presence": "tax_presence",
+    "feedback": "tax_feedback",
+    "accounts": "tax_accounts",
     "share_tokens": "tax_share_tokens",
 }
 
@@ -104,7 +104,7 @@ async def _ensure_domain_schema(vault: Any) -> None:
         f"CREATE INDEX IF NOT EXISTS idx_cls_session ON {t('tax_classifications')}(session_id)",
         f"CREATE INDEX IF NOT EXISTS idx_cls_category ON {t('tax_classifications')}(session_id, category)",
 
-        f"CREATE TABLE IF NOT EXISTS {t('rules')} ("
+        f"CREATE TABLE IF NOT EXISTS {t('tax_rules')} ("
         "id SERIAL PRIMARY KEY, "
         f"session_id TEXT REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
         "owner_npub TEXT NOT NULL, "
