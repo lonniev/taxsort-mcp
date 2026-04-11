@@ -428,10 +428,14 @@ async function _runEngine(
       const applyResult = await mcpCall("apply_rules", { session_id: sessionId, npub }) as { updated: number } | null;
       const applied = applyResult?.updated ?? 0;
 
-      // Update state
+      // Update state — recount from source of truth to avoid exceeding total
+      const progressResult = await mcpCall("get_transactions", {
+        session_id: sessionId, npub, limit: 1, offset: 0, unclassified_only: true,
+      }) as { total: number } | null;
+      const nowUnclassified = progressResult?.total ?? 0;
       _setState(s => ({
         ...s,
-        classified: s.classified + applied,
+        classified: Math.min(s.total, s.total - nowUnclassified),
         recentUpdates: newRules.slice(0, 10).map(r => ({
           id: "",
           category: r.category,

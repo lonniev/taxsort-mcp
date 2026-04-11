@@ -93,7 +93,7 @@ export default function ClassifyPage() {
 
   const { phase, total, classified, errors, recentUpdates, usage } = state;
   const needsReview = Math.max(0, total - classified);
-  const pct = total > 0 ? Math.round((classified / total) * 100) : 0;
+  const pct = total > 0 ? Math.min(100, Math.round((classified / total) * 100)) : 0;
 
   async function loadRules() {
     if (!sessionId) return;
