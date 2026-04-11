@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "taxsort-mcp"
-version = "0.23.3"
+version = "0.23.4"
 description = "TaxSort — Tollbooth-monetized MCP server for personal tax transaction classification"
 requires-python = ">=3.12"
 dependencies = [
     "fastmcp>=2.0.0",
-    "tollbooth-dpyc[nostr]>=0.4.8",
+    "tollbooth-dpyc[nostr]>=0.4.9",
     "httpx>=0.27.0",
     "anthropic>=0.40.0",
     "pydantic>=2.0.0",
