@@ -20,7 +20,17 @@ from fastmcp import FastMCP
 from tollbooth.tool_identity import ToolIdentity, STANDARD_IDENTITIES, capability_uuid
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.credential_templates import CredentialTemplate, FieldSpec
+from tollbooth.credential_validators import validate_btcpay_creds, validate_required
 from tollbooth.slug_tools import make_slug_tool
+
+
+def _validate_taxsort_creds(creds: dict[str, str]) -> list[str]:
+    """Validate TaxSort operator credentials."""
+    errors = validate_btcpay_creds(creds)
+    err = validate_required(creds.get("anthropic_api_key", ""), "anthropic_api_key")
+    if err:
+        errors.append(err)
+    return errors
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +180,7 @@ runtime = OperatorRuntime(
         "Your response will be encrypted and signed by your Nostr key."
     ),
     service_name="TaxSort MCP",
+    credential_validator=_validate_taxsort_creds,
 )
 
 # ---------------------------------------------------------------------------
