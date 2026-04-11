@@ -425,8 +425,7 @@ async function _runEngine(
       if (savedCount === 0) break; // LLM produced nothing usable
 
       // Apply all rules in bulk
-      const applyResult = await mcpCall("apply_rules", { session_id: sessionId, npub }) as { updated: number } | null;
-      const applied = applyResult?.updated ?? 0;
+      await mcpCall("apply_rules", { session_id: sessionId, npub });
 
       // Update state — recount from source of truth to avoid exceeding total
       const progressResult = await mcpCall("get_transactions", {

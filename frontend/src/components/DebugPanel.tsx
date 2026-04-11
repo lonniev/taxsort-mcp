@@ -14,7 +14,7 @@ export default function DebugPanel() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50">
+    <div className="fixed bottom-0 left-0 right-0 z-50 debug-panel">
       <button
         onClick={() => setOpen(!open)}
         className="absolute bottom-0 right-4 bg-stone-800 text-white text-xs px-3 py-1 rounded-t-lg"

@@ -106,16 +106,16 @@ async def save_rule(
                            amount_operator, amount_value,
                            category, subcategory, new_description,
                            session_id)
-        VALUES ($1, $2, NULLIF($3,''), $4, $5, $6, NULLIF($7,''), NULLIF($8,''))
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         """,
         owner_npub,
         description_pattern,
-        amount_operator or "",
+        amount_operator or None,
         amount_value,
         category,
         subcategory,
-        new_description or "",
-        session_id,
+        new_description or None,
+        session_id or None,
     )
 
     return {
@@ -145,16 +145,28 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
     Writes matching results to the classifications table. Only processes
     transactions that don't already have a classification.
     """
-    rules = await fetch(
-        """
-        SELECT description_pattern, amount_operator, amount_value,
-               category, subcategory, new_description
-        FROM rules
-        WHERE owner_npub=$1 AND (session_id=$2 OR session_id IS NULL)
-        ORDER BY id
-        """,
-        owner_npub, session_id,
-    )
+    if session_id:
+        rules = await fetch(
+            """
+            SELECT description_pattern, amount_operator, amount_value,
+                   category, subcategory, new_description
+            FROM rules
+            WHERE owner_npub=$1 AND (session_id=$2 OR session_id IS NULL)
+            ORDER BY id
+            """,
+            owner_npub, session_id,
+        )
+    else:
+        rules = await fetch(
+            """
+            SELECT description_pattern, amount_operator, amount_value,
+                   category, subcategory, new_description
+            FROM rules
+            WHERE owner_npub=$1
+            ORDER BY id
+            """,
+            owner_npub,
+        )
     if not rules:
         return {"updated": 0, "message": "No rules defined."}
 
