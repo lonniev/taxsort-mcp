@@ -316,12 +316,16 @@ async def get_summary(
     def _group_sql(dim: str) -> str:
         if dim == "taxline":
             return "c.subcategory"
+        if dim == "subcategory":
+            return "c.subcategory"
         if dim == "month":
             return "TO_CHAR(r.date, 'YYYY-MM')"
         if dim == "category":
             return "c.category"
         if dim == "account":
             return "r.account"
+        if dim == "none":
+            return "c.category"
         return "c.category"
 
     parts = group_by.split("+")

@@ -5,7 +5,7 @@ import { parseAmountFilter } from "../utils/amountFilter";
 import type { Column } from "./SortableTable";
 import { useToolCall } from "../hooks/useMCP";
 import ReasonText from "./ReasonText";
-import DonutChart from "./DonutChart";
+// DonutChart removed — Categorized page matches Transactions layout
 
 interface SummaryRow {
   label: string;
@@ -24,8 +24,10 @@ interface Summary {
 }
 
 const GROUP_OPTIONS = [
-  ["taxline", "Tax Line (IRS)"],
+  ["none", "No grouping"],
   ["category", "Category"],
+  ["subcategory", "Subcategory"],
+  ["taxline", "Tax Line (IRS)"],
   ["month", "Month"],
   ["account", "Account"],
   ["month+category", "Month + Category"],
@@ -122,7 +124,7 @@ export default function SummaryPage() {
   const saveTool = useToolCall<{ saved: number }>("save_classifications");
 
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [classifyStatus, setClassifyStatus] = useState<{ total: number; classified: number; needs_review: number } | null>(null);
+  // classifyStatus removed — metric cards and donut chart removed
   const [groupBy, setGroupBy] = useState("taxline");
   const [scope, setScope] = useState("tax");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -144,19 +146,12 @@ export default function SummaryPage() {
     if (data) setSummary(data);
   }
 
-  async function fetchStatus() {
-    if (!sessionId) return;
-    const all = await txTool.invoke({ session_id: sessionId, npub, limit: 1, offset: 0 });
-    const unclassified = await txTool.invoke({ session_id: sessionId, npub, limit: 1, offset: 0, unclassified_only: true });
-    const totalN = all?.total ?? 0;
-    const unclassifiedN = unclassified?.total ?? 0;
-    setClassifyStatus({ total: totalN, classified: totalN - unclassifiedN, needs_review: unclassifiedN });
-  }
+  // fetchStatus removed — metric cards and donut chart removed
 
   useEffect(() => {
     if (sessionId) {
       fetchSummary();
-      fetchStatus();
+      // fetchStatus removed
     }
   }, [sessionId, groupBy, scope]);
 
@@ -274,41 +269,6 @@ export default function SummaryPage() {
       </div>
 
       {summary && (
-        <div className="flex gap-3 mb-5">
-          {/* Metric cards */}
-          <div className="flex-1 grid grid-cols-3 gap-3">
-            <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
-              <div className="text-xs text-stone-400 mb-1">Total expenses</div>
-              <div className="text-xl font-mono font-medium text-amber-700">${fmt$(summary.totals.expenses)}</div>
-              <div className="text-xs text-stone-400 mt-0.5">{summary.totals.transactions} transactions</div>
-            </div>
-            <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
-              <div className="text-xs text-stone-400 mb-1">Schedule C</div>
-              <div className="text-xl font-mono font-medium text-amber-700">
-                ${fmt$(summary.rows.filter(r => r.irs_line?.startsWith("Sch C")).reduce((s, r) => s + r.expenses, 0))}
-              </div>
-              <div className="text-xs text-stone-400 mt-0.5">business expenses</div>
-            </div>
-            <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
-              <div className="text-xs text-stone-400 mb-1">Schedule A</div>
-              <div className="text-xl font-mono font-medium text-green-700">
-                ${fmt$(summary.rows.filter(r => r.irs_line?.startsWith("Sch A")).reduce((s, r) => s + r.expenses, 0))}
-              </div>
-              <div className="text-xs text-stone-400 mt-0.5">itemized deductions</div>
-            </div>
-          </div>
-
-          {classifyStatus && classifyStatus.total > 0 && (
-            <DonutChart
-              total={classifyStatus.total}
-              classified={classifyStatus.classified}
-              needsReview={classifyStatus.needs_review}
-            />
-          )}
-        </div>
-      )}
-
-      {summary && (
         <>
           <SortableTable<SummaryRow>
             columns={summaryColumns}
@@ -417,7 +377,7 @@ export default function SummaryPage() {
                                           setEditingTx(null);
                                           // Refresh summary and expanded transactions
                                           fetchSummary();
-                                          fetchStatus();
+                                          // fetchStatus removed
                                           // Re-fetch expanded list
                                           const data = await txTool.invoke({
                                             session_id: sessionId,
