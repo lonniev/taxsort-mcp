@@ -17,7 +17,7 @@ _DOMAIN_TABLES = {
     "sessions": "tax_sessions",
     "raw_transactions": "tax_raw_transactions",
     "classifications": "tax_classifications",
-    "rules": "tax_rules",
+    "rules": "rules",
     "tax_categories": "tax_categories",
     "tax_api_usage": "tax_api_usage",
     "tax_verifications": "tax_verifications",
@@ -104,7 +104,7 @@ async def _ensure_domain_schema(vault: Any) -> None:
         f"CREATE INDEX IF NOT EXISTS idx_cls_session ON {t('tax_classifications')}(session_id)",
         f"CREATE INDEX IF NOT EXISTS idx_cls_category ON {t('tax_classifications')}(session_id, category)",
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_rules')} ("
+        f"CREATE TABLE IF NOT EXISTS {t('rules')} ("
         "id SERIAL PRIMARY KEY, "
         f"session_id TEXT REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
         "owner_npub TEXT NOT NULL, "
