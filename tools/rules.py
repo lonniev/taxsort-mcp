@@ -30,28 +30,27 @@ def _amount_matches(tx_amount: float, operator: str, threshold: float) -> bool:
 
 async def get_rules(owner_npub: str, session_id: str = "") -> dict:
     """Get all rules for the current patron (global + session-specific)."""
-    if session_id:
-        rows = await fetch(
-            """
-            SELECT id, session_id, description_pattern, amount_operator,
-                   amount_value, category, subcategory, new_description
-            FROM rules
-            WHERE owner_npub=$1 AND (session_id=$2 OR session_id IS NULL)
-            ORDER BY id
-            """,
-            owner_npub, session_id,
-        )
-    else:
-        rows = await fetch(
-            """
-            SELECT id, session_id, description_pattern, amount_operator,
-                   amount_value, category, subcategory, new_description
-            FROM rules
-            WHERE owner_npub=$1
-            ORDER BY id
-            """,
-            owner_npub,
-        )
+    try:
+        if session_id:
+            rows = await fetch(
+                "SELECT id, session_id, description_pattern, amount_operator, "
+                "amount_value, category, subcategory, new_description "
+                "FROM rules "
+                "WHERE owner_npub=$1 AND (session_id=$2 OR session_id IS NULL) "
+                "ORDER BY id",
+                owner_npub, session_id,
+            )
+        else:
+            rows = await fetch(
+                "SELECT id, session_id, description_pattern, amount_operator, "
+                "amount_value, category, subcategory, new_description "
+                "FROM rules "
+                "WHERE owner_npub=$1 "
+                "ORDER BY id",
+                owner_npub,
+            )
+    except Exception as e:
+        return {"rules": [], "error": f"Rules query failed: {e}"}
 
     return {
         "rules": [
@@ -100,23 +99,23 @@ async def save_rule(
     if amount_operator and amount_value is None:
         return {"error": "amount_value is required when amount_operator is set"}
 
-    await execute(
-        """
-        INSERT INTO rules (owner_npub, description_pattern,
-                           amount_operator, amount_value,
-                           category, subcategory, new_description,
-                           session_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        """,
-        owner_npub,
-        description_pattern,
-        amount_operator or None,
-        amount_value,
-        category,
-        subcategory,
-        new_description or None,
-        session_id or None,
-    )
+    try:
+        await execute(
+            "INSERT INTO rules (owner_npub, description_pattern, "
+            "amount_operator, amount_value, "
+            "category, subcategory, new_description, session_id) "
+            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            owner_npub,
+            description_pattern,
+            amount_operator or None,
+            amount_value,
+            category,
+            subcategory,
+            new_description or None,
+            session_id or None,
+        )
+    except Exception as e:
+        return {"error": f"Failed to save rule: {e}"}
 
     return {
         "saved": True,
@@ -147,24 +146,20 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
     """
     if session_id:
         rules = await fetch(
-            """
-            SELECT description_pattern, amount_operator, amount_value,
-                   category, subcategory, new_description
-            FROM rules
-            WHERE owner_npub=$1 AND (session_id=$2 OR session_id IS NULL)
-            ORDER BY id
-            """,
+            "SELECT description_pattern, amount_operator, amount_value, "
+            "category, subcategory, new_description "
+            "FROM rules "
+            "WHERE owner_npub=$1 AND (session_id=$2 OR session_id IS NULL) "
+            "ORDER BY id",
             owner_npub, session_id,
         )
     else:
         rules = await fetch(
-            """
-            SELECT description_pattern, amount_operator, amount_value,
-                   category, subcategory, new_description
-            FROM rules
-            WHERE owner_npub=$1
-            ORDER BY id
-            """,
+            "SELECT description_pattern, amount_operator, amount_value, "
+            "category, subcategory, new_description "
+            "FROM rules "
+            "WHERE owner_npub=$1 "
+            "ORDER BY id",
             owner_npub,
         )
     if not rules:
