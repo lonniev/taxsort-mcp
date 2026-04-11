@@ -214,10 +214,10 @@ export default function SummaryPage() {
           <button
             key={f}
             onClick={() => setScope(f === "all" ? "all" : f)}
-            className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
+            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
               scope === f || (f === "all" && scope === "all")
-                ? "bg-stone-900 text-white"
-                : "bg-stone-100 text-stone-500 hover:bg-stone-200"
+                ? "bg-stone-100 border-stone-400 font-medium text-stone-800"
+                : "border-stone-200 text-stone-400 hover:border-stone-300"
             }`}
           >
             {f === "all" ? "All" : f}

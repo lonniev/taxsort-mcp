@@ -92,7 +92,7 @@ export default function Nav() {
             {link("/import", "\u{1F4E5}", "Import", "Upload bank CSV files")}
             {link("/accounts", "\u{1F3E6}", "Accounts", "Tag account types, view aliases and transactions")}
             {link("/transactions", "\u{1F4C4}", "Transactions", "Browse and search raw transaction data")}
-            {link("/classify", "\u{1F916}", "Classify", "Run Claude AI classification and manage rules")}
+            {link("/classify", "\u{1F916}", "\u2192 Categorize \u2192", "Run AI categorization rules on imported transactions")}
             {link("/summary", "\u2705", "Categorized", "View classified totals with semantic categories")}
             {link("/subscriptions", "\u{1F501}", "Subscriptions", "Find recurring charges and money leaks")}
             {link("/advisor", "\u{1F4AC}", "Advisor", "Ask the Financial Advisor about TaxSort")}

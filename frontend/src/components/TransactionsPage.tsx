@@ -332,7 +332,7 @@ export default function TransactionsPage() {
     },
   ], []);
 
-  const filters = ["all", "Schedule A", "Schedule C", "Internal Transfer", "Personal", "Duplicate", "Unclassified"];
+  // Category chiclets removed — this page shows raw imported data.
 
   return (
     <div className="w-[85%] mx-auto relative">
@@ -353,15 +353,7 @@ export default function TransactionsPage() {
         )}
 
         <div className="flex items-center gap-2 flex-wrap mb-3">
-          {filters.map(f => (
-            <button
-              key={f}
-              onClick={() => { setFilter(f); setSubFilter(""); setSearch(""); setSearchInput(""); setOffset(0); }}
-              className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${filter === f && !subFilter && !search ? "bg-stone-100 border-stone-400 font-medium text-stone-800" : "border-stone-200 text-stone-400 hover:border-stone-300"}`}
-            >
-              {f === "all" ? "All" : f}
-            </button>
-          ))}
+          {/* Raw transaction data — no category chiclets */}
           <button
             onClick={() => fetchTxns(filter, subFilter, search, offset)}
             className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded ml-1"
