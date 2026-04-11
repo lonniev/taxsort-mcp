@@ -225,37 +225,50 @@ export default function SummaryPage() {
         ))}
       </div>
 
-      <div className="bg-white border border-stone-200 rounded-xl px-5 py-4 mb-5 flex items-center gap-4 flex-wrap">
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-stone-400">Group by</label>
+      {/* Group by */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-1.5">
+          <label className="text-xs text-stone-400">Group</label>
           <select
             value={groupBy}
             onChange={e => setGroupBy(e.target.value)}
-            className="text-sm border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50"
+            className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50"
           >
             {GROUP_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
+      </div>
+
+      {/* Search + amount filter */}
+      <div className="flex items-center gap-2 mb-4">
         <input
-          className="text-xs border border-stone-200 rounded-lg px-3 py-1.5 bg-stone-50 w-40"
-          placeholder="Search description..."
+          className="flex-1 border border-stone-200 rounded-lg px-3 py-1.5 text-xs bg-stone-50 focus:outline-none focus:border-stone-400 font-mono"
+          placeholder="Search descriptions (regex)..."
           value={searchInput}
           onChange={e => setSearchInput(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") setSearch(searchInput); }}
         />
         <input
           className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 w-36 font-mono"
-          placeholder="Amount: <-95, [0..10)"
-          title="Amount filter expression"
+          placeholder="e.g. <-95, [0..10), !33"
+          title="Amount filter: <, <=, >, >=, =, !=, !N, not N, gt/gte/lt/lte/eq/neq N, [lo..hi), (lo..hi], lo..hi"
           value={amountExpr}
           onChange={e => setAmountExpr(e.target.value)}
         />
+        {searchInput && (
+          <button
+            onClick={() => setSearch(searchInput)}
+            className="text-xs bg-stone-900 text-white px-3 py-1.5 rounded-lg"
+          >
+            Search
+          </button>
+        )}
         {(search || amountExpr) && (
           <button
             onClick={() => { setSearch(""); setSearchInput(""); setAmountExpr(""); }}
             className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded"
           >
-            Clear
+            Clear filters
           </button>
         )}
       </div>
