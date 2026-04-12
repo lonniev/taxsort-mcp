@@ -1,6 +1,13 @@
 """Transaction retrieval, classification writes, and summary tools."""
 
+import re
+
 from db.neon import fetch, execute, fetchrow, executemany
+
+
+def _escape_regex(s: str) -> str:
+    """Escape PostgreSQL regex metacharacters so user input matches literally."""
+    return re.sub(r'([.*+?^${}()|[\]\\])', r'\\\1', s)
 
 IRS_MAP = {
     "Advertising & Marketing":          "Sch C · Line 8 — Advertising",
@@ -77,7 +84,7 @@ async def get_transactions(
 
     if search:
         where.append(f"r.description ~* ${idx}")
-        params.append(search)
+        params.append(_escape_regex(search))
         idx += 1
 
     where_clause = " AND ".join(where)
@@ -196,7 +203,7 @@ async def get_transactions_paged(
         idx += 1
     if search:
         where.append(f"r.description ~* ${idx}")
-        params.append(search)
+        params.append(_escape_regex(search))
         idx += 1
 
     where_clause = " AND ".join(where)

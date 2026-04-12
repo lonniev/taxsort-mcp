@@ -445,7 +445,7 @@ export default function TransactionsPage() {
         <div className="flex items-center gap-2 mb-4">
           <input
             className="flex-1 border border-stone-200 rounded-lg px-3 py-1.5 text-xs bg-stone-50 focus:outline-none focus:border-stone-400 font-mono"
-            placeholder="Search descriptions (regex)..."
+            placeholder="Search descriptions..."
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             onKeyDown={e => {
