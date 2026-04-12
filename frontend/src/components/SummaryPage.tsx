@@ -59,9 +59,17 @@ export default function SummaryPage() {
   const { sessionId, npub } = useSession();
   const pagedTool = useToolCall<PagedResult>("get_transactions_paged");
 
+  // Ungrouped state
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+
+  // Grouped state — groups are always complete, rows fetched per expanded group
   const [groups, setGroups] = useState<GroupAgg[]>([]);
+  const [groupRows, setGroupRows] = useState<Map<string, Transaction[]>>(new Map());
+  const [loadingGroups, setLoadingGroups] = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
   const [loading, setLoading] = useState(false);
   const [scope, setScope] = useState("all");
   const [groupBy, setGroupBy] = useState("category");
@@ -70,14 +78,11 @@ export default function SummaryPage() {
   const [sortDir, setSortDir] = useState("asc");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(0);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const isGrouped = groupBy !== "none";
 
-  const fetchPage = useCallback(async () => {
-    if (!sessionId) return;
-    setLoading(true);
+  // Build common server params
+  const baseParams = useCallback(() => {
     const params: Record<string, unknown> = {
       session_id: sessionId,
       npub,
@@ -86,49 +91,102 @@ export default function SummaryPage() {
       group_sort: groupSort,
       sort_col: sortCol,
       sort_dir: sortDir,
-      page,
-      page_size: PAGE_SIZE,
     };
     if (scope !== "all") {
       params.category = scope;
       params.classified_only = false;
     }
     if (search) params.search = search;
-    const data = await pagedTool.invoke(params);
+    return params;
+  }, [sessionId, npub, scope, groupBy, groupSort, sortCol, sortDir, search]);
+
+  // Fetch for ungrouped mode: server-paginated flat list
+  const fetchFlat = useCallback(async () => {
+    if (!sessionId || isGrouped) return;
+    setLoading(true);
+    const data = await pagedTool.invoke({ ...baseParams(), group_by: "none", page, page_size: PAGE_SIZE });
     if (data) {
       setTxns(data.transactions);
       setTotal(data.total);
-      setGroups(data.groups);
     }
     setLoading(false);
-  }, [sessionId, npub, scope, groupBy, groupSort, sortCol, sortDir, search, page]);
+  }, [sessionId, isGrouped, baseParams, page]);
 
-  useEffect(() => { fetchPage(); }, [fetchPage]);
+  // Fetch group list (no rows — just aggregates)
+  const fetchGroups = useCallback(async () => {
+    if (!sessionId || !isGrouped) return;
+    setLoading(true);
+    // Fetch page 0 with page_size=0 to get groups only (server returns empty transactions but full groups)
+    // Actually, fetch with page_size=1 to get groups + total
+    const data = await pagedTool.invoke({ ...baseParams(), page: 0, page_size: 1 });
+    if (data) {
+      setGroups(data.groups);
+      setTotal(data.total);
+      setGroupRows(new Map());
+    }
+    setLoading(false);
+  }, [sessionId, isGrouped, baseParams]);
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  // Fetch rows for a specific expanded group
+  async function fetchGroupRows(groupKey: string) {
+    if (!sessionId) return;
+    setLoadingGroups(prev => new Set(prev).add(groupKey));
+    // Use category/subcategory filter based on group dimension to fetch this group's rows
+    // The server's get_transactions_paged with the same group_by will return rows tagged with group_key
+    // Fetch a large page — group contents are typically <500 rows
+    const data = await pagedTool.invoke({ ...baseParams(), page: 0, page_size: 5000 });
+    if (data) {
+      // Extract only rows belonging to this group
+      const rows = data.transactions.filter(t => t.group_key === groupKey);
+      setGroupRows(prev => new Map(prev).set(groupKey, rows));
+    }
+    setLoadingGroups(prev => { const n = new Set(prev); n.delete(groupKey); return n; });
+  }
 
-  // Group lookup for rendering headers in the flat row list
-  const groupMap = useMemo(() => {
-    const m = new Map<string, GroupAgg>();
-    for (const g of groups) m.set(g.key, g);
-    return m;
+  useEffect(() => {
+    if (isGrouped) {
+      fetchGroups();
+      setCollapsed(new Set()); // expand all on fresh grouping
+    } else {
+      fetchFlat();
+    }
+  }, [isGrouped, fetchGroups, fetchFlat]);
+
+  // When expanding a group, fetch its rows if not cached
+  function toggleGroup(key: string) {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+        // Fetch rows if not cached
+        if (!groupRows.has(key)) fetchGroupRows(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  // Initial expand: fetch rows for visible groups
+  useEffect(() => {
+    if (isGrouped && groups.length > 0 && groupRows.size === 0) {
+      // Fetch all rows for the initial view
+      (async () => {
+        const data = await pagedTool.invoke({ ...baseParams(), page: 0, page_size: 5000 });
+        if (data) {
+          const byGroup = new Map<string, Transaction[]>();
+          for (const t of data.transactions) {
+            const arr = byGroup.get(t.group_key) ?? [];
+            arr.push(t);
+            byGroup.set(t.group_key, arr);
+          }
+          setGroupRows(byGroup);
+        }
+      })();
+    }
   }, [groups]);
 
-  // Detect group boundaries in the page for header insertion
-  const rowsWithHeaders = useMemo(() => {
-    if (!isGrouped) return txns.map(t => ({ type: "row" as const, data: t }));
-    const items: Array<{ type: "header"; key: string; agg: GroupAgg } | { type: "row"; data: Transaction }> = [];
-    let lastGroup = "";
-    for (const t of txns) {
-      if (t.group_key !== lastGroup) {
-        const agg = groupMap.get(t.group_key) ?? { key: t.group_key, count: 0, total_amount: 0 };
-        items.push({ type: "header", key: t.group_key, agg });
-        lastGroup = t.group_key;
-      }
-      items.push({ type: "row", data: t });
-    }
-    return items;
-  }, [txns, isGrouped, groupMap]);
+  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   const txColumns: Column<Transaction>[] = useMemo(() => [
     {
@@ -192,8 +250,23 @@ export default function SummaryPage() {
     },
   ], []);
 
-  // Sort is controlled by the dedicated Sort By dropdown + direction toggle.
-  // Column header clicks also trigger server-side sort.
+  const colHeader = (col: Column<Transaction>) => (
+    <th key={col.key}
+      onClick={() => { if (sortCol === col.key) { setSortDir(d => d === "asc" ? "desc" : "asc"); } else { setSortCol(col.key); setSortDir("asc"); } setPage(0); }}
+      className={`px-3 py-2 text-xs font-medium text-stone-400 cursor-pointer hover:text-stone-700 ${col.align === "right" ? "text-right" : "text-left"}`}>
+      {col.label} {sortCol === col.key ? (sortDir === "asc" ? "\u25B2" : "\u25BC") : ""}
+    </th>
+  );
+
+  const dataRow = (t: Transaction) => (
+    <tr key={t.id} className="border-b border-stone-100 hover:bg-stone-50">
+      {txColumns.map(col => (
+        <td key={col.key} className={`px-3 py-1.5 ${col.align === "right" ? "text-right" : ""} ${col.className ?? ""}`}>
+          {col.render(t)}
+        </td>
+      ))}
+    </tr>
+  );
 
   return (
     <div className="w-[85%] mx-auto relative">
@@ -205,29 +278,19 @@ export default function SummaryPage() {
             Categorized shows your AI-categorized activities — the accounting journal after rules and AI have assigned tax categories.
           </span>
         </span>
+        {loading && <span className="text-xs text-stone-400">Loading&hellip;</span>}
       </div>
 
       {/* Category chiclets */}
       <div className="flex flex-wrap gap-1.5 mb-4">
         {["all", "Schedule A", "Schedule C", "Internal Transfer", "Personal", "Duplicate"].map(f => (
-          <button
-            key={f}
-            onClick={() => { setScope(f); setPage(0); }}
+          <button key={f} onClick={() => { setScope(f); setPage(0); }}
             className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-              scope === f
-                ? "bg-stone-100 border-stone-400 font-medium text-stone-800"
-                : "border-stone-200 text-stone-400 hover:border-stone-300"
-            }`}
-          >
-            {f === "all" ? "All" : f}
-          </button>
+              scope === f ? "bg-stone-100 border-stone-400 font-medium text-stone-800" : "border-stone-200 text-stone-400 hover:border-stone-300"
+            }`}>{f === "all" ? "All" : f}</button>
         ))}
-        <button
-          onClick={() => fetchPage()}
-          className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded ml-1"
-        >
-          {loading ? "Loading\u2026" : "Refresh"}
-        </button>
+        <button onClick={() => isGrouped ? fetchGroups() : fetchFlat()}
+          className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded ml-1">Refresh</button>
         <span className="ml-auto text-xs text-stone-400">{total} categorized</span>
       </div>
 
@@ -235,21 +298,20 @@ export default function SummaryPage() {
       <div className="flex items-center gap-4 mb-3 flex-wrap">
         <div className="flex items-center gap-1.5">
           <label className="text-xs text-stone-400">Group</label>
-          <select value={groupBy} onChange={e => { setGroupBy(e.target.value); setPage(0); }}
+          <select value={groupBy} onChange={e => { setGroupBy(e.target.value); setPage(0); setGroupRows(new Map()); }}
             className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50">
             {GROUP_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           {isGrouped && (
-            <button onClick={() => { setGroupSort(d => d === "asc" ? "desc" : "asc"); setPage(0); }}
-              className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100"
-              title="Group order">
+            <button onClick={() => { setGroupSort(d => d === "asc" ? "desc" : "asc"); setPage(0); setGroupRows(new Map()); }}
+              className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100" title="Group order">
               {groupSort === "asc" ? "A\u2192Z" : "Z\u2192A"}
             </button>
           )}
         </div>
         <div className="flex items-center gap-1.5">
           <label className="text-xs text-stone-400">Sort by</label>
-          <select value={sortCol} onChange={e => { setSortCol(e.target.value); setPage(0); }}
+          <select value={sortCol} onChange={e => { setSortCol(e.target.value); setPage(0); if (isGrouped) setGroupRows(new Map()); }}
             className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50">
             <option value="date">Date</option>
             <option value="description">Description</option>
@@ -257,9 +319,8 @@ export default function SummaryPage() {
             <option value="account">Account</option>
             <option value="category">Category</option>
           </select>
-          <button onClick={() => { setSortDir(d => d === "asc" ? "desc" : "asc"); setPage(0); }}
-            className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100"
-            title="Sort direction">
+          <button onClick={() => { setSortDir(d => d === "asc" ? "desc" : "asc"); setPage(0); if (isGrouped) setGroupRows(new Map()); }}
+            className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100" title="Sort direction">
             {sortDir === "asc" ? "\u25B2" : "\u25BC"}
           </button>
         </div>
@@ -267,134 +328,90 @@ export default function SummaryPage() {
 
       {/* Search */}
       <div className="flex items-center gap-2 mb-4">
-        <input
-          className="flex-1 border border-stone-200 rounded-lg px-3 py-1.5 text-xs bg-stone-50 focus:outline-none focus:border-stone-400 font-mono"
-          placeholder="Search descriptions (regex)..."
-          value={searchInput}
+        <input className="flex-1 border border-stone-200 rounded-lg px-3 py-1.5 text-xs bg-stone-50 focus:outline-none focus:border-stone-400 font-mono"
+          placeholder="Search descriptions (regex)..." value={searchInput}
           onChange={e => setSearchInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") { setSearch(searchInput); setPage(0); } }}
-        />
-        {searchInput && (
-          <button onClick={() => { setSearch(searchInput); setPage(0); }}
-            className="text-xs bg-stone-900 text-white px-3 py-1.5 rounded-lg">Search</button>
-        )}
-        {search && (
-          <button onClick={() => { setSearch(""); setSearchInput(""); setPage(0); }}
-            className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded">Clear</button>
-        )}
+          onKeyDown={e => { if (e.key === "Enter") { setSearch(searchInput); setPage(0); } }} />
+        {searchInput && <button onClick={() => { setSearch(searchInput); setPage(0); }}
+          className="text-xs bg-stone-900 text-white px-3 py-1.5 rounded-lg">Search</button>}
+        {search && <button onClick={() => { setSearch(""); setSearchInput(""); setPage(0); }}
+          className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded">Clear</button>}
       </div>
 
-      {/* Table — server handles group/sort/page, client renders */}
+      {/* Grouped view — all group headers visible, rows expand/collapse */}
       {isGrouped && groups.length > 0 && (
-        <div className="flex justify-end mb-1">
-          <button
-            onClick={() => {
+        <>
+          <div className="flex justify-end mb-1">
+            <button onClick={() => {
               const allKeys = groups.map(g => g.key);
-              setCollapsed(prev => prev.size >= allKeys.length ? new Set() : new Set(allKeys));
-            }}
-            className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-0.5 rounded"
-          >
-            {collapsed.size >= groups.length ? "Expand All" : "Collapse All"}
-          </button>
-        </div>
-      )}
-      {isGrouped ? (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-200">
-              {txColumns.map(col => (
-                <th key={col.key}
-                  onClick={() => { if (sortCol === col.key) { setSortDir(d => d === "asc" ? "desc" : "asc"); } else { setSortCol(col.key); setSortDir("asc"); } setPage(0); }}
-                  className={`px-3 py-2 text-xs font-medium text-stone-400 cursor-pointer hover:text-stone-700 ${col.align === "right" ? "text-right" : "text-left"}`}>
-                  {col.label} {sortCol === col.key ? (sortDir === "asc" ? "\u25B2" : "\u25BC") : ""}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {(() => {
-              let currentGroup = "";
-              return rowsWithHeaders.map((item, i) => {
-                if (item.type === "header") {
-                  currentGroup = item.key;
-                  const isCollapsed = collapsed.has(item.key);
-                  return (
-                    <tr key={`gh-${item.key}-${i}`}
-                      className="bg-stone-50 border-t border-stone-200 cursor-pointer hover:bg-stone-100"
-                      onClick={() => setCollapsed(prev => {
-                        const next = new Set(prev);
-                        next.has(item.key) ? next.delete(item.key) : next.add(item.key);
-                        return next;
-                      })}>
-                      <td colSpan={txColumns.length - 1} className="px-3 py-2 text-xs font-semibold text-stone-600">
-                        <span className="mr-1.5">{isCollapsed ? "\u25B6" : "\u25BC"}</span>
-                        {item.key} <span className="font-normal text-stone-400">({item.agg.count})</span>
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono text-xs">
-                        <span className={item.agg.total_amount >= 0 ? "text-green-700" : "text-stone-700"}>
-                          {item.agg.total_amount.toFixed(2)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                }
-                if (collapsed.has(currentGroup)) return null;
-                const t = item.data;
-                return (
-                  <tr key={t.id} className="border-b border-stone-100 hover:bg-stone-50">
-                    {txColumns.map(col => (
-                      <td key={col.key} className={`px-3 py-1.5 ${col.align === "right" ? "text-right" : ""} ${col.className ?? ""}`}>
-                        {col.render(t)}
-                      </td>
-                    ))}
-                  </tr>
-                );
-              });
-            })()}
-          </tbody>
-        </table>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-200">
-              {txColumns.map(col => (
-                <th key={col.key}
-                  onClick={() => { if (sortCol === col.key) { setSortDir(d => d === "asc" ? "desc" : "asc"); } else { setSortCol(col.key); setSortDir("asc"); } setPage(0); }}
-                  className={`px-3 py-2 text-xs font-medium text-stone-400 cursor-pointer hover:text-stone-700 ${col.align === "right" ? "text-right" : "text-left"}`}>
-                  {col.label} {sortCol === col.key ? (sortDir === "asc" ? "\u25B2" : "\u25BC") : ""}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {txns.length === 0 ? (
-              <tr><td colSpan={txColumns.length} className="px-3 py-8 text-center text-stone-400 text-xs">No categorized transactions match this filter.</td></tr>
-            ) : txns.map(t => (
-              <tr key={t.id} className="border-b border-stone-100 hover:bg-stone-50">
-                {txColumns.map(col => (
-                  <td key={col.key} className={`px-3 py-1.5 ${col.align === "right" ? "text-right" : ""} ${col.className ?? ""}`}>
-                    {col.render(t)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              const allCollapsed = collapsed.size >= allKeys.length;
+              setCollapsed(allCollapsed ? new Set() : new Set(allKeys));
+            }} className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-0.5 rounded">
+              {collapsed.size >= groups.length ? "Expand All" : "Collapse All"}
+            </button>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-stone-200">{txColumns.map(colHeader)}</tr>
+            </thead>
+            <tbody>
+              {groups.map(g => {
+                const isCollapsed = collapsed.has(g.key);
+                const rows = groupRows.get(g.key) ?? [];
+                const isLoading = loadingGroups.has(g.key);
+                return [
+                  <tr key={`gh-${g.key}`}
+                    className="bg-stone-50 border-t border-stone-200 cursor-pointer hover:bg-stone-100"
+                    onClick={() => toggleGroup(g.key)}>
+                    <td colSpan={txColumns.length - 1} className="px-3 py-2 text-xs font-semibold text-stone-600">
+                      <span className="mr-1.5">{isCollapsed ? "\u25B6" : "\u25BC"}</span>
+                      {g.key} <span className="font-normal text-stone-400">({g.count})</span>
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-xs">
+                      <span className={g.total_amount >= 0 ? "text-green-700" : "text-stone-700"}>
+                        {g.total_amount.toFixed(2)}
+                      </span>
+                    </td>
+                  </tr>,
+                  ...(!isCollapsed ? (
+                    isLoading ? [
+                      <tr key={`gl-${g.key}`}><td colSpan={txColumns.length} className="px-3 py-2 text-xs text-stone-400">Loading&hellip;</td></tr>
+                    ] : rows.map(dataRow)
+                  ) : []),
+                ];
+              })}
+            </tbody>
+          </table>
+        </>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-2.5 mt-2 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-400">
-          <div className="flex gap-2">
-            <button onClick={() => setPage(0)} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30" title="First page">|&larr;</button>
-            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
-          </div>
-          <span>Page {page + 1} of {totalPages} ({total} total)</span>
-          <div className="flex gap-2">
-            <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
-            <button onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30">&rarr;|</button>
-          </div>
-        </div>
+      {/* Ungrouped view — server-paginated flat list */}
+      {!isGrouped && (
+        <>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-stone-200">{txColumns.map(colHeader)}</tr>
+            </thead>
+            <tbody>
+              {txns.length === 0 ? (
+                <tr><td colSpan={txColumns.length} className="px-3 py-8 text-center text-stone-400 text-xs">No categorized transactions match this filter.</td></tr>
+              ) : txns.map(dataRow)}
+            </tbody>
+          </table>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2.5 mt-2 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-400">
+              <div className="flex gap-2">
+                <button onClick={() => setPage(0)} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30" title="First page">|&larr;</button>
+                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
+              </div>
+              <span>Page {page + 1} of {totalPages} ({total} total)</span>
+              <div className="flex gap-2">
+                <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
+                <button onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30" title="Last page">&rarr;|</button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -95,16 +95,23 @@ export default function TransactionsPage() {
   const saveRuleTool = useToolCall("save_rule");
   const applyRulesTool = useToolCall<{ updated: number }>("apply_rules");
 
+  // Ungrouped state
   const [txns, setTxns] = useState<Transaction[]>([]);
-  const [groups, setGroups] = useState<GroupAgg[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+
+  // Grouped state
+  const [groups, setGroups] = useState<GroupAgg[]>([]);
+  const [groupRows, setGroupRows] = useState<Map<string, Transaction[]>>(new Map());
+  // Group rows are fetched in bulk on group change — no per-group loading state needed
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState(searchParams.get("category") ?? "all");
   const [subFilter, setSubFilter] = useState(searchParams.get("subcategory") ?? "");
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
   const [amountExpr, setAmountExpr] = useState("");
-  const [page, setPage] = useState(0);
   const [groupSort, setGroupSort] = useState("asc");
   const [sortCol, setSortCol] = useState("date");
   const [sortDir, setSortDir] = useState("asc");
@@ -121,46 +128,74 @@ export default function TransactionsPage() {
   const [ruleApplied, setRuleApplied] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState("none");
   const [scope, setScope] = useState("all");
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const PAGE_SIZE = 200;
   const isGrouped = groupBy !== "none";
 
-  const fetchPage = useCallback(async () => {
-    if (!sessionId) return;
-    setError(null);
-    setLoading(true);
+  const baseParams = useCallback(() => {
+    const args: Record<string, unknown> = {
+      session_id: sessionId, npub,
+      group_by: groupBy, group_sort: groupSort,
+      sort_col: sortCol, sort_dir: sortDir,
+    };
+    if (filter === "Unclassified") args.unclassified_only = true;
+    else if (filter !== "all") args.category = filter;
+    if (subFilter) args.subcategory = subFilter;
+    if (search) args.search = search;
+    return args;
+  }, [sessionId, npub, filter, subFilter, search, groupBy, groupSort, sortCol, sortDir]);
+
+  // Ungrouped: server-paginated flat list
+  const fetchFlat = useCallback(async () => {
+    if (!sessionId || isGrouped) return;
+    setError(null); setLoading(true);
     try {
-      const args: Record<string, unknown> = {
-        session_id: sessionId,
-        npub,
-        group_by: groupBy,
-        group_sort: groupSort,
-        sort_col: sortCol,
-        sort_dir: sortDir,
-        page,
-        page_size: PAGE_SIZE,
-      };
-      if (filter === "Unclassified") {
-        args.unclassified_only = true;
-      } else if (filter !== "all") {
-        args.category = filter;
-      }
-      if (subFilter) args.subcategory = subFilter;
-      if (search) args.search = search;
-      const data = await pagedTool.invoke(args);
+      const data = await pagedTool.invoke({ ...baseParams(), group_by: "none", page, page_size: PAGE_SIZE });
       if (data) {
         setTxns(data.transactions ?? []);
-        setGroups(data.groups ?? []);
         setTotal(data.total ?? 0);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load transactions");
     }
     setLoading(false);
-  }, [sessionId, npub, filter, subFilter, search, groupBy, groupSort, sortCol, sortDir, page]);
+  }, [sessionId, isGrouped, baseParams, page]);
 
-  useEffect(() => { fetchPage(); }, [fetchPage]);
+  // Grouped: fetch group list + all rows (for expand/collapse)
+  const fetchGrouped = useCallback(async () => {
+    if (!sessionId || !isGrouped) return;
+    setError(null); setLoading(true);
+    try {
+      const data = await pagedTool.invoke({ ...baseParams(), page: 0, page_size: 5000 });
+      if (data) {
+        setGroups(data.groups ?? []);
+        setTotal(data.total ?? 0);
+        const byGroup = new Map<string, Transaction[]>();
+        for (const t of data.transactions) {
+          const arr = byGroup.get((t as Transaction & { group_key: string }).group_key) ?? [];
+          arr.push(t);
+          byGroup.set((t as Transaction & { group_key: string }).group_key, arr);
+        }
+        setGroupRows(byGroup);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load transactions");
+    }
+    setLoading(false);
+  }, [sessionId, isGrouped, baseParams]);
+
+  useEffect(() => {
+    if (isGrouped) { fetchGrouped(); setCollapsed(new Set()); }
+    else { fetchFlat(); }
+  }, [isGrouped, fetchGrouped, fetchFlat]);
+
+  function toggleGroup(key: string) {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
 
   function openEdit(t: Transaction) {
     setSelected(t);
@@ -193,7 +228,7 @@ export default function TransactionsPage() {
       description: desc,
     });
     setRuleApplied(null);
-    fetchPage();
+    isGrouped ? fetchGrouped() : fetchFlat();
   }
 
   async function handleCreateRule() {
@@ -218,7 +253,7 @@ export default function TransactionsPage() {
     });
     if (result?.updated !== undefined) {
       setRuleApplied(`Rule applied — ${result.updated} transactions updated`);
-      fetchPage();
+      isGrouped ? fetchGrouped() : fetchFlat();
     }
   }
 
@@ -237,7 +272,7 @@ export default function TransactionsPage() {
       npub,
     });
     setSelected(null);
-    fetchPage();
+    isGrouped ? fetchGrouped() : fetchFlat();
   }
 
   const GROUP_OPTIONS = [
@@ -260,30 +295,7 @@ export default function TransactionsPage() {
   ];
 
   // Server handles filter + group + sort + pagination.
-  // Client just renders what it gets.
   const totalPages = Math.ceil(total / PAGE_SIZE);
-
-  const groupMap = useMemo(() => {
-    const m = new Map<string, GroupAgg>();
-    for (const g of groups) m.set(g.key, g);
-    return m;
-  }, [groups]);
-
-  // Detect group boundaries for header insertion
-  const rowsWithHeaders = useMemo(() => {
-    if (!isGrouped) return txns.map(t => ({ type: "row" as const, data: t }));
-    const items: Array<{ type: "header"; key: string; agg: GroupAgg } | { type: "row"; data: Transaction & { group_key: string } }> = [];
-    let lastGroup = "";
-    for (const t of txns as (Transaction & { group_key: string })[]) {
-      if (t.group_key !== lastGroup) {
-        const agg = groupMap.get(t.group_key) ?? { key: t.group_key, count: 0, total_amount: 0 };
-        items.push({ type: "header", key: t.group_key, agg });
-        lastGroup = t.group_key;
-      }
-      items.push({ type: "row", data: t });
-    }
-    return items;
-  }, [txns, isGrouped, groupMap]);
 
   const txColumns: Column<Transaction>[] = useMemo(() => [
     {
@@ -380,7 +392,7 @@ export default function TransactionsPage() {
         <div className="flex items-center gap-2 flex-wrap mb-3">
           {/* Raw transaction data — no category chiclets */}
           <button
-            onClick={() => fetchPage()}
+            onClick={() => isGrouped ? fetchGrouped() : fetchFlat()}
             className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded ml-1"
           >
             {loading ? "Loading\u2026" : "Refresh"}
@@ -489,7 +501,7 @@ export default function TransactionsPage() {
               <tr className="border-b border-stone-200">
                 {txColumns.map(col => (
                   <th key={col.key}
-                    onClick={() => { if (sortCol === col.key) { setSortDir(d => d === "asc" ? "desc" : "asc"); } else { setSortCol(col.key); setSortDir("asc"); } setPage(0); }}
+                    onClick={() => { if (sortCol === col.key) { setSortDir(d => d === "asc" ? "desc" : "asc"); } else { setSortCol(col.key); setSortDir("asc"); } setPage(0); setGroupRows(new Map()); }}
                     className={`px-3 py-2 text-xs font-medium text-stone-400 cursor-pointer hover:text-stone-700 ${col.align === "right" ? "text-right" : "text-left"}`}>
                     {col.label} {sortCol === col.key ? (sortDir === "asc" ? "\u25B2" : "\u25BC") : ""}
                   </th>
@@ -497,35 +509,24 @@ export default function TransactionsPage() {
               </tr>
             </thead>
             <tbody>
-              {(() => {
-                let currentGroup = "";
-                return rowsWithHeaders.map((item, i) => {
-                  if (item.type === "header") {
-                    currentGroup = item.key;
-                    const isCollapsed = collapsed.has(item.key);
-                    return (
-                      <tr key={`gh-${item.key}-${i}`}
-                        className="bg-stone-50 border-t border-stone-200 cursor-pointer hover:bg-stone-100"
-                        onClick={() => setCollapsed(prev => {
-                          const next = new Set(prev);
-                          next.has(item.key) ? next.delete(item.key) : next.add(item.key);
-                          return next;
-                        })}>
-                        <td colSpan={txColumns.length - 1} className="px-3 py-2 text-xs font-semibold text-stone-600">
-                          <span className="mr-1.5">{isCollapsed ? "\u25B6" : "\u25BC"}</span>
-                          {item.key} <span className="font-normal text-stone-400">({item.agg.count})</span>
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono text-xs">
-                          <span className={item.agg.total_amount >= 0 ? "text-green-700" : "text-stone-700"}>
-                            {item.agg.total_amount.toFixed(2)}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  }
-                  if (collapsed.has(currentGroup)) return null;
-                  const t = item.data;
-                  return (
+              {groups.map(g => {
+                const isCollapsed = collapsed.has(g.key);
+                const rows = groupRows.get(g.key) ?? [];
+                return [
+                  <tr key={`gh-${g.key}`}
+                    className="bg-stone-50 border-t border-stone-200 cursor-pointer hover:bg-stone-100"
+                    onClick={() => toggleGroup(g.key)}>
+                    <td colSpan={txColumns.length - 1} className="px-3 py-2 text-xs font-semibold text-stone-600">
+                      <span className="mr-1.5">{isCollapsed ? "\u25B6" : "\u25BC"}</span>
+                      {g.key} <span className="font-normal text-stone-400">({g.count})</span>
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-xs">
+                      <span className={g.total_amount >= 0 ? "text-green-700" : "text-stone-700"}>
+                        {g.total_amount.toFixed(2)}
+                      </span>
+                    </td>
+                  </tr>,
+                  ...(!isCollapsed ? rows.map(t => (
                     <tr key={t.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer" onClick={() => openEdit(t)}>
                       {txColumns.map(col => (
                         <td key={col.key} className={`px-3 py-1.5 ${col.align === "right" ? "text-right" : ""} ${col.className ?? ""}`}>
@@ -533,9 +534,9 @@ export default function TransactionsPage() {
                         </td>
                       ))}
                     </tr>
-                  );
-                });
-              })()}
+                  )) : []),
+                ];
+              })}
             </tbody>
           </table>
         ) : (
