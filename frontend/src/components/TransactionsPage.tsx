@@ -106,6 +106,7 @@ export default function TransactionsPage() {
   const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
   const [amountExpr, setAmountExpr] = useState("");
   const [page, setPage] = useState(0);
+  const [groupSort, setGroupSort] = useState("asc");
   const [sortCol, setSortCol] = useState("date");
   const [sortDir, setSortDir] = useState("asc");
   const [selected, setSelected] = useState<Transaction | null>(null);
@@ -134,6 +135,7 @@ export default function TransactionsPage() {
         session_id: sessionId,
         npub,
         group_by: groupBy,
+        group_sort: groupSort,
         sort_col: sortCol,
         sort_dir: sortDir,
         page,
@@ -156,7 +158,7 @@ export default function TransactionsPage() {
       setError(e instanceof Error ? e.message : "Failed to load transactions");
     }
     setLoading(false);
-  }, [sessionId, npub, filter, subFilter, search, groupBy, sortCol, sortDir, page]);
+  }, [sessionId, npub, filter, subFilter, search, groupBy, groupSort, sortCol, sortDir, page]);
 
   useEffect(() => { fetchPage(); }, [fetchPage]);
 
@@ -390,23 +392,40 @@ export default function TransactionsPage() {
         <div className="flex items-center gap-3 mb-3">
           <div className="flex items-center gap-1.5">
             <label className="text-xs text-stone-400">Group</label>
-            <select
-              value={groupBy}
-              onChange={e => { setGroupBy(e.target.value); setPage(0); }}
-              className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50"
-            >
+            <select value={groupBy} onChange={e => { setGroupBy(e.target.value); setPage(0); }}
+              className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50">
               {GROUP_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
+            {isGrouped && (
+              <button onClick={() => { setGroupSort(d => d === "asc" ? "desc" : "asc"); setPage(0); }}
+                className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100"
+                title="Group order">
+                {groupSort === "asc" ? "A\u2192Z" : "Z\u2192A"}
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             <label className="text-xs text-stone-400">Show</label>
-            <select
-              value={scope}
-              onChange={e => { setScope(e.target.value); setPage(0); }}
-              className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50"
-            >
+            <select value={scope} onChange={e => { setScope(e.target.value); setPage(0); }}
+              className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50">
               {SCOPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-stone-400">Sort by</label>
+            <select value={sortCol} onChange={e => { setSortCol(e.target.value); setPage(0); }}
+              className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50">
+              <option value="date">Date</option>
+              <option value="description">Description</option>
+              <option value="amount">Amount</option>
+              <option value="account">Account</option>
+              <option value="category">Category</option>
+            </select>
+            <button onClick={() => { setSortDir(d => d === "asc" ? "desc" : "asc"); setPage(0); }}
+              className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100"
+              title="Sort direction">
+              {sortDir === "asc" ? "\u25B2" : "\u25BC"}
+            </button>
           </div>
         </div>
 
@@ -457,7 +476,7 @@ export default function TransactionsPage() {
               <tr className="border-b border-stone-200">
                 {txColumns.map(col => (
                   <th key={col.key}
-                    onClick={() => { setSortCol(col.key); setSortDir(d => sortCol === col.key ? (d === "asc" ? "desc" : "asc") : "asc"); setPage(0); }}
+                    onClick={() => { if (sortCol === col.key) { setSortDir(d => d === "asc" ? "desc" : "asc"); } else { setSortCol(col.key); setSortDir("asc"); } setPage(0); }}
                     className={`px-3 py-2 text-xs font-medium text-stone-400 cursor-pointer hover:text-stone-700 ${col.align === "right" ? "text-right" : "text-left"}`}>
                     {col.label} {sortCol === col.key ? (sortDir === "asc" ? "\u25B2" : "\u25BC") : ""}
                   </th>

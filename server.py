@@ -396,6 +396,7 @@ async def get_transactions_paged(
     unclassified_only: bool = False,
     classified_only: bool = False,
     group_by: str = "none",
+    group_sort: str = "asc",
     sort_col: str = "date",
     sort_dir: str = "asc",
     page: int = 0,
@@ -404,16 +405,17 @@ async def get_transactions_paged(
 ) -> dict[str, Any]:
     """Server-side filtered, grouped, sorted, paginated transactions.
 
-    Groups and sorts the full dataset on the server, then returns one
-    page. Includes per-group aggregates (count + total_amount) so the
-    client can render group headers at any page boundary.
+    group_sort controls the order of groups (A-Z vs Z-A).
+    sort_col + sort_dir control row order within each group.
+    When group_by='none', only sort_col + sort_dir apply.
     """
     from tools.transactions import get_transactions_paged as _get_paged
     return await _get_paged(
         session_id=session_id, category=category, subcategory=subcategory,
         month=month, search=search, account=account,
         unclassified_only=unclassified_only, classified_only=classified_only,
-        group_by=group_by, sort_col=sort_col, sort_dir=sort_dir,
+        group_by=group_by, group_sort=group_sort,
+        sort_col=sort_col, sort_dir=sort_dir,
         page=page, page_size=page_size,
     )
 

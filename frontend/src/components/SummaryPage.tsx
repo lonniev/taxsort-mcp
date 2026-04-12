@@ -66,6 +66,7 @@ export default function SummaryPage() {
   const [loading, setLoading] = useState(false);
   const [scope, setScope] = useState("all");
   const [groupBy, setGroupBy] = useState("category");
+  const [groupSort, setGroupSort] = useState("asc");
   const [sortCol, setSortCol] = useState("date");
   const [sortDir, setSortDir] = useState("asc");
   const [searchInput, setSearchInput] = useState("");
@@ -82,6 +83,7 @@ export default function SummaryPage() {
       npub,
       classified_only: scope === "all",
       group_by: groupBy,
+      group_sort: groupSort,
       sort_col: sortCol,
       sort_dir: sortDir,
       page,
@@ -99,7 +101,7 @@ export default function SummaryPage() {
       setGroups(data.groups);
     }
     setLoading(false);
-  }, [sessionId, npub, scope, groupBy, sortCol, sortDir, search, page]);
+  }, [sessionId, npub, scope, groupBy, groupSort, sortCol, sortDir, search, page]);
 
   useEffect(() => { fetchPage(); }, [fetchPage]);
 
@@ -190,15 +192,8 @@ export default function SummaryPage() {
     },
   ], []);
 
-  function handleSort(col: string) {
-    if (col === sortCol) {
-      setSortDir(d => d === "asc" ? "desc" : "asc");
-    } else {
-      setSortCol(col);
-      setSortDir("asc");
-    }
-    setPage(0);
-  }
+  // Sort is controlled by the dedicated Sort By dropdown + direction toggle.
+  // Column header clicks also trigger server-side sort.
 
   return (
     <div className="w-[85%] mx-auto relative">
@@ -236,17 +231,37 @@ export default function SummaryPage() {
         <span className="ml-auto text-xs text-stone-400">{total} categorized</span>
       </div>
 
-      {/* Group by */}
-      <div className="flex items-center gap-3 mb-3">
+      {/* Group + Sort controls */}
+      <div className="flex items-center gap-4 mb-3 flex-wrap">
         <div className="flex items-center gap-1.5">
           <label className="text-xs text-stone-400">Group</label>
-          <select
-            value={groupBy}
-            onChange={e => { setGroupBy(e.target.value); setPage(0); }}
-            className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50"
-          >
+          <select value={groupBy} onChange={e => { setGroupBy(e.target.value); setPage(0); }}
+            className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50">
             {GROUP_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
+          {isGrouped && (
+            <button onClick={() => { setGroupSort(d => d === "asc" ? "desc" : "asc"); setPage(0); }}
+              className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100"
+              title="Group order">
+              {groupSort === "asc" ? "A\u2192Z" : "Z\u2192A"}
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <label className="text-xs text-stone-400">Sort by</label>
+          <select value={sortCol} onChange={e => { setSortCol(e.target.value); setPage(0); }}
+            className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50">
+            <option value="date">Date</option>
+            <option value="description">Description</option>
+            <option value="amount">Amount</option>
+            <option value="account">Account</option>
+            <option value="category">Category</option>
+          </select>
+          <button onClick={() => { setSortDir(d => d === "asc" ? "desc" : "asc"); setPage(0); }}
+            className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100"
+            title="Sort direction">
+            {sortDir === "asc" ? "\u25B2" : "\u25BC"}
+          </button>
         </div>
       </div>
 
@@ -276,7 +291,7 @@ export default function SummaryPage() {
             <tr className="border-b border-stone-200">
               {txColumns.map(col => (
                 <th key={col.key}
-                  onClick={() => handleSort(col.key)}
+                  onClick={() => { if (sortCol === col.key) { setSortDir(d => d === "asc" ? "desc" : "asc"); } else { setSortCol(col.key); setSortDir("asc"); } setPage(0); }}
                   className={`px-3 py-2 text-xs font-medium text-stone-400 cursor-pointer hover:text-stone-700 ${col.align === "right" ? "text-right" : "text-left"}`}>
                   {col.label} {sortCol === col.key ? (sortDir === "asc" ? "\u25B2" : "\u25BC") : ""}
                 </th>

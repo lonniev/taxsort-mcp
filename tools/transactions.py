@@ -149,6 +149,7 @@ async def get_transactions_paged(
     unclassified_only: bool = False,
     classified_only: bool = False,
     group_by: str = "none",
+    group_sort: str = "asc",
     sort_col: str = "date",
     sort_dir: str = "asc",
     page: int = 0,
@@ -228,7 +229,8 @@ async def get_transactions_paged(
         "category": "COALESCE(c.category, 'zzz')",
     }
     sort_expr = sort_map.get(sort_col, "r.date")
-    sort_direction = "DESC" if sort_dir == "desc" else "ASC"
+    row_direction = "DESC" if sort_dir == "desc" else "ASC"
+    grp_direction = "DESC" if group_sort == "desc" else "ASC"
 
     # ── Total count ──
     total_row = await fetchrow(
@@ -253,7 +255,7 @@ async def get_transactions_paged(
                   ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
                 WHERE {where_clause}
                 GROUP BY gk
-                ORDER BY gk {sort_direction}""",
+                ORDER BY gk {grp_direction}""",
             *params,
         )
         groups = [
@@ -263,9 +265,9 @@ async def get_transactions_paged(
 
     # ── Paged rows (ordered by group then sort) ──
     order_clause = (
-        f"{group_expr} {sort_direction}, {sort_expr} {sort_direction}, r.amount, r.description"
+        f"{group_expr} {grp_direction}, {sort_expr} {row_direction}, r.amount, r.description"
         if group_by != "none"
-        else f"{sort_expr} {sort_direction}, r.amount, r.description"
+        else f"{sort_expr} {row_direction}, r.amount, r.description"
     )
 
     rows = await fetch(
