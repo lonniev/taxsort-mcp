@@ -107,7 +107,7 @@ export default function TransactionsPage() {
   const [groupBy, setGroupBy] = useState("none");
   const [scope, setScope] = useState("all");
 
-  const LIMIT = 100;
+  const LIMIT = 500;
   const isGrouped = groupBy !== "none";
 
   const fetchTxns = useCallback(async (cat: string, sub: string, srch: string, off: number) => {
