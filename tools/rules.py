@@ -180,19 +180,30 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
             "new_description": r.get("new_description"),
         })
 
-    # Fetch all transactions — rules apply to everything.
+    # Fetch all transactions with their current classification fields
+    # so rules can match against merchant names and description overrides.
     txns = await fetch(
-        "SELECT id, description, amount FROM raw_transactions WHERE session_id=$1",
+        """SELECT r.id, r.description, r.amount,
+                  c.merchant, c.description_override
+           FROM raw_transactions r
+           LEFT JOIN classifications c
+             ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
+           WHERE r.session_id=$1""",
         session_id,
     )
 
     inserts = []
     for tx in txns:
-        desc = str(tx["description"])
+        raw_desc = str(tx["description"])
+        merchant = str(tx.get("merchant") or "")
+        desc_override = str(tx.get("description_override") or "")
         amount = float(tx["amount"])
 
+        # Match against all visible text fields
+        searchable = f"{raw_desc} {merchant} {desc_override}"
+
         for rule in compiled:
-            if not rule["pattern"].search(desc):
+            if not rule["pattern"].search(searchable):
                 continue
             if rule["amount_op"] and rule["amount_val"] is not None:
                 if not _amount_matches(amount, rule["amount_op"], rule["amount_val"]):
@@ -202,7 +213,7 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
                 session_id,
                 rule["category"],
                 rule["subcategory"],
-                rule.get("new_description"),
+                rule.get("new_description") or None,
             ))
             break
 
@@ -217,7 +228,7 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
             ON CONFLICT (raw_transaction_id, session_id) DO UPDATE SET
                 category = EXCLUDED.category,
                 subcategory = EXCLUDED.subcategory,
-                description_override = EXCLUDED.description_override,
+                description_override = COALESCE(EXCLUDED.description_override, classifications.description_override),
                 classified_by = 'rule',
                 classified_at = NOW()
             """,
@@ -240,13 +251,18 @@ async def count_rule_matches(
         return {"matches": 0, "error": f"Invalid regex: {e}"}
 
     txns = await fetch(
-        "SELECT description, amount FROM raw_transactions WHERE session_id=$1",
+        """SELECT r.description, r.amount, c.merchant, c.description_override
+           FROM raw_transactions r
+           LEFT JOIN classifications c
+             ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
+           WHERE r.session_id=$1""",
         session_id,
     )
 
     count = 0
     for tx in txns:
-        if not pat.search(str(tx["description"])):
+        searchable = f"{tx['description']} {tx.get('merchant') or ''} {tx.get('description_override') or ''}"
+        if not pat.search(searchable):
             continue
         if amount_operator and amount_value is not None:
             if not _amount_matches(float(tx["amount"]), amount_operator, amount_value):
