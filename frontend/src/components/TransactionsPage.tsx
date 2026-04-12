@@ -3,7 +3,6 @@ import { useSearchParams } from "react-router-dom";
 import { useSession } from "../App";
 import ReasonText from "./ReasonText";
 import { useToolCall } from "../hooks/useMCP";
-import SortableTable from "./SortableTable";
 import type { Column } from "./SortableTable";
 // Amount filtering is now a UI input — server-side support TBD
 
@@ -540,13 +539,32 @@ export default function TransactionsPage() {
             </tbody>
           </table>
         ) : (
-          <SortableTable<Transaction>
-            columns={txColumns}
-            rows={txns}
-            rowKey={t => t.id}
-            onRowClick={openEdit}
-            emptyMessage="No transactions match this filter."
-          />
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-stone-200">
+                {txColumns.map(col => (
+                  <th key={col.key}
+                    onClick={() => { if (sortCol === col.key) { setSortDir(d => d === "asc" ? "desc" : "asc"); } else { setSortCol(col.key); setSortDir("asc"); } setPage(0); }}
+                    className={`px-3 py-2 text-xs font-medium text-stone-400 cursor-pointer hover:text-stone-700 ${col.align === "right" ? "text-right" : "text-left"}`}>
+                    {col.label} {sortCol === col.key ? (sortDir === "asc" ? "\u25B2" : "\u25BC") : ""}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {txns.length === 0 ? (
+                <tr><td colSpan={txColumns.length} className="px-3 py-8 text-center text-stone-400 text-xs">No transactions match this filter.</td></tr>
+              ) : txns.map(t => (
+                <tr key={t.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer" onClick={() => openEdit(t)}>
+                  {txColumns.map(col => (
+                    <td key={col.key} className={`px-3 py-1.5 ${col.align === "right" ? "text-right" : ""} ${col.className ?? ""}`}>
+                      {col.render(t)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-2.5 mt-2 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-400">

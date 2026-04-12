@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useSession } from "../App";
-import SortableTable from "./SortableTable";
 import type { Column } from "./SortableTable";
 import { useToolCall } from "../hooks/useMCP";
 import ReasonText from "./ReasonText";
@@ -355,12 +354,32 @@ export default function SummaryPage() {
           </tbody>
         </table>
       ) : (
-        <SortableTable<Transaction>
-          columns={txColumns}
-          rows={txns}
-          rowKey={t => t.id}
-          emptyMessage="No categorized transactions match this filter."
-        />
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-stone-200">
+              {txColumns.map(col => (
+                <th key={col.key}
+                  onClick={() => { if (sortCol === col.key) { setSortDir(d => d === "asc" ? "desc" : "asc"); } else { setSortCol(col.key); setSortDir("asc"); } setPage(0); }}
+                  className={`px-3 py-2 text-xs font-medium text-stone-400 cursor-pointer hover:text-stone-700 ${col.align === "right" ? "text-right" : "text-left"}`}>
+                  {col.label} {sortCol === col.key ? (sortDir === "asc" ? "\u25B2" : "\u25BC") : ""}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {txns.length === 0 ? (
+              <tr><td colSpan={txColumns.length} className="px-3 py-8 text-center text-stone-400 text-xs">No categorized transactions match this filter.</td></tr>
+            ) : txns.map(t => (
+              <tr key={t.id} className="border-b border-stone-100 hover:bg-stone-50">
+                {txColumns.map(col => (
+                  <td key={col.key} className={`px-3 py-1.5 ${col.align === "right" ? "text-right" : ""} ${col.className ?? ""}`}>
+                    {col.render(t)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
 
       {/* Pagination */}
