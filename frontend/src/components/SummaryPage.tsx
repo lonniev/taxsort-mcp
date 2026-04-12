@@ -49,29 +49,33 @@ const GROUP_OPTIONS: [string, string][] = [
   ["category+subcategory", "Category + Sub"],
 ];
 
-const LIMIT = 500;
+// All rows fetched once; pagination is client-side.
 
 export default function SummaryPage() {
   const { sessionId, npub } = useSession();
   const txTool = useToolCall<TxResult>("get_transactions");
 
-  const [txns, setTxns] = useState<Transaction[]>([]);
-  const [_total, setTotal] = useState(0);
+  const [allTxns, setAllTxns] = useState<Transaction[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [scope, setScope] = useState("all");
   const [groupBy, setGroupBy] = useState("category");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [amountExpr, setAmountExpr] = useState("");
-  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState(0);
 
-  async function fetchTxns() {
+  const PAGE_SIZE = 200;
+
+  // Fetch ALL categorized rows once. Re-fetch on session/scope/search change.
+  async function fetchAll() {
     if (!sessionId) return;
-    // Fetch only categorized transactions (not unclassified)
+    setLoading(true);
     const params: Record<string, unknown> = {
       session_id: sessionId,
       npub,
-      limit: LIMIT,
-      offset,
+      limit: 10000,
+      offset: 0,
     };
     if (scope !== "all") {
       params.category = scope;
@@ -81,22 +85,28 @@ export default function SummaryPage() {
     }
     const data = await txTool.invoke(params);
     if (data) {
-      setTxns(data.transactions);
+      setAllTxns(data.transactions);
       setTotal(data.total);
     }
+    setLoading(false);
   }
 
   useEffect(() => {
-    fetchTxns();
-  }, [sessionId, scope, search, offset]);
+    fetchAll();
+    setPage(0);
+  }, [sessionId, scope, search]);
 
   const amountFilter = useMemo(() => parseAmountFilter(amountExpr), [amountExpr]);
   const isGrouped = groupBy !== "none";
 
-  const filtered = txns.filter(t => {
-    if (amountFilter && !amountFilter(t.amount)) return false;
-    return true;
-  });
+  const filtered = useMemo(() => {
+    let rows = allTxns;
+    if (amountFilter) rows = rows.filter(t => amountFilter(t.amount));
+    return rows;
+  }, [allTxns, amountFilter]);
+
+  const displayRows = isGrouped ? filtered : filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
 
   function groupKey(t: Transaction): string {
     switch (groupBy) {
@@ -198,7 +208,7 @@ export default function SummaryPage() {
         {["all", "Schedule A", "Schedule C", "Internal Transfer", "Personal", "Duplicate"].map(f => (
           <button
             key={f}
-            onClick={() => { setScope(f); setOffset(0); }}
+            onClick={() => { setScope(f); setPage(0); }}
             className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
               scope === f
                 ? "bg-stone-100 border-stone-400 font-medium text-stone-800"
@@ -209,12 +219,12 @@ export default function SummaryPage() {
           </button>
         ))}
         <button
-          onClick={() => fetchTxns()}
+          onClick={() => fetchAll()}
           className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded ml-1"
         >
-          Refresh
+          {loading ? "Loading\u2026" : "Refresh"}
         </button>
-        <span className="ml-auto text-xs text-stone-400">{_total} categorized</span>
+        <span className="ml-auto text-xs text-stone-400">{total} categorized</span>
       </div>
 
       {/* Group by */}
@@ -238,7 +248,7 @@ export default function SummaryPage() {
           placeholder="Search descriptions (regex)..."
           value={searchInput}
           onChange={e => setSearchInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") { setSearch(searchInput); setOffset(0); } }}
+          onKeyDown={e => { if (e.key === "Enter") { setSearch(searchInput); setPage(0); } }}
         />
         <input
           className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 w-36 font-mono"
@@ -249,7 +259,7 @@ export default function SummaryPage() {
         />
         {searchInput && (
           <button
-            onClick={() => { setSearch(searchInput); setOffset(0); }}
+            onClick={() => { setSearch(searchInput); setPage(0); }}
             className="text-xs bg-stone-900 text-white px-3 py-1.5 rounded-lg"
           >
             Search
@@ -257,7 +267,7 @@ export default function SummaryPage() {
         )}
         {(search || amountExpr) && (
           <button
-            onClick={() => { setSearch(""); setSearchInput(""); setAmountExpr(""); setOffset(0); }}
+            onClick={() => { setSearch(""); setSearchInput(""); setAmountExpr(""); setPage(0); }}
             className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded"
           >
             Clear filters
@@ -267,7 +277,7 @@ export default function SummaryPage() {
 
       <SortableTable<Transaction>
         columns={txColumns}
-        rows={filtered}
+        rows={displayRows}
         rowKey={t => t.id}
         groupBy={isGrouped ? groupKey : undefined}
         groupLabel={(gk, rows) => (
@@ -283,11 +293,11 @@ export default function SummaryPage() {
         )}
         emptyMessage="No categorized transactions match this filter."
       />
-      {!isGrouped && _total > LIMIT && (
+      {!isGrouped && totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-2.5 mt-2 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-400">
-          <button onClick={() => setOffset(Math.max(0, offset - LIMIT))} disabled={offset === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
-          <span>{offset + 1}&ndash;{Math.min(offset + LIMIT, _total)} of {_total}</span>
-          <button onClick={() => setOffset(offset + LIMIT)} disabled={offset + LIMIT >= _total} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
+          <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
+          <span>{page * PAGE_SIZE + 1}&ndash;{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+          <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
         </div>
       )}
     </div>

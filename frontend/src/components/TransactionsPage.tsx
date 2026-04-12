@@ -85,14 +85,15 @@ export default function TransactionsPage() {
   const saveRuleTool = useToolCall("save_rule");
   const applyRulesTool = useToolCall<{ updated: number }>("apply_rules");
 
-  const [txns, setTxns] = useState<Transaction[]>([]);
+  const [allTxns, setAllTxns] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState(searchParams.get("category") ?? "all");
   const [subFilter, setSubFilter] = useState(searchParams.get("subcategory") ?? "");
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
   const [amountExpr, setAmountExpr] = useState("");
-  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [editCat, setEditCat] = useState("");
   const [editSub, setEditSub] = useState("");
@@ -107,19 +108,19 @@ export default function TransactionsPage() {
   const [groupBy, setGroupBy] = useState("none");
   const [scope, setScope] = useState("all");
 
-  const LIMIT = 500;
+  const PAGE_SIZE = 200;
   const isGrouped = groupBy !== "none";
 
-  const fetchTxns = useCallback(async (cat: string, sub: string, srch: string, off: number) => {
+  // Fetch ALL rows once, cache client-side. Re-fetch only on session/filter change.
+  const fetchAll = useCallback(async (cat: string, sub: string, srch: string) => {
     if (!sessionId) return;
     setError(null);
+    setLoading(true);
     try {
-      // When grouped, fetch all rows so grouping sees everything.
-      // When ungrouped, paginate normally.
       const args: Record<string, unknown> = {
         session_id: sessionId,
-        limit: isGrouped ? 10000 : LIMIT,
-        offset: isGrouped ? 0 : off,
+        limit: 10000,
+        offset: 0,
         npub,
       };
       if (cat === "Unclassified") {
@@ -131,17 +132,19 @@ export default function TransactionsPage() {
       if (srch) args.search = srch;
       const data = await txTool.invoke(args);
       if (data) {
-        setTxns(data.transactions ?? []);
+        setAllTxns(data.transactions ?? []);
         setTotal(data.total ?? 0);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load transactions");
     }
-  }, [sessionId, npub, isGrouped]);
+    setLoading(false);
+  }, [sessionId, npub]);
 
   useEffect(() => {
-    fetchTxns(filter, subFilter, search, offset);
-  }, [sessionId, filter, subFilter, search, offset, groupBy, fetchTxns]);
+    fetchAll(filter, subFilter, search);
+    setPage(0);
+  }, [sessionId, filter, subFilter, search, fetchAll]);
 
   function openEdit(t: Transaction) {
     setSelected(t);
@@ -174,7 +177,7 @@ export default function TransactionsPage() {
       description: desc,
     });
     setRuleApplied(null);
-    fetchTxns(filter, subFilter, search, offset);
+    fetchAll(filter, subFilter, search);
   }
 
   async function handleCreateRule() {
@@ -199,7 +202,7 @@ export default function TransactionsPage() {
     });
     if (result?.updated !== undefined) {
       setRuleApplied(`Rule applied — ${result.updated} transactions updated`);
-      fetchTxns(filter, subFilter, search, offset);
+      fetchAll(filter, subFilter, search);
     }
   }
 
@@ -218,7 +221,7 @@ export default function TransactionsPage() {
       npub,
     });
     setSelected(null);
-    fetchTxns(filter, subFilter, search, offset);
+    fetchAll(filter, subFilter, search);
   }
 
   const GROUP_OPTIONS = [
@@ -255,18 +258,21 @@ export default function TransactionsPage() {
     }
   }
 
-  // Filter by scope + amount expression
+  // Client-side pipeline: filter → (SortableTable handles group + sort) → paginate
   const amountFilter = parseAmountFilter(amountExpr);
 
-  const scopedTxns = (scope === "all" ? txns
-    : scope === "tax" ? txns.filter(t => t.category === "Schedule C" || t.category === "Schedule A")
-    : txns.filter(t => t.category === scope)
-  ).filter(t => {
-    if (amountFilter && !amountFilter(t.amount)) return false;
-    return true;
-  });
+  const filtered = useMemo(() => {
+    let rows = scope === "all" ? allTxns
+      : scope === "tax" ? allTxns.filter(t => t.category === "Schedule C" || t.category === "Schedule A")
+      : allTxns.filter(t => t.category === scope);
+    if (amountFilter) rows = rows.filter(t => amountFilter(t.amount));
+    return rows;
+  }, [allTxns, scope, amountFilter]);
 
-  // (grouping is handled by SortableTable)
+  // When grouped, SortableTable gets all filtered rows (it handles grouping internally).
+  // When ungrouped, paginate client-side.
+  const displayRows = isGrouped ? filtered : filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
 
   const txColumns: Column<Transaction>[] = useMemo(() => [
     {
@@ -363,10 +369,10 @@ export default function TransactionsPage() {
         <div className="flex items-center gap-2 flex-wrap mb-3">
           {/* Raw transaction data — no category chiclets */}
           <button
-            onClick={() => fetchTxns(filter, subFilter, search, offset)}
+            onClick={() => fetchAll(filter, subFilter, search)}
             className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded ml-1"
           >
-            Refresh
+            {loading ? "Loading\u2026" : "Refresh"}
           </button>
           <span className="ml-auto text-xs text-stone-400">{total} transactions</span>
         </div>
@@ -377,7 +383,7 @@ export default function TransactionsPage() {
             <label className="text-xs text-stone-400">Group</label>
             <select
               value={groupBy}
-              onChange={e => { setGroupBy(e.target.value); setOffset(0); }}
+              onChange={e => { setGroupBy(e.target.value); setPage(0); }}
               className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50"
             >
               {GROUP_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -387,7 +393,7 @@ export default function TransactionsPage() {
             <label className="text-xs text-stone-400">Show</label>
             <select
               value={scope}
-              onChange={e => { setScope(e.target.value); setOffset(0); }}
+              onChange={e => { setScope(e.target.value); setPage(0); }}
               className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50"
             >
               {SCOPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -403,7 +409,7 @@ export default function TransactionsPage() {
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             onKeyDown={e => {
-              if (e.key === "Enter") { setSearch(searchInput); setOffset(0); }
+              if (e.key === "Enter") { setSearch(searchInput); setPage(0); }
             }}
           />
           <input
@@ -415,7 +421,7 @@ export default function TransactionsPage() {
           />
           {searchInput && (
             <button
-              onClick={() => { setSearch(searchInput); setOffset(0); }}
+              onClick={() => { setSearch(searchInput); setPage(0); }}
               className="text-xs bg-stone-900 text-white px-3 py-1.5 rounded-lg"
             >
               Search
@@ -423,7 +429,7 @@ export default function TransactionsPage() {
           )}
           {(search || subFilter || amountExpr) && (
             <button
-              onClick={() => { setSearch(""); setSearchInput(""); setSubFilter(""); setAmountExpr(""); setOffset(0); }}
+              onClick={() => { setSearch(""); setSearchInput(""); setSubFilter(""); setAmountExpr(""); setPage(0); }}
               className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded"
             >
               Clear filters
@@ -438,7 +444,7 @@ export default function TransactionsPage() {
 
         <SortableTable<Transaction>
           columns={txColumns}
-          rows={scopedTxns}
+          rows={displayRows}
           rowKey={t => t.id}
           onRowClick={openEdit}
           groupBy={groupBy !== "none" ? groupKey : undefined}
@@ -455,11 +461,11 @@ export default function TransactionsPage() {
           )}
           emptyMessage="No transactions match this filter."
         />
-        {!isGrouped && total > LIMIT && (
+        {!isGrouped && totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-2.5 mt-2 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-400">
-            <button onClick={() => setOffset(Math.max(0, offset - LIMIT))} disabled={offset === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
-            <span>{offset + 1}&ndash;{Math.min(offset + LIMIT, total)} of {total}</span>
-            <button onClick={() => setOffset(offset + LIMIT)} disabled={offset + LIMIT >= total} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
+            <span>{page * PAGE_SIZE + 1}&ndash;{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+            <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
           </div>
         )}
       </div>
@@ -518,7 +524,7 @@ export default function TransactionsPage() {
                   setSearch(words);
                   setFilter("all");
                   setSubFilter("");
-                  setOffset(0);
+                  setPage(0);
                   setSelected(null);
                 }}
                 className="w-full text-xs border border-stone-200 py-1.5 rounded-lg text-stone-400 hover:text-amber-700 hover:border-amber-200 mt-1"
