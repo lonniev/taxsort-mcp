@@ -6,7 +6,7 @@ optionally description are written to the classifications table.
 """
 
 import re
-from db.neon import fetch, execute, executemany, fetchrow
+from db.neon import fetch, execute, executemany
 
 VALID_AMOUNT_OPS = {"lt", "lte", "gt", "gte", "eq", "neq"}
 
