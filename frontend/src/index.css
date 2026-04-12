@@ -78,6 +78,17 @@
 /* Lock/login screens */
 .dark .bg-stone-900.min-h-screen { background-color: #0c0a09 !important; }
 
+/* Prose (Markdown) — readable in dark mode */
+.dark .prose { color: #e7e5e4 !important; }
+.dark .prose :where(strong) { color: #fafaf9 !important; }
+.dark .prose :where(a) { color: #60a5fa !important; }
+.dark .prose :where(h1, h2, h3, h4, h5, h6) { color: #fafaf9 !important; }
+.dark .prose :where(code) { color: #fbbf24 !important; }
+.dark .prose :where(blockquote) { color: #a8a29e !important; border-left-color: #57534e !important; }
+.dark .prose :where(li::marker) { color: #78716c !important; }
+.dark .prose :where(hr) { border-color: #44403c !important; }
+.dark .prose :where(th) { color: #d6d3d1 !important; }
+
 /* Debug panel — always dark, immune to dark mode overrides */
 .dark .debug-panel .bg-stone-900 { background-color: #1c1917 !important; }
 .dark .debug-panel .bg-stone-800 { background-color: #292524 !important; }

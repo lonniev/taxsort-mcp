@@ -135,9 +135,9 @@ export default function AdvisorPage() {
                 {t.role === "user" ? "Y" : "FA"}
               </span>
               {t.role === "user" ? (
-                <div className="text-sm text-stone-600 italic">{t.text}</div>
+                <div className="text-sm text-stone-400 italic">{t.text}</div>
               ) : (
-                <div className="text-sm leading-relaxed text-stone-800 prose prose-sm prose-stone max-w-none">
+                <div className="text-sm leading-relaxed prose prose-sm prose-stone max-w-none">
                   <Markdown remarkPlugins={[remarkGfm]}>{t.text}</Markdown>
                 </div>
               )}
