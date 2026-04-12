@@ -336,7 +336,15 @@ export default function TransactionsPage() {
 
   return (
     <div className="w-[85%] mx-auto relative">
-      <h1 className="text-xl font-semibold mb-5 text-stone-800">Transactions</h1>
+      <div className="flex items-center gap-2 mb-5">
+        <h1 className="text-xl font-semibold text-stone-800">Transactions</h1>
+        <span className="relative group">
+          <span className="text-stone-300 hover:text-stone-500 cursor-help text-sm">&#9432;</span>
+          <span className="absolute left-6 top-0 hidden group-hover:block bg-stone-800 text-white text-xs rounded-lg px-3 py-2 w-64 z-50 shadow-lg">
+            Transactions shows your raw CSV line items before categorization — the unprocessed accounting journal.
+          </span>
+        </span>
+      </div>
     <div>
       {/* Main table */}
       <div>
@@ -437,8 +445,11 @@ export default function TransactionsPage() {
           groupLabel={(gk, rows) => (
             <span className="font-semibold text-stone-600">
               {gk}
-              <span className="ml-2 font-normal text-stone-400">
-                ({rows.length} &middot; ${Math.abs(rows.reduce((s, t) => s + t.amount, 0)).toFixed(2)})
+              <span className="ml-2 font-normal text-stone-400">({rows.length})</span>
+              <span className="float-right font-mono text-xs">
+                <span className={rows.reduce((s, t) => s + t.amount, 0) >= 0 ? "text-green-700" : "text-stone-700"}>
+                  {rows.reduce((s, t) => s + t.amount, 0).toFixed(2)}
+                </span>
               </span>
             </span>
           )}
