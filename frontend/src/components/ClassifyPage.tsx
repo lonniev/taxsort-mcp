@@ -83,6 +83,8 @@ export default function ClassifyPage() {
   const [newCat, setNewCat] = useState("");
   const [newSub, setNewSub] = useState("");
 
+  const [ruleSearch, setRuleSearch] = useState("");
+
   // New/edit rule form state
   const [formPattern, setFormPattern] = useState("");
   const [formCategory, setFormCategory] = useState("Personal");
@@ -385,11 +387,21 @@ export default function ClassifyPage() {
         </div>
 
         <p className="text-xs text-stone-400 mb-3">
-          Rules run before AI categorization. Matching transactions are categorized instantly without an API call. Click a rule to edit it.
+          Rules assign categories to imported transactions by matching description patterns. They do not alter the imported data — categories are stored separately. "Apply Rules Now" re-runs all rules against all transactions. Click a rule to edit it.
         </p>
 
         {applyMsg && (
           <div className="text-xs text-blue-600 mb-3">{applyMsg}</div>
+        )}
+
+        {/* Rule search */}
+        {rules.length > 5 && (
+          <input
+            className="w-full text-xs border border-stone-200 rounded-lg px-3 py-1.5 bg-stone-50 mb-3 font-mono focus:outline-none focus:border-stone-400"
+            placeholder="Search rules (pattern, category, subcategory)..."
+            value={ruleSearch}
+            onChange={e => setRuleSearch(e.target.value)}
+          />
         )}
 
         {/* New rule form */}
@@ -475,7 +487,14 @@ export default function ClassifyPage() {
         )}
         {rules.length > 0 && (
           <div className="space-y-2">
-            {rules.map(r => (
+            {rules.filter(r => {
+              if (!ruleSearch) return true;
+              const q = ruleSearch.toLowerCase();
+              return r.description_pattern.toLowerCase().includes(q)
+                || r.category.toLowerCase().includes(q)
+                || r.subcategory.toLowerCase().includes(q)
+                || (r.new_description ?? "").toLowerCase().includes(q);
+            }).map(r => (
               <div key={r.id} onClick={() => editRule(r)} className="flex items-center gap-3 bg-stone-50 border border-stone-100 rounded-lg px-3 py-2 text-xs cursor-pointer hover:border-stone-300 transition-colors">
                 <div className="flex-1 min-w-0">
                   <span className="font-mono text-stone-600">/{r.description_pattern}/i</span>
