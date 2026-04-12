@@ -180,19 +180,9 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
             "new_description": r.get("new_description"),
         })
 
-    # Fetch all transactions (not just unclassified) so rules can
-    # re-categorize previously rule-classified items when rules change.
-    # Manual classifications are preserved (not overwritten).
+    # Fetch all transactions — rules apply to everything.
     txns = await fetch(
-        """
-        SELECT r.id, r.description, r.amount,
-               c.classified_by
-        FROM raw_transactions r
-        LEFT JOIN classifications c
-          ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
-        WHERE r.session_id=$1
-          AND (c.classified_by IS NULL OR c.classified_by != 'manual')
-        """,
+        "SELECT id, description, amount FROM raw_transactions WHERE session_id=$1",
         session_id,
     )
 
