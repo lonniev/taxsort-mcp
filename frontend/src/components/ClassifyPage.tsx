@@ -216,7 +216,7 @@ export default function ClassifyPage() {
     }
   }
 
-  // Merge built-in + custom categories — deep copy arrays to avoid mutation
+  // Merge built-in + custom categories, alpha-sorted
   const allCatSubs: Record<string, string[]> = {};
   for (const [k, v] of Object.entries(CAT_SUBS)) {
     allCatSubs[k] = [...v];
@@ -227,7 +227,11 @@ export default function ClassifyPage() {
       allCatSubs[c.category].push(c.subcategory);
     }
   }
-  const allCategories = [...new Set([...CATEGORIES, ...customCats.map(c => c.category)])];
+  // Sort subcategories within each category
+  for (const k of Object.keys(allCatSubs)) {
+    allCatSubs[k].sort((a, b) => a.localeCompare(b));
+  }
+  const allCategories = [...new Set([...CATEGORIES, ...customCats.map(c => c.category)])].sort((a, b) => a.localeCompare(b));
   const subs = allCatSubs[formCategory] ?? [];
 
   return (
@@ -465,7 +469,7 @@ export default function ClassifyPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-stone-500 block mb-1">Subcategory</label>
+                <label className="text-xs text-stone-500 block mb-1">Subcategory ({subs.length}{customCats.length > 0 ? ` + ${customCats.filter(c => c.category === formCategory).length} custom` : ""})</label>
                 <select
                   value={formSubcategory}
                   onChange={e => setFormSubcategory(e.target.value)}

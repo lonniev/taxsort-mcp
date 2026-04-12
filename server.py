@@ -34,7 +34,7 @@ def _validate_taxsort_creds(creds: dict[str, str]) -> list[str]:
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.24.7"
+__version__ = "0.24.8"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
