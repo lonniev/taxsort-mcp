@@ -122,6 +122,7 @@ export default function TransactionsPage() {
   const [ruleApplied, setRuleApplied] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState("none");
   const [scope, setScope] = useState("all");
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const PAGE_SIZE = 200;
   const isGrouped = groupBy !== "none";
@@ -470,6 +471,19 @@ export default function TransactionsPage() {
           </div>
         )}
 
+        {isGrouped && groups.length > 0 && (
+          <div className="flex justify-end mb-1">
+            <button
+              onClick={() => {
+                const allKeys = groups.map(g => g.key);
+                setCollapsed(prev => prev.size >= allKeys.length ? new Set() : new Set(allKeys));
+              }}
+              className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-0.5 rounded"
+            >
+              {collapsed.size >= groups.length ? "Expand All" : "Collapse All"}
+            </button>
+          </div>
+        )}
         {isGrouped ? (
           <table className="w-full text-sm">
             <thead>
@@ -484,32 +498,45 @@ export default function TransactionsPage() {
               </tr>
             </thead>
             <tbody>
-              {rowsWithHeaders.map((item, i) => {
-                if (item.type === "header") {
+              {(() => {
+                let currentGroup = "";
+                return rowsWithHeaders.map((item, i) => {
+                  if (item.type === "header") {
+                    currentGroup = item.key;
+                    const isCollapsed = collapsed.has(item.key);
+                    return (
+                      <tr key={`gh-${item.key}-${i}`}
+                        className="bg-stone-50 border-t border-stone-200 cursor-pointer hover:bg-stone-100"
+                        onClick={() => setCollapsed(prev => {
+                          const next = new Set(prev);
+                          next.has(item.key) ? next.delete(item.key) : next.add(item.key);
+                          return next;
+                        })}>
+                        <td colSpan={txColumns.length - 1} className="px-3 py-2 text-xs font-semibold text-stone-600">
+                          <span className="mr-1.5">{isCollapsed ? "\u25B6" : "\u25BC"}</span>
+                          {item.key} <span className="font-normal text-stone-400">({item.agg.count})</span>
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono text-xs">
+                          <span className={item.agg.total_amount >= 0 ? "text-green-700" : "text-stone-700"}>
+                            {item.agg.total_amount.toFixed(2)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  if (collapsed.has(currentGroup)) return null;
+                  const t = item.data;
                   return (
-                    <tr key={`gh-${item.key}-${i}`} className="bg-stone-50 border-t border-stone-200">
-                      <td colSpan={txColumns.length - 1} className="px-3 py-2 text-xs font-semibold text-stone-600">
-                        {item.key} <span className="font-normal text-stone-400">({item.agg.count})</span>
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono text-xs">
-                        <span className={item.agg.total_amount >= 0 ? "text-green-700" : "text-stone-700"}>
-                          {item.agg.total_amount.toFixed(2)}
-                        </span>
-                      </td>
+                    <tr key={t.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer" onClick={() => openEdit(t)}>
+                      {txColumns.map(col => (
+                        <td key={col.key} className={`px-3 py-1.5 ${col.align === "right" ? "text-right" : ""} ${col.className ?? ""}`}>
+                          {col.render(t)}
+                        </td>
+                      ))}
                     </tr>
                   );
-                }
-                const t = item.data;
-                return (
-                  <tr key={t.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer" onClick={() => openEdit(t)}>
-                    {txColumns.map(col => (
-                      <td key={col.key} className={`px-3 py-1.5 ${col.align === "right" ? "text-right" : ""} ${col.className ?? ""}`}>
-                        {col.render(t)}
-                      </td>
-                    ))}
-                  </tr>
-                );
-              })}
+                });
+              })()}
             </tbody>
           </table>
         ) : (
