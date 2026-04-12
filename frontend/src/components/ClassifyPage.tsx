@@ -3,6 +3,7 @@ import { useSession } from "../App";
 import { useClassify } from "../hooks/useClassify";
 import type { Rule } from "../hooks/useClassify";
 import { useToolCall } from "../hooks/useMCP";
+import { useCategories } from "../hooks/useCategories";
 import DonutChart from "./DonutChart";
 
 interface ResetResult {
@@ -21,35 +22,7 @@ interface ApplyResult {
   updated: number;
 }
 
-const CATEGORIES = [
-  "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate",
-];
-const CAT_SUBS: Record<string, string[]> = {
-  "Schedule C": [
-    "Advertising & Marketing", "Business Meals (50%)", "Business Software & Subscriptions",
-    "Home Office Utilities", "Office Supplies", "Phone & Internet", "Professional Services",
-    "Travel & Transportation", "Vehicle Expenses", "Other Business Expense",
-  ],
-  "Schedule A": [
-    "Charitable Contributions", "Medical & Dental", "Mortgage Interest",
-    "Property Tax", "State & Local Tax", "Other Itemized Deduction",
-  ],
-  "Internal Transfer": [
-    "Internal Transfer", "Credit Card Payment", "Savings Transfer",
-    "Investment Transfer", "Loan Payment",
-  ],
-  "Personal": [
-    "Income", "Salary", "Bonus", "Tax Refund",
-    "Auto Insurance", "Home Insurance", "Life Insurance", "Health Insurance",
-    "Groceries", "Dining Out", "Clothing",
-    "Personal Care", "Entertainment", "Streaming & Subscriptions",
-    "Gym & Fitness", "Pet Care", "Childcare",
-    "Utilities (Personal)", "Rent", "Auto Loan", "Student Loan",
-    "Cash & ATM", "Shopping", "Gifts",
-    "Education", "Travel (Personal)", "Other Personal",
-  ],
-  "Duplicate": ["Duplicate"],
-};
+// Categories come from useCategories() hook (built-in + custom, alpha-sorted)
 
 const AMOUNT_OPS = [
   { value: "", label: "Any" },
@@ -69,17 +42,15 @@ export default function ClassifyPage() {
   const deleteRuleTool = useToolCall<unknown>("delete_rule");
   const applyRulesTool = useToolCall<ApplyResult>("apply_rules");
   const matchCountTool = useToolCall<{ matches: number; error?: string }>("count_rule_matches");
-  const customCatsTool = useToolCall<{ categories: Array<{ id: number; category: string; subcategory: string }> }>("get_custom_categories");
   const saveCatTool = useToolCall<{ category: string; subcategory: string }>("save_custom_category");
   const deleteCatTool = useToolCall<unknown>("delete_custom_category");
+  const { allCategories, allCatSubs, customCats, loadCustomCats } = useCategories();
 
   const [resetMsg, setResetMsg] = useState<string | null>(null);
   const [rules, setRules] = useState<Rule[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
 
-  // Custom categories state
-  const [customCats, setCustomCats] = useState<Array<{ id: number; category: string; subcategory: string }>>([]);
   const [showCatForm, setShowCatForm] = useState(false);
   const [newCat, setNewCat] = useState("");
   const [newSub, setNewSub] = useState("");
@@ -107,16 +78,10 @@ export default function ClassifyPage() {
     if (data?.rules) setRules(data.rules);
   }
 
-  async function loadCustomCats() {
-    const data = await customCatsTool.invoke({ npub });
-    if (data?.categories) setCustomCats(data.categories);
-  }
-
   useEffect(() => {
     if (sessionId) {
       refreshCounts();
       loadRules();
-      loadCustomCats();
     }
   }, [sessionId]);
 
@@ -216,22 +181,6 @@ export default function ClassifyPage() {
     }
   }
 
-  // Merge built-in + custom categories, alpha-sorted
-  const allCatSubs: Record<string, string[]> = {};
-  for (const [k, v] of Object.entries(CAT_SUBS)) {
-    allCatSubs[k] = [...v];
-  }
-  for (const c of customCats) {
-    if (!allCatSubs[c.category]) allCatSubs[c.category] = [];
-    if (!allCatSubs[c.category].includes(c.subcategory)) {
-      allCatSubs[c.category].push(c.subcategory);
-    }
-  }
-  // Sort subcategories within each category
-  for (const k of Object.keys(allCatSubs)) {
-    allCatSubs[k].sort((a, b) => a.localeCompare(b));
-  }
-  const allCategories = [...new Set([...CATEGORIES, ...customCats.map(c => c.category)])].sort((a, b) => a.localeCompare(b));
   const subs = allCatSubs[formCategory] ?? [];
 
   return (

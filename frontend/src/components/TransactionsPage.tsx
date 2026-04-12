@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useSession } from "../App";
 import ReasonText from "./ReasonText";
 import { useToolCall } from "../hooks/useMCP";
+import { useCategories } from "../hooks/useCategories";
 import type { Column } from "./SortableTable";
 // Amount filtering is now a UI input — server-side support TBD
 
@@ -42,39 +43,7 @@ interface PagedResult {
   transactions: (Transaction & { group_key: string })[];
 }
 
-const CATEGORIES = [
-  "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate",
-];
-const SCHED_C_SUBS = [
-  "Advertising & Marketing", "Business Meals (50%)", "Business Software & Subscriptions",
-  "Home Office Utilities", "Office Supplies", "Phone & Internet", "Professional Services",
-  "Travel & Transportation", "Vehicle Expenses", "Other Business Expense",
-];
-const SCHED_A_SUBS = [
-  "Charitable Contributions", "Medical & Dental", "Mortgage Interest",
-  "Property Tax", "State & Local Tax", "Other Itemized Deduction",
-];
-const PERSONAL_SUBS = [
-  "Income", "Salary", "Bonus", "Tax Refund",
-  "Auto Insurance", "Home Insurance", "Life Insurance", "Health Insurance",
-  "Groceries", "Dining Out", "Clothing",
-  "Personal Care", "Entertainment", "Streaming & Subscriptions",
-  "Gym & Fitness", "Pet Care", "Childcare",
-  "Utilities (Personal)", "Rent", "Auto Loan", "Student Loan",
-  "Cash & ATM", "Shopping", "Gifts",
-  "Education", "Travel (Personal)", "Other Personal",
-];
-const TRANSFER_SUBS = [
-  "Internal Transfer", "Credit Card Payment", "Savings Transfer",
-  "Investment Transfer", "Loan Payment",
-];
-const CAT_SUBS: Record<string, string[]> = {
-  "Schedule C": SCHED_C_SUBS,
-  "Schedule A": SCHED_A_SUBS,
-  "Internal Transfer": TRANSFER_SUBS,
-  "Personal": PERSONAL_SUBS,
-  "Duplicate": ["Duplicate"],
-};
+// Categories come from useCategories() hook (built-in + custom, alpha-sorted)
 const CAT_COLOR: Record<string, string> = {
   "Schedule C": "text-amber-700",
   "Schedule A": "text-green-700",
@@ -94,6 +63,7 @@ export default function TransactionsPage() {
   const deleteClassTool = useToolCall("delete_classification");
   const saveRuleTool = useToolCall("save_rule");
   const applyRulesTool = useToolCall<{ updated: number }>("apply_rules");
+  const { allCategories, allCatSubs } = useCategories();
 
   // Ungrouped state
   const [txns, setTxns] = useState<Transaction[]>([]);
@@ -601,18 +571,18 @@ export default function TransactionsPage() {
               <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Classification</div>
               <select
                 value={editCat}
-                onChange={e => { setEditCat(e.target.value); setEditSub((CAT_SUBS[e.target.value] ?? [])[0] ?? ""); }}
+                onChange={e => { setEditCat(e.target.value); setEditSub((allCatSubs[e.target.value] ?? [])[0] ?? ""); }}
                 className="w-full text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50"
               >
-                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                {allCategories.map(c => <option key={c}>{c}</option>)}
               </select>
-              {(CAT_SUBS[editCat]?.length ?? 0) > 1 && (
+              {(allCatSubs[editCat]?.length ?? 0) > 1 && (
                 <select
                   value={editSub}
                   onChange={e => setEditSub(e.target.value)}
                   className="w-full text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50"
                 >
-                  {CAT_SUBS[editCat].map(s => <option key={s}>{s}</option>)}
+                  {allCatSubs[editCat].map(s => <option key={s}>{s}</option>)}
                 </select>
               )}
               {selected.irs_line && <div className="text-xs text-stone-400">{selected.irs_line}</div>}
