@@ -1,6 +1,17 @@
 """Transaction retrieval, classification writes, and summary tools."""
 
+import re
+
 from db.neon import fetch, execute, fetchrow, executemany
+
+
+def _validate_regex(pattern: str) -> str | None:
+    """Validate regex syntax. Returns error message or None if valid."""
+    try:
+        re.compile(pattern)
+        return None
+    except re.error as e:
+        return f"Invalid regex: {e}"
 
 IRS_MAP = {
     "Advertising & Marketing":          "Sch C · Line 8 — Advertising",
@@ -39,6 +50,11 @@ async def get_transactions(
 
     Returns raw_transactions LEFT JOINed with classifications.
     """
+    if search:
+        err = _validate_regex(search)
+        if err:
+            return {"total": 0, "limit": limit, "offset": offset, "transactions": [], "error": err}
+
     where = ["r.session_id = $1"]
     params: list = [session_id]
     idx = 2
@@ -76,7 +92,7 @@ async def get_transactions(
         idx += 1
 
     if search:
-        where.append(f"r.description ~* ${idx}")
+        where.append(f"(r.description ~* ${idx} OR COALESCE(c.merchant, '') ~* ${idx} OR COALESCE(c.description_override, '') ~* ${idx})")
         params.append(search)
         idx += 1
 
@@ -168,6 +184,11 @@ async def get_transactions_paged(
         groups: List of {key, count, total_amount} for ALL groups (compact).
         transactions: The page of rows, each with group_key attached.
     """
+    if search:
+        err = _validate_regex(search)
+        if err:
+            return {"total": 0, "page": page, "page_size": page_size, "groups": [], "transactions": [], "error": err}
+
     # ── Build WHERE clause ──
     where = ["r.session_id = $1"]
     params: list = [session_id]
@@ -195,7 +216,7 @@ async def get_transactions_paged(
         params.append(account)
         idx += 1
     if search:
-        where.append(f"r.description ~* ${idx}")
+        where.append(f"(r.description ~* ${idx} OR COALESCE(c.merchant, '') ~* ${idx} OR COALESCE(c.description_override, '') ~* ${idx})")
         params.append(search)
         idx += 1
 
