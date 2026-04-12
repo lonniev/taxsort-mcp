@@ -226,9 +226,9 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
                 classified_by, classified_at
             ) VALUES ($1, $2, $3, $4, $5, 'rule', NOW())
             ON CONFLICT (raw_transaction_id, session_id) DO UPDATE SET
-                category = EXCLUDED.category,
-                subcategory = EXCLUDED.subcategory,
-                description_override = COALESCE(EXCLUDED.description_override, classifications.description_override),
+                category = $3,
+                subcategory = $4,
+                description_override = $5,
                 classified_by = 'rule',
                 classified_at = NOW()
             """,
