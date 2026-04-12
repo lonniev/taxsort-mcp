@@ -220,8 +220,22 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
                 description_override = EXCLUDED.description_override,
                 classified_by = 'rule',
                 classified_at = NOW()
+            WHERE classifications.category IS DISTINCT FROM EXCLUDED.category
+               OR classifications.subcategory IS DISTINCT FROM EXCLUDED.subcategory
+               OR classifications.description_override IS DISTINCT FROM EXCLUDED.description_override
             """,
             inserts,
         )
 
-    return {"updated": len(inserts), "session_id": session_id}
+    # Count how many were actually new or changed (not no-ops).
+    # The classification timestamp tells us — only rows touched by this
+    # run have classified_at within the last few seconds.
+    count_row = await fetchrow(
+        """SELECT COUNT(*) as n FROM classifications
+           WHERE session_id=$1 AND classified_by='rule'
+             AND classified_at >= NOW() - INTERVAL '10 seconds'""",
+        session_id,
+    )
+    changed = int(count_row["n"]) if count_row else 0
+
+    return {"updated": changed, "matched": len(inserts), "session_id": session_id}
