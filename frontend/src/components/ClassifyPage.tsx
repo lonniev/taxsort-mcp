@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSession } from "../App";
 import { useClassify } from "../hooks/useClassify";
 import type { Rule } from "../hooks/useClassify";
@@ -68,6 +68,7 @@ export default function ClassifyPage() {
   const saveRuleTool = useToolCall<SaveRuleResult>("save_rule");
   const deleteRuleTool = useToolCall<unknown>("delete_rule");
   const applyRulesTool = useToolCall<ApplyResult>("apply_rules");
+  const matchCountTool = useToolCall<{ matches: number; error?: string }>("count_rule_matches");
   const customCatsTool = useToolCall<{ categories: Array<{ id: number; category: string; subcategory: string }> }>("get_custom_categories");
   const saveCatTool = useToolCall<{ category: string; subcategory: string }>("save_custom_category");
   const deleteCatTool = useToolCall<unknown>("delete_custom_category");
@@ -84,6 +85,8 @@ export default function ClassifyPage() {
   const [newSub, setNewSub] = useState("");
 
   const [ruleSearch, setRuleSearch] = useState("");
+  const [matchCount, setMatchCount] = useState<number | null>(null);
+  const [matchError, setMatchError] = useState<string | null>(null);
 
   // New/edit rule form state
   const [formPattern, setFormPattern] = useState("");
@@ -148,7 +151,29 @@ export default function ClassifyPage() {
     setFormNewDesc("");
     setEditingRuleId(null);
     setShowForm(false);
+    setMatchCount(null);
+    setMatchError(null);
   }
+
+  // Debounced match count preview
+  const matchTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    if (!formPattern || !sessionId || !showForm) { setMatchCount(null); setMatchError(null); return; }
+    clearTimeout(matchTimer.current);
+    matchTimer.current = setTimeout(async () => {
+      const result = await matchCountTool.invoke({
+        session_id: sessionId, npub,
+        description_pattern: formPattern,
+        amount_operator: formAmountOp || "",
+        amount_value: formAmountOp && formAmountVal ? parseFloat(formAmountVal) : null,
+      });
+      if (result) {
+        setMatchCount(result.matches);
+        setMatchError(result.error ?? null);
+      }
+    }, 500);
+    return () => clearTimeout(matchTimer.current);
+  }, [formPattern, formAmountOp, formAmountVal, sessionId, showForm]);
 
   function editRule(r: Rule) {
     setFormPattern(r.description_pattern);
@@ -408,7 +433,16 @@ export default function ClassifyPage() {
         {showForm && (
           <div className="bg-stone-50 border border-stone-200 rounded-lg p-4 mb-4 space-y-3">
             <div>
-              <label className="text-xs text-stone-500 block mb-1">Description pattern (regex, case-insensitive)</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-stone-500">Description pattern (regex, case-insensitive)</label>
+                {matchCount !== null && !matchError && (
+                  <span className={`text-xs font-mono ${matchCount > 0 ? "text-green-600" : "text-stone-400"}`}>
+                    {matchCount} match{matchCount !== 1 ? "es" : ""}
+                  </span>
+                )}
+                {matchError && <span className="text-xs text-red-500">{matchError}</span>}
+                {matchCountTool.loading && <span className="text-xs text-stone-400">checking&hellip;</span>}
+              </div>
               <input
                 value={formPattern}
                 onChange={e => setFormPattern(e.target.value)}

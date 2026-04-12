@@ -207,13 +207,6 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
             break
 
     if inserts:
-        # Count existing classifications before upsert
-        before_row = await fetchrow(
-            "SELECT COUNT(*) as n FROM classifications WHERE session_id=$1",
-            session_id,
-        )
-        before = int(before_row["n"]) if before_row else 0
-
         await executemany(
             """
             INSERT INTO classifications (
@@ -231,17 +224,33 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
             inserts,
         )
 
-        after_row = await fetchrow(
-            "SELECT COUNT(*) as n FROM classifications WHERE session_id=$1",
-            session_id,
-        )
-        after = int(after_row["n"]) if after_row else 0
-        new_classifications = after - before
-    else:
-        new_classifications = 0
+    return {"updated": len(inserts), "session_id": session_id}
 
-    return {
-        "updated": new_classifications,
-        "matched": len(inserts),
-        "session_id": session_id,
-    }
+
+async def count_rule_matches(
+    session_id: str,
+    description_pattern: str,
+    amount_operator: str = "",
+    amount_value: float | None = None,
+) -> dict:
+    """Count how many transactions match a rule pattern (live preview)."""
+    try:
+        pat = re.compile(description_pattern, re.IGNORECASE)
+    except re.error as e:
+        return {"matches": 0, "error": f"Invalid regex: {e}"}
+
+    txns = await fetch(
+        "SELECT description, amount FROM raw_transactions WHERE session_id=$1",
+        session_id,
+    )
+
+    count = 0
+    for tx in txns:
+        if not pat.search(str(tx["description"])):
+            continue
+        if amount_operator and amount_value is not None:
+            if not _amount_matches(float(tx["amount"]), amount_operator, amount_value):
+                continue
+        count += 1
+
+    return {"matches": count}

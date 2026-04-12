@@ -34,7 +34,7 @@ def _validate_taxsort_creds(creds: dict[str, str]) -> list[str]:
 
 logger = logging.getLogger(__name__)
 
-__version__ = "0.24.2"
+__version__ = "0.24.3"
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
@@ -86,6 +86,7 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="get_session", category="free", intent="Get session details"),
     ToolIdentity(capability="list_sessions", category="free", intent="List patron sessions"),
     ToolIdentity(capability="get_rules", category="free", intent="Get classification rules"),
+    ToolIdentity(capability="count_rule_matches", category="free", intent="Count transactions matching a rule pattern"),
     ToolIdentity(capability="get_import_stats", category="free", intent="Get import statistics"),
     ToolIdentity(capability="load_share_token", category="free", intent="Load a shared session"),
     ToolIdentity(capability="get_transactions", category="free", intent="Get transactions with filters"),
@@ -613,6 +614,25 @@ async def apply_rules(
     """Apply rules to unclassified transactions in a session."""
     from tools.rules import apply_rules as _apply_rules
     return await _apply_rules(owner_npub=npub, session_id=session_id)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("count_rule_matches"))
+async def count_rule_matches(
+    session_id: str,
+    description_pattern: str,
+    amount_operator: str = "",
+    amount_value: float | None = None,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Count how many transactions match a rule pattern (live preview)."""
+    from tools.rules import count_rule_matches as _count
+    return await _count(
+        session_id=session_id,
+        description_pattern=description_pattern,
+        amount_operator=amount_operator,
+        amount_value=amount_value,
+    )
 
 
 @tool
