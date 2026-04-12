@@ -180,14 +180,18 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
             "new_description": r.get("new_description"),
         })
 
-    # Fetch unclassified transactions
+    # Fetch all transactions (not just unclassified) so rules can
+    # re-categorize previously rule-classified items when rules change.
+    # Manual classifications are preserved (not overwritten).
     txns = await fetch(
         """
-        SELECT r.id, r.description, r.amount
+        SELECT r.id, r.description, r.amount,
+               c.classified_by
         FROM raw_transactions r
         LEFT JOIN classifications c
           ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
-        WHERE r.session_id=$1 AND c.raw_transaction_id IS NULL
+        WHERE r.session_id=$1
+          AND (c.classified_by IS NULL OR c.classified_by != 'manual')
         """,
         session_id,
     )
@@ -220,7 +224,12 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
                 category, subcategory, description_override,
                 classified_by, classified_at
             ) VALUES ($1, $2, $3, $4, $5, 'rule', NOW())
-            ON CONFLICT (raw_transaction_id, session_id) DO NOTHING
+            ON CONFLICT (raw_transaction_id, session_id) DO UPDATE SET
+                category = EXCLUDED.category,
+                subcategory = EXCLUDED.subcategory,
+                description_override = EXCLUDED.description_override,
+                classified_by = 'rule',
+                classified_at = NOW()
             """,
             inserts,
         )
