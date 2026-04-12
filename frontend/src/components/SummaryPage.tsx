@@ -81,12 +81,8 @@ export default function SummaryPage() {
     }
     const data = await txTool.invoke(params);
     if (data) {
-      // Filter to categorized only (has a category)
-      const categorized = scope === "all"
-        ? data.transactions.filter(t => t.category != null)
-        : data.transactions;
-      setTxns(categorized);
-      setTotal(scope === "all" ? categorized.length : data.total);
+      setTxns(data.transactions);
+      setTotal(data.total);
     }
   }
 
@@ -218,7 +214,7 @@ export default function SummaryPage() {
         >
           Refresh
         </button>
-        <span className="ml-auto text-xs text-stone-400">{filtered.length} categorized</span>
+        <span className="ml-auto text-xs text-stone-400">{_total} categorized</span>
       </div>
 
       {/* Group by */}
@@ -287,6 +283,13 @@ export default function SummaryPage() {
         )}
         emptyMessage="No categorized transactions match this filter."
       />
+      {!isGrouped && _total > LIMIT && (
+        <div className="flex items-center justify-between px-4 py-2.5 mt-2 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-400">
+          <button onClick={() => setOffset(Math.max(0, offset - LIMIT))} disabled={offset === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
+          <span>{offset + 1}&ndash;{Math.min(offset + LIMIT, _total)} of {_total}</span>
+          <button onClick={() => setOffset(offset + LIMIT)} disabled={offset + LIMIT >= _total} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
+        </div>
+      )}
     </div>
   );
 }
