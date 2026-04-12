@@ -5,7 +5,7 @@ import ReasonText from "./ReasonText";
 import { useToolCall } from "../hooks/useMCP";
 import SortableTable from "./SortableTable";
 import type { Column } from "./SortableTable";
-import { parseAmountFilter } from "../utils/amountFilter";
+// Amount filtering is now a UI input — server-side support TBD
 
 interface Transaction {
   id: string;
@@ -31,6 +31,16 @@ interface Transaction {
 interface TxResult {
   total: number;
   transactions: Transaction[];
+}
+
+interface GroupAgg { key: string; count: number; total_amount: number; }
+
+interface PagedResult {
+  total: number;
+  page: number;
+  page_size: number;
+  groups: GroupAgg[];
+  transactions: (Transaction & { group_key: string })[];
 }
 
 const CATEGORIES = [
@@ -79,13 +89,15 @@ export default function TransactionsPage() {
   const { sessionId, npub } = useSession();
   const [searchParams] = useSearchParams();
 
-  const txTool = useToolCall<TxResult>("get_transactions");
+  const txTool = useToolCall<TxResult>("get_transactions");  // kept for classify hook
+  const pagedTool = useToolCall<PagedResult>("get_transactions_paged");
   const saveClassTool = useToolCall<{ saved: number }>("save_classifications");
   const deleteClassTool = useToolCall("delete_classification");
   const saveRuleTool = useToolCall("save_rule");
   const applyRulesTool = useToolCall<{ updated: number }>("apply_rules");
 
-  const [allTxns, setAllTxns] = useState<Transaction[]>([]);
+  const [txns, setTxns] = useState<Transaction[]>([]);
+  const [groups, setGroups] = useState<GroupAgg[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState(searchParams.get("category") ?? "all");
@@ -94,6 +106,8 @@ export default function TransactionsPage() {
   const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
   const [amountExpr, setAmountExpr] = useState("");
   const [page, setPage] = useState(0);
+  const [sortCol, setSortCol] = useState("date");
+  const [sortDir, setSortDir] = useState("asc");
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [editCat, setEditCat] = useState("");
   const [editSub, setEditSub] = useState("");
@@ -111,40 +125,40 @@ export default function TransactionsPage() {
   const PAGE_SIZE = 200;
   const isGrouped = groupBy !== "none";
 
-  // Fetch ALL rows once, cache client-side. Re-fetch only on session/filter change.
-  const fetchAll = useCallback(async (cat: string, sub: string, srch: string) => {
+  const fetchPage = useCallback(async () => {
     if (!sessionId) return;
     setError(null);
     setLoading(true);
     try {
       const args: Record<string, unknown> = {
         session_id: sessionId,
-        limit: 10000,
-        offset: 0,
         npub,
+        group_by: groupBy,
+        sort_col: sortCol,
+        sort_dir: sortDir,
+        page,
+        page_size: PAGE_SIZE,
       };
-      if (cat === "Unclassified") {
+      if (filter === "Unclassified") {
         args.unclassified_only = true;
-      } else if (cat !== "all") {
-        args.category = cat;
+      } else if (filter !== "all") {
+        args.category = filter;
       }
-      if (sub) args.subcategory = sub;
-      if (srch) args.search = srch;
-      const data = await txTool.invoke(args);
+      if (subFilter) args.subcategory = subFilter;
+      if (search) args.search = search;
+      const data = await pagedTool.invoke(args);
       if (data) {
-        setAllTxns(data.transactions ?? []);
+        setTxns(data.transactions ?? []);
+        setGroups(data.groups ?? []);
         setTotal(data.total ?? 0);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load transactions");
     }
     setLoading(false);
-  }, [sessionId, npub]);
+  }, [sessionId, npub, filter, subFilter, search, groupBy, sortCol, sortDir, page]);
 
-  useEffect(() => {
-    fetchAll(filter, subFilter, search);
-    setPage(0);
-  }, [sessionId, filter, subFilter, search, fetchAll]);
+  useEffect(() => { fetchPage(); }, [fetchPage]);
 
   function openEdit(t: Transaction) {
     setSelected(t);
@@ -177,7 +191,7 @@ export default function TransactionsPage() {
       description: desc,
     });
     setRuleApplied(null);
-    fetchAll(filter, subFilter, search);
+    fetchPage();
   }
 
   async function handleCreateRule() {
@@ -202,7 +216,7 @@ export default function TransactionsPage() {
     });
     if (result?.updated !== undefined) {
       setRuleApplied(`Rule applied — ${result.updated} transactions updated`);
-      fetchAll(filter, subFilter, search);
+      fetchPage();
     }
   }
 
@@ -221,7 +235,7 @@ export default function TransactionsPage() {
       npub,
     });
     setSelected(null);
-    fetchAll(filter, subFilter, search);
+    fetchPage();
   }
 
   const GROUP_OPTIONS = [
@@ -243,36 +257,31 @@ export default function TransactionsPage() {
     ["Schedule A", "Schedule A only"],
   ];
 
-  // Group transactions for display
-  function groupKey(t: Transaction): string {
-    switch (groupBy) {
-      case "category": return t.category ?? "Unclassified";
-      case "subcategory": return t.subcategory ?? t.category ?? "Unclassified";
-      case "taxline": return t.subcategory ?? t.category ?? "Unclassified";
-      case "month": return t.date?.slice(0, 7) ?? "Unknown";
-      case "account": return t.account ?? "Unknown";
-      case "merchant": return t.merchant ?? t.description?.split(/\s+/).slice(0, 3).join(" ") ?? "Unknown";
-      case "month+category": return `${t.date?.slice(0, 7)} / ${t.category ?? "Unclassified"}`;
-      case "category+subcategory": return `${t.category ?? "Unclassified"} / ${t.subcategory ?? "—"}`;
-      default: return "";
+  // Server handles filter + group + sort + pagination.
+  // Client just renders what it gets.
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  const groupMap = useMemo(() => {
+    const m = new Map<string, GroupAgg>();
+    for (const g of groups) m.set(g.key, g);
+    return m;
+  }, [groups]);
+
+  // Detect group boundaries for header insertion
+  const rowsWithHeaders = useMemo(() => {
+    if (!isGrouped) return txns.map(t => ({ type: "row" as const, data: t }));
+    const items: Array<{ type: "header"; key: string; agg: GroupAgg } | { type: "row"; data: Transaction & { group_key: string } }> = [];
+    let lastGroup = "";
+    for (const t of txns as (Transaction & { group_key: string })[]) {
+      if (t.group_key !== lastGroup) {
+        const agg = groupMap.get(t.group_key) ?? { key: t.group_key, count: 0, total_amount: 0 };
+        items.push({ type: "header", key: t.group_key, agg });
+        lastGroup = t.group_key;
+      }
+      items.push({ type: "row", data: t });
     }
-  }
-
-  // Client-side pipeline: filter → (SortableTable handles group + sort) → paginate
-  const amountFilter = parseAmountFilter(amountExpr);
-
-  const filtered = useMemo(() => {
-    let rows = scope === "all" ? allTxns
-      : scope === "tax" ? allTxns.filter(t => t.category === "Schedule C" || t.category === "Schedule A")
-      : allTxns.filter(t => t.category === scope);
-    if (amountFilter) rows = rows.filter(t => amountFilter(t.amount));
-    return rows;
-  }, [allTxns, scope, amountFilter]);
-
-  // When grouped, SortableTable gets all filtered rows (it handles grouping internally).
-  // When ungrouped, paginate client-side.
-  const displayRows = isGrouped ? filtered : filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+    return items;
+  }, [txns, isGrouped, groupMap]);
 
   const txColumns: Column<Transaction>[] = useMemo(() => [
     {
@@ -369,7 +378,7 @@ export default function TransactionsPage() {
         <div className="flex items-center gap-2 flex-wrap mb-3">
           {/* Raw transaction data — no category chiclets */}
           <button
-            onClick={() => fetchAll(filter, subFilter, search)}
+            onClick={() => fetchPage()}
             className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded ml-1"
           >
             {loading ? "Loading\u2026" : "Refresh"}
@@ -442,29 +451,61 @@ export default function TransactionsPage() {
           </div>
         )}
 
-        <SortableTable<Transaction>
-          columns={txColumns}
-          rows={displayRows}
-          rowKey={t => t.id}
-          onRowClick={openEdit}
-          groupBy={groupBy !== "none" ? groupKey : undefined}
-          groupLabel={(gk, rows) => (
-            <span className="font-semibold text-stone-600">
-              {gk}
-              <span className="ml-2 font-normal text-stone-400">({rows.length})</span>
-              <span className="float-right font-mono text-xs">
-                <span className={rows.reduce((s, t) => s + t.amount, 0) >= 0 ? "text-green-700" : "text-stone-700"}>
-                  {rows.reduce((s, t) => s + t.amount, 0).toFixed(2)}
-                </span>
-              </span>
-            </span>
-          )}
-          emptyMessage="No transactions match this filter."
-        />
-        {!isGrouped && totalPages > 1 && (
+        {isGrouped ? (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-stone-200">
+                {txColumns.map(col => (
+                  <th key={col.key}
+                    onClick={() => { setSortCol(col.key); setSortDir(d => sortCol === col.key ? (d === "asc" ? "desc" : "asc") : "asc"); setPage(0); }}
+                    className={`px-3 py-2 text-xs font-medium text-stone-400 cursor-pointer hover:text-stone-700 ${col.align === "right" ? "text-right" : "text-left"}`}>
+                    {col.label} {sortCol === col.key ? (sortDir === "asc" ? "\u25B2" : "\u25BC") : ""}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rowsWithHeaders.map((item, i) => {
+                if (item.type === "header") {
+                  return (
+                    <tr key={`gh-${item.key}-${i}`} className="bg-stone-50 border-t border-stone-200">
+                      <td colSpan={txColumns.length - 1} className="px-3 py-2 text-xs font-semibold text-stone-600">
+                        {item.key} <span className="font-normal text-stone-400">({item.agg.count})</span>
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-xs">
+                        <span className={item.agg.total_amount >= 0 ? "text-green-700" : "text-stone-700"}>
+                          {item.agg.total_amount.toFixed(2)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                }
+                const t = item.data;
+                return (
+                  <tr key={t.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer" onClick={() => openEdit(t)}>
+                    {txColumns.map(col => (
+                      <td key={col.key} className={`px-3 py-1.5 ${col.align === "right" ? "text-right" : ""} ${col.className ?? ""}`}>
+                        {col.render(t)}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <SortableTable<Transaction>
+            columns={txColumns}
+            rows={txns}
+            rowKey={t => t.id}
+            onRowClick={openEdit}
+            emptyMessage="No transactions match this filter."
+          />
+        )}
+        {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-2.5 mt-2 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-400">
             <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
-            <span>{page * PAGE_SIZE + 1}&ndash;{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+            <span>Page {page + 1} of {totalPages} ({total} total)</span>
             <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
           </div>
         )}

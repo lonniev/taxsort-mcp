@@ -139,6 +139,184 @@ async def get_transactions(
     }
 
 
+async def get_transactions_paged(
+    session_id: str,
+    category: str = "",
+    subcategory: str = "",
+    month: str = "",
+    search: str = "",
+    account: str = "",
+    unclassified_only: bool = False,
+    classified_only: bool = False,
+    group_by: str = "none",
+    sort_col: str = "date",
+    sort_dir: str = "asc",
+    page: int = 0,
+    page_size: int = 200,
+) -> dict:
+    """Server-side filtered, grouped, sorted, paginated transactions.
+
+    Returns a page of individual transaction rows ordered by (group_key,
+    sort_col). Each row includes its group_key and the group's aggregate
+    (count + total amount) via window functions so the client can render
+    group headers at page boundaries without extra queries.
+
+    Returns:
+        total: Total filtered rows (before pagination).
+        page / page_size: Current page parameters.
+        groups: List of {key, count, total_amount} for ALL groups (compact).
+        transactions: The page of rows, each with group_key attached.
+    """
+    # ── Build WHERE clause ──
+    where = ["r.session_id = $1"]
+    params: list = [session_id]
+    idx = 2
+
+    if unclassified_only:
+        where.append("c.category IS NULL")
+    elif classified_only:
+        where.append("c.category IS NOT NULL")
+
+    if category:
+        where.append(f"c.category = ${idx}")
+        params.append(category)
+        idx += 1
+    if subcategory:
+        where.append(f"c.subcategory = ${idx}")
+        params.append(subcategory)
+        idx += 1
+    if month:
+        where.append(f"TO_CHAR(r.date, 'YYYY-MM') = ${idx}")
+        params.append(month)
+        idx += 1
+    if account:
+        where.append(f"r.account = ${idx}")
+        params.append(account)
+        idx += 1
+    if search:
+        where.append(f"r.description ~* ${idx}")
+        params.append(search)
+        idx += 1
+
+    where_clause = " AND ".join(where)
+
+    # ── Group expression ──
+    group_expr_map = {
+        "none": "''",
+        "category": "COALESCE(c.category, 'Uncategorized')",
+        "subcategory": "COALESCE(c.subcategory, c.category, 'Uncategorized')",
+        "taxline": "COALESCE(c.subcategory, 'Uncategorized')",
+        "month": "TO_CHAR(r.date, 'YYYY-MM')",
+        "account": "r.account",
+        "merchant": "COALESCE(c.merchant, LEFT(r.description, 40))",
+    }
+    # Handle compound groups like "month+category"
+    if "+" in group_by:
+        parts = group_by.split("+")
+        g1 = group_expr_map.get(parts[0], "''")
+        g2 = group_expr_map.get(parts[1], "''")
+        group_expr = f"({g1} || ' / ' || {g2})"
+    else:
+        group_expr = group_expr_map.get(group_by, "''")
+
+    # ── Sort expression ──
+    sort_map = {
+        "date": "r.date",
+        "description": "COALESCE(c.merchant, r.description)",
+        "amount": "r.amount",
+        "account": "r.account",
+        "category": "COALESCE(c.category, 'zzz')",
+    }
+    sort_expr = sort_map.get(sort_col, "r.date")
+    sort_direction = "DESC" if sort_dir == "desc" else "ASC"
+
+    # ── Total count ──
+    total_row = await fetchrow(
+        f"""SELECT COUNT(*) as n
+            FROM raw_transactions r
+            LEFT JOIN classifications c
+              ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
+            WHERE {where_clause}""",
+        *params,
+    )
+    total = int(total_row["n"]) if total_row else 0
+
+    # ── Group aggregates (compact — sent once, not per row) ──
+    groups = []
+    if group_by != "none":
+        group_rows = await fetch(
+            f"""SELECT {group_expr} as gk,
+                       COUNT(*) as cnt,
+                       SUM(r.amount) as total_amount
+                FROM raw_transactions r
+                LEFT JOIN classifications c
+                  ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
+                WHERE {where_clause}
+                GROUP BY gk
+                ORDER BY gk {sort_direction}""",
+            *params,
+        )
+        groups = [
+            {"key": str(g["gk"]), "count": int(g["cnt"]), "total_amount": float(g["total_amount"] or 0)}
+            for g in group_rows
+        ]
+
+    # ── Paged rows (ordered by group then sort) ──
+    order_clause = (
+        f"{group_expr} {sort_direction}, {sort_expr} {sort_direction}, r.amount, r.description"
+        if group_by != "none"
+        else f"{sort_expr} {sort_direction}, r.amount, r.description"
+    )
+
+    rows = await fetch(
+        f"""
+        SELECT r.id, r.date, r.description, r.amount, r.account, r.format,
+               r.hint1, r.hint2, r.src_id, r.ambiguous,
+               c.category, c.subcategory, c.confidence, c.reason,
+               c.merchant, c.description_override, c.classified_by,
+               c.classified_at,
+               {group_expr} as group_key
+        FROM raw_transactions r
+        LEFT JOIN classifications c
+          ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
+        WHERE {where_clause}
+        ORDER BY {order_clause}
+        LIMIT ${idx} OFFSET ${idx+1}
+        """,
+        *params, page_size, page * page_size,
+    )
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "groups": groups,
+        "transactions": [
+            {
+                "id": str(r["id"]),
+                "date": str(r["date"]),
+                "description": str(r.get("description_override") or r["description"]),
+                "raw_description": str(r["description"]),
+                "amount": float(r["amount"]),
+                "account": str(r["account"]),
+                "hint1": r.get("hint1"),
+                "hint2": r.get("hint2"),
+                "ambiguous": bool(r.get("ambiguous")),
+                "category": r.get("category"),
+                "subcategory": r.get("subcategory"),
+                "confidence": r.get("confidence"),
+                "reason": r.get("reason"),
+                "merchant": r.get("merchant"),
+                "classified_by": r.get("classified_by"),
+                "classified": r.get("category") is not None,
+                "irs_line": IRS_MAP.get(str(r.get("subcategory") or ""), None),
+                "group_key": str(r["group_key"]),
+            }
+            for r in rows
+        ],
+    }
+
+
 async def save_classifications(
     session_id: str,
     classifications: list[dict],

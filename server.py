@@ -89,6 +89,7 @@ _DOMAIN_TOOLS = [
     ToolIdentity(capability="get_import_stats", category="free", intent="Get import statistics"),
     ToolIdentity(capability="load_share_token", category="free", intent="Load a shared session"),
     ToolIdentity(capability="get_transactions", category="free", intent="Get transactions with filters"),
+    ToolIdentity(capability="get_transactions_paged", category="free", intent="Server-side filtered, grouped, sorted, paginated transactions"),
     ToolIdentity(capability="get_summary", category="free", intent="Get grouped tax summary"),
     ToolIdentity(capability="import_csv", category="free", intent="Import CSV transactions"),
     ToolIdentity(capability="save_classifications", category="free", intent="Bulk write classifications from FE"),
@@ -380,6 +381,40 @@ async def get_transactions(
         month=month, search=search, account=account,
         date_from=date_from, date_to=date_to,
         unclassified_only=unclassified_only, limit=limit, offset=offset,
+    )
+
+
+@tool
+@runtime.paid_tool(capability_uuid("get_transactions_paged"))
+async def get_transactions_paged(
+    session_id: str,
+    category: str = "",
+    subcategory: str = "",
+    month: str = "",
+    search: str = "",
+    account: str = "",
+    unclassified_only: bool = False,
+    classified_only: bool = False,
+    group_by: str = "none",
+    sort_col: str = "date",
+    sort_dir: str = "asc",
+    page: int = 0,
+    page_size: int = 200,
+    npub: NpubField = "",
+) -> dict[str, Any]:
+    """Server-side filtered, grouped, sorted, paginated transactions.
+
+    Groups and sorts the full dataset on the server, then returns one
+    page. Includes per-group aggregates (count + total_amount) so the
+    client can render group headers at any page boundary.
+    """
+    from tools.transactions import get_transactions_paged as _get_paged
+    return await _get_paged(
+        session_id=session_id, category=category, subcategory=subcategory,
+        month=month, search=search, account=account,
+        unclassified_only=unclassified_only, classified_only=classified_only,
+        group_by=group_by, sort_col=sort_col, sort_dir=sort_dir,
+        page=page, page_size=page_size,
     )
 
 
