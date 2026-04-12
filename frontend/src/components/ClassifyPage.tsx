@@ -216,12 +216,15 @@ export default function ClassifyPage() {
     }
   }
 
-  // Merge built-in + custom categories
-  const allCatSubs = { ...CAT_SUBS };
+  // Merge built-in + custom categories — deep copy arrays to avoid mutation
+  const allCatSubs: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(CAT_SUBS)) {
+    allCatSubs[k] = [...v];
+  }
   for (const c of customCats) {
     if (!allCatSubs[c.category]) allCatSubs[c.category] = [];
     if (!allCatSubs[c.category].includes(c.subcategory)) {
-      allCatSubs[c.category] = [...allCatSubs[c.category], c.subcategory];
+      allCatSubs[c.category].push(c.subcategory);
     }
   }
   const allCategories = [...new Set([...CATEGORIES, ...customCats.map(c => c.category)])];
