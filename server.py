@@ -208,7 +208,7 @@ register_standard_tools(
 @tool
 @runtime.paid_tool(capability_uuid("verify_npub"))
 async def verify_npub(
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Start npub verification via Secure Courier.
 
@@ -241,7 +241,7 @@ async def verify_npub(
 @tool
 @runtime.paid_tool(capability_uuid("check_verification"))
 async def check_verification(
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Check if npub verification completed."""
     from tools.verification import get_verification_status, store_verification
@@ -283,7 +283,7 @@ async def check_verification(
 @runtime.paid_tool(capability_uuid("verify_passphrase"))
 async def verify_passphrase(
     passphrase: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Verify a passphrase to unlock a timed-out session."""
     from tools.verification import verify_passphrase as _verify
@@ -297,7 +297,7 @@ async def verify_passphrase(
 async def create_session(
     label: str = "",
     tax_year: int = 0,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Create a new TaxSort session for a tax year."""
     from tools.sessions import create_session as _create_session
@@ -308,7 +308,7 @@ async def create_session(
 @runtime.paid_tool(capability_uuid("get_session"))
 async def get_session(
     session_id: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Get session details and summary stats."""
     from tools.sessions import get_session as _get_session
@@ -318,7 +318,7 @@ async def get_session(
 @tool
 @runtime.paid_tool(capability_uuid("list_sessions"))
 async def list_sessions(
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """List all sessions owned by the current patron."""
     from tools.sessions import list_sessions as _list_sessions
@@ -334,7 +334,7 @@ async def import_csv(
     content: str,
     filename: str,
     account_name: str = "",
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Import a CSV file into a session. Content is the raw CSV text. Optional account_name overrides the filename-derived account."""
     from tools.imports import import_csv as _import_csv
@@ -345,7 +345,7 @@ async def import_csv(
 @runtime.paid_tool(capability_uuid("get_import_stats"))
 async def get_import_stats(
     session_id: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Get import statistics for a session."""
     from tools.imports import get_import_stats as _get_import_stats
@@ -368,7 +368,7 @@ async def get_transactions(
     unclassified_only: bool = False,
     limit: int = 200,
     offset: int = 0,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Get transactions for a session with optional filters.
 
@@ -402,7 +402,7 @@ async def get_transactions_paged(
     sort_dir: str = "asc",
     page: int = 0,
     page_size: int = 200,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Server-side filtered, grouped, sorted, paginated transactions.
 
@@ -426,7 +426,7 @@ async def get_transactions_paged(
 async def save_classifications(
     session_id: str,
     classifications: str = "[]",
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Bulk write classifications from the FE.
 
@@ -451,7 +451,7 @@ async def save_classifications(
 async def delete_classification(
     session_id: str,
     transaction_id: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Remove a classification, reverting the transaction to unclassified."""
     from tools.transactions import delete_classification as _delete
@@ -462,7 +462,7 @@ async def delete_classification(
 @runtime.paid_tool(capability_uuid("clear_transactions"))
 async def clear_transactions(
     session_id: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Delete all transactions and classifications for a session, so CSVs can be re-imported."""
     from tools.transactions import clear_transactions as _clear
@@ -474,7 +474,7 @@ async def clear_transactions(
 async def delete_account_transactions(
     session_id: str,
     account: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Delete all transactions and classifications for a specific imported account."""
     from tools.transactions import delete_account_transactions as _del
@@ -485,7 +485,7 @@ async def delete_account_transactions(
 @runtime.paid_tool(capability_uuid("reset_classifications"))
 async def reset_classifications(
     session_id: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Delete all classifications but keep the imported transactions."""
     from tools.transactions import reset_classifications as _reset
@@ -500,7 +500,7 @@ async def get_amount_neighbors(
     date: str,
     days: int = 14,
     exclude_id: str = "",
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Fetch transactions with the same amount within ±days of a date. Used by the classifier to detect duplicates from overlapping CSV imports."""
     from tools.transactions import get_amount_neighbors as _get
@@ -511,7 +511,7 @@ async def get_amount_neighbors(
 @runtime.paid_tool(capability_uuid("get_accounts"))
 async def get_accounts(
     session_id: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """List all accounts in this session with their types and transaction counts."""
     from tools.accounts import get_accounts as _get
@@ -524,7 +524,7 @@ async def set_account_type(
     session_id: str,
     account_name: str,
     account_type: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Set an account's type: bank (checking/savings), card (credit/debit), investment, or loan."""
     from tools.accounts import set_account_type as _set
@@ -539,7 +539,7 @@ async def get_summary(
     group_by: str = "taxline",
     scope: str = "tax",
     month: str = "",
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Get a grouped spending summary for tax reporting."""
     from tools.transactions import get_summary as _get_summary
@@ -554,7 +554,7 @@ async def get_summary(
 @runtime.paid_tool(capability_uuid("get_rules"))
 async def get_rules(
     session_id: str = "",
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Get all classification rules for the current patron."""
     from tools.rules import get_rules as _get_rules
@@ -571,7 +571,7 @@ async def save_rule(
     amount_operator: str = "",
     amount_value: float | None = None,
     session_id: str = "",
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Create a classification rule.
 
@@ -598,7 +598,7 @@ async def save_rule(
 @runtime.paid_tool(capability_uuid("delete_rule"))
 async def delete_rule(
     rule_id: int,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Delete a classification rule by ID."""
     from tools.rules import delete_rule as _delete_rule
@@ -609,7 +609,7 @@ async def delete_rule(
 @runtime.paid_tool(capability_uuid("apply_rules"))
 async def apply_rules(
     session_id: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Apply rules to unclassified transactions in a session."""
     from tools.rules import apply_rules as _apply_rules
@@ -623,7 +623,7 @@ async def count_rule_matches(
     description_pattern: str,
     amount_operator: str = "",
     amount_value: float | None = None,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Count how many transactions match a rule pattern (live preview)."""
     from tools.rules import count_rule_matches as _count
@@ -638,7 +638,7 @@ async def count_rule_matches(
 @tool
 @runtime.paid_tool(capability_uuid("get_custom_categories"))
 async def get_custom_categories(
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Get custom categories defined by this user."""
     from tools.categories import get_custom_categories as _get
@@ -650,7 +650,7 @@ async def get_custom_categories(
 async def save_custom_category(
     category: str,
     subcategory: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Add a custom category/subcategory (e.g. Personal / Auto Gas)."""
     from tools.categories import save_custom_category as _save
@@ -661,7 +661,7 @@ async def save_custom_category(
 @runtime.paid_tool(capability_uuid("delete_custom_category"))
 async def delete_custom_category(
     category_id: int,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Delete a custom category."""
     from tools.categories import delete_custom_category as _del
@@ -675,7 +675,7 @@ async def delete_custom_category(
 async def create_share_token(
     session_id: str,
     expires_days: int = 30,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Create a share token so another user can access this session."""
     from tools.share import create_share_token as _create_share_token
@@ -689,7 +689,7 @@ async def create_share_token(
 @runtime.paid_tool(capability_uuid("load_share_token"))
 async def load_share_token(
     share_token: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Load a shared session via a share token."""
     from tools.share import load_share_token as _load_share_token
@@ -701,7 +701,7 @@ async def load_share_token(
 @tool
 @runtime.paid_tool(capability_uuid("get_github_token"))
 async def get_github_token(
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Get the GitHub token for creating issues in the taxsort-mcp repo."""
     try:
@@ -721,7 +721,7 @@ async def get_github_token(
 @tool
 @runtime.paid_tool(capability_uuid("get_anthropic_key"))
 async def get_anthropic_key(
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Get the Anthropic API key for FE-driven classification."""
     try:
@@ -744,7 +744,7 @@ async def report_api_usage(
     input_tokens: int,
     output_tokens: int,
     model: str = "",
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Report Anthropic API usage from FE classification for cost tracking."""
     from tools.usage import report_usage
@@ -759,7 +759,7 @@ async def report_api_usage(
 @runtime.paid_tool(capability_uuid("get_api_usage_stats"))
 async def get_api_usage_stats(
     session_id: str = "",
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Get aggregated API usage statistics for cost analysis."""
     from tools.usage import get_usage_stats
@@ -775,7 +775,7 @@ async def create_feedback_issue(
     body: str = "",
     category: str = "feedback",
     contact: str = "",
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Create a GitHub issue for bug reports, feature requests, or feedback."""
     from tools.feedback import create_issue
@@ -785,7 +785,7 @@ async def create_feedback_issue(
 @tool
 @runtime.paid_tool(capability_uuid("list_feedback_issues"))
 async def list_feedback_issues(
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """List feedback issues submitted by this patron."""
     from tools.feedback import list_my_issues
@@ -798,7 +798,7 @@ async def list_feedback_issues(
 @runtime.paid_tool(capability_uuid("session_heartbeat"))
 async def session_heartbeat(
     session_id: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Presence heartbeat. Returns who else is active in this session."""
     from tools.presence import heartbeat as _heartbeat
@@ -813,7 +813,7 @@ async def ask_advisor(
     question: str,
     session_id: str = "",
     history: str = "",
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Ask the Financial Advisor about using TaxSort."""
     import json as _json
@@ -828,7 +828,7 @@ async def ask_tax_researcher(
     question: str,
     session_id: str = "",
     history: str = "",
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Ask the Tax Code Researcher about IRS provisions."""
     import json as _json
@@ -842,7 +842,7 @@ async def ask_tax_researcher(
 @tool
 @runtime.paid_tool(capability_uuid("request_unlock"))
 async def request_unlock(
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Request a session unlock after timeout."""
     from tools.session_lock import request_unlock as _request_unlock
@@ -876,7 +876,7 @@ async def request_unlock(
 @runtime.paid_tool(capability_uuid("check_unlock"))
 async def check_unlock(
     response: str,
-    npub: NpubField = "",
+    npub: NpubField = "", proof: str = "",
 ) -> dict[str, Any]:
     """Check if the unlock response is valid."""
     from tools.session_lock import check_unlock as _check_unlock
