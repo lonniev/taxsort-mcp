@@ -504,15 +504,29 @@ async def get_summary(
     month: str = "",
 ) -> dict:
     """Get a grouped spending summary for tax reporting."""
+    # Parameterized scope/month — never interpolate user input into SQL.
+    _VALID_SCOPES = {"tax", "all", "Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate"}
+    if scope not in _VALID_SCOPES:
+        scope = "all"
+
+    params: list = [session_id]
+    idx = 2
+
     scope_where = "AND c.category != 'Duplicate'"
     if scope == "tax":
         scope_where = "AND c.category IN ('Schedule C', 'Schedule A')"
-    elif scope in ("Schedule C", "Schedule A", "Internal Transfer", "Personal", "Duplicate"):
-        scope_where = f"AND c.category = '{scope}'"
+    elif scope != "all":
+        scope_where = f"AND c.category = ${idx}"
+        params.append(scope)
+        idx += 1
 
     month_where = ""
     if month:
-        month_where = f"AND TO_CHAR(r.date, 'YYYY-MM') = '{month}'"
+        if not re.match(r'^\d{4}-\d{2}$', month):
+            return {"error": "month must be YYYY-MM format", "rows": [], "totals": {"transactions": 0, "expenses": 0, "income": 0}}
+        month_where = f"AND TO_CHAR(r.date, 'YYYY-MM') = ${idx}"
+        params.append(month)
+        idx += 1
 
     def _group_sql(dim: str) -> str:
         if dim == "taxline":
@@ -551,7 +565,7 @@ async def get_summary(
         GROUP BY {group_cols}
         ORDER BY {group_cols}
         """,
-        session_id,
+        *params,
     )
 
     totals = await fetchrow(
@@ -564,7 +578,7 @@ async def get_summary(
           ON c.raw_transaction_id = r.id AND c.session_id = r.session_id
         WHERE r.session_id=$1 {scope_where} {month_where}
         """,
-        session_id,
+        *params,
     )
 
     return {
