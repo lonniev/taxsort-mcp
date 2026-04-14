@@ -65,9 +65,9 @@ async def require_verified(npub: str) -> dict | None:
             "success": False,
             "error": (
                 "Your npub has not been verified. "
-                "Call taxsort_verify_npub to start the Secure Courier verification, "
+                "Call taxsort_request_npub_proof to start verification, "
                 "then reply to the Nostr DM with any passphrase, "
-                "then call taxsort_check_verification."
+                "then call taxsort_receive_npub_proof."
             ),
         }
     return None

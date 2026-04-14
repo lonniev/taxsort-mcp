@@ -131,8 +131,8 @@ function NpubGate({ children, npub, setNpub }: {
   const [dmSent, setDmSent] = useState(false);
   const [opHash, setOpHash] = useState("");
 
-  const verifyTool = useToolCall<VerifyResult>("verify_npub");
-  const checkTool = useToolCall<VerifyResult>("check_verification");
+  const verifyTool = useToolCall<VerifyResult>("request_npub_proof");
+  const checkTool = useToolCall<VerifyResult>("receive_npub_proof");
   const statusTool = useToolCall<ServiceStatus>("service_status");
 
   // Fetch operator hash on mount for DM verification hint
@@ -150,13 +150,13 @@ function NpubGate({ children, npub, setNpub }: {
     localStorage.setItem("taxsort_npub", target);
     setNpub(target);
     setDmSent(false);
-    await verifyTool.invoke({ npub: target });
+    await verifyTool.invoke({ patron_npub: target });
     setDmSent(true);
   }
 
   async function handleFinishLogin() {
     const target = npub || input.trim();
-    const r = await checkTool.invoke({ npub: target });
+    const r = await checkTool.invoke({ patron_npub: target });
     if (r?.verified) {
       sessionStorage.setItem("taxsort_verified", "true");
       setVerified(true);

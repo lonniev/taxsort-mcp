@@ -46,9 +46,9 @@ mcp = FastMCP(
         "TaxSort MCP — Personal tax transaction storage, monetized "
         "via Tollbooth DPYC Bitcoin Lightning micropayments.\n\n"
         "## Onboarding\n"
-        "1. Call taxsort_verify_npub(npub=...) to start identity verification\n"
+        "1. Call taxsort_request_npub_proof(patron_npub=...) to start identity verification\n"
         "2. Reply to the Nostr DM with any passphrase to prove npub ownership\n"
-        "3. Call taxsort_check_verification(npub=...) to complete verification\n\n"
+        "3. Call taxsort_receive_npub_proof(patron_npub=...) to complete verification\n\n"
         "## Workflow\n"
         "1. taxsort_create_session() → get a session_id\n"
         "2. taxsort_import_csv(session_id, content, filename) → parse and store raw transactions\n"
@@ -79,8 +79,6 @@ NpubField = Annotated[
 # ---------------------------------------------------------------------------
 
 _DOMAIN_TOOLS = [
-    ToolIdentity(capability="verify_npub", category="free", intent="Start npub verification via Secure Courier"),
-    ToolIdentity(capability="check_verification", category="free", intent="Check if npub verification completed"),
     ToolIdentity(capability="verify_passphrase", category="free", intent="Verify passphrase for timeout unlock"),
     ToolIdentity(capability="create_session", category="free", intent="Create a tax session"),
     ToolIdentity(capability="get_session", category="free", intent="Get session details"),
@@ -123,6 +121,14 @@ _DOMAIN_TOOLS = [
 
 TOOL_REGISTRY: dict[str, ToolIdentity] = {ti.tool_id: ti for ti in _DOMAIN_TOOLS}
 
+
+async def _on_npub_proven(npub: str, payload: dict) -> None:
+    """Store passphrase hash after npub ownership is proven."""
+    from tools.verification import store_verification
+    passphrase = payload.get("passphrase", "verified")
+    await store_verification(npub, passphrase or "verified")
+
+
 # ---------------------------------------------------------------------------
 # OperatorRuntime
 # ---------------------------------------------------------------------------
@@ -161,28 +167,15 @@ runtime = OperatorRuntime(
         "transaction classification. To come online I need your "
         "BTCPay credentials and Anthropic API key."
     ),
-    patron_credential_template=CredentialTemplate(
-        service="taxsort-patron",
-        version=1,
-        description="Verify your npub ownership with any passphrase",
-        fields={
-            "passphrase": FieldSpec(
-                required=True, sensitive=False,
-                description=(
-                    "Any passphrase of your choice. This proves you own "
-                    "this npub (the Nostr DM is signed with your nsec). "
-                    "Your passphrase protects your tax data."
-                ),
-            ),
-        },
-    ),
-    patron_credential_greeting=(
+    service_name="TaxSort MCP",
+    credential_validator=_validate_taxsort_creds,
+    npub_proof_field="passphrase",
+    npub_proof_greeting=(
         "Hi \u2014 I'm TaxSort MCP. To verify you own this npub and "
         "protect your tax data, please reply with any passphrase. "
         "Your response will be encrypted and signed by your Nostr key."
     ),
-    service_name="TaxSort MCP",
-    credential_validator=_validate_taxsort_creds,
+    on_npub_proven=_on_npub_proven,
 )
 
 # ---------------------------------------------------------------------------
@@ -204,80 +197,9 @@ register_standard_tools(
 
 
 # ── Verification ──────────────────────────────────────────────────────────
-
-@tool
-@runtime.paid_tool(capability_uuid("verify_npub"))
-async def verify_npub(
-    npub: NpubField = "", proof: str = "",
-) -> dict[str, Any]:
-    """Start npub verification via Secure Courier.
-
-    Sends a Nostr DM to the given npub asking for a passphrase.
-    The patron replies with any passphrase via their Nostr client.
-    Then call check_verification to complete.
-    """
-    courier = await runtime.courier()
-    result = await courier.open_channel(
-        service="taxsort-patron",
-        greeting=(
-            "Hi \u2014 TaxSort needs to verify you own this npub. "
-            "Please reply with any passphrase of your choice. "
-            "Your signed reply proves ownership and protects your data."
-        ),
-        recipient_npub=npub,
-    )
-    return {
-        "status": "verification_sent",
-        "npub": npub,
-        "message": (
-            "A Nostr DM has been sent to your npub. "
-            "Reply with any passphrase using your Nostr client, "
-            "then call taxsort_check_verification."
-        ),
-        **{k: v for k, v in result.items() if k != "success"},
-    }
-
-
-@tool
-@runtime.paid_tool(capability_uuid("check_verification"))
-async def check_verification(
-    npub: NpubField = "", proof: str = "",
-) -> dict[str, Any]:
-    """Check if npub verification completed."""
-    from tools.verification import get_verification_status, store_verification
-
-    existing = await get_verification_status(npub)
-    if existing.get("verified"):
-        return {**existing, "message": "Already verified."}
-
-    courier = await runtime.courier()
-    result = await courier.receive(
-        sender_npub=npub,
-        service="taxsort-patron",
-    )
-
-    if not result.get("success"):
-        return {
-            "verified": False,
-            "npub": npub,
-            "message": (
-                "No reply received yet. Open your Nostr client, "
-                "find the DM from TaxSort, and reply with any passphrase."
-            ),
-        }
-
-    try:
-        creds = await runtime.load_patron_session(npub, service="taxsort-patron")
-        passphrase = creds.get("passphrase", "") if creds else ""
-    except Exception:
-        passphrase = "verified"
-
-    stored = await store_verification(npub, passphrase or "verified")
-    return {
-        **stored,
-        "message": "Npub verified! Your tax data is now protected.",
-    }
-
+# npub ownership proof is handled by the wheel's standard
+# request_npub_proof / receive_npub_proof tools. The on_npub_proven
+# callback above stores the passphrase hash for domain use.
 
 @tool
 @runtime.paid_tool(capability_uuid("verify_passphrase"))
