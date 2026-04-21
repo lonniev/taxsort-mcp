@@ -1,14 +1,12 @@
-"""Patron npub verification — prove ownership via Secure Courier passphrase.
+"""Patron npub verification — passphrase storage and status checks.
 
-Flow:
-1. Patron calls verify_npub → operator sends Nostr DM asking for passphrase
-2. Patron replies via their Nostr client with any passphrase
-3. Patron calls check_verification → operator picks up signed DM, stores proof
-4. All subsequent tool calls for this npub are unlocked
+Npub ownership proof is handled by the tollbooth-dpyc wheel via
+``request_npub_proof`` / ``receive_npub_proof`` standard tools. The
+``on_npub_proven`` callback (wired in server.py) stores the patron's
+passphrase hash here for data-at-rest encryption key derivation.
 
-The signed Nostr DM proves npub ownership (signed with the patron's nsec).
-The passphrase is stored (hashed) and used to derive an encryption key
-for the patron's data in Neon.
+This module provides verification status queries and passphrase
+hash storage — not the proof flow itself.
 """
 
 import hashlib
