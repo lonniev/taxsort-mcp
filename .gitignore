@@ -12,7 +12,6 @@ venv/
 .mcp.json
 .claude/
 .DS_Store
-uv.lock
 frontend/node_modules/
 frontend/dist/
 frontend/.env
