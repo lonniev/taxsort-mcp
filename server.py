@@ -21,7 +21,6 @@ from tollbooth.tool_identity import ToolIdentity, STANDARD_IDENTITIES, capabilit
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.credential_validators import validate_btcpay_creds, validate_required
-from tollbooth.slug_tools import make_slug_tool
 
 
 def _validate_taxsort_creds(creds: dict[str, str]) -> list[str]:
@@ -62,8 +61,6 @@ mcp = FastMCP(
         "Use `taxsort_check_price` to preview costs."
     ),
 )
-tool = make_slug_tool(mcp, "taxsort")
-
 
 # Shared npub field annotation
 NpubField = Annotated[
@@ -182,7 +179,7 @@ runtime = OperatorRuntime(
 # Register standard DPYC tools from the wheel
 # ---------------------------------------------------------------------------
 
-register_standard_tools(
+tool = register_standard_tools(
     mcp,
     "taxsort",
     runtime,
