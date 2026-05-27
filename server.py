@@ -75,45 +75,86 @@ NpubField = Annotated[
 # Tool registry (domain tools only)
 # ---------------------------------------------------------------------------
 
+# Frozen UUIDs — declared once at tool birth and never changed.
+VERIFY_PASSPHRASE_UUID           = "4e7acfb3-5aee-5046-a882-34730889f0dc"
+CREATE_SESSION_UUID              = "9f641066-b0f2-5242-8f96-df7331460bcb"
+GET_SESSION_UUID                 = "0b99a03b-62d6-5257-bb85-9e465b70c5e2"
+LIST_SESSIONS_UUID               = "f418b6e2-49c3-5297-ab2c-113f8ac0149c"
+GET_RULES_UUID                   = "0046328b-0def-585a-8471-736983650450"
+COUNT_RULE_MATCHES_UUID          = "474f6a49-5372-507b-a918-f2897ffca8d1"
+GET_IMPORT_STATS_UUID            = "a9264a4a-6cd3-5165-b54b-11f9640e3a3b"
+LOAD_SHARE_TOKEN_UUID            = "91194142-289e-5f74-ab6d-e03650cc9f9a"
+GET_TRANSACTIONS_UUID            = "1404e24a-2a24-504c-93e6-9145ea648b9d"
+GET_TRANSACTIONS_PAGED_UUID      = "3389f7e6-09b4-52e0-b7d4-fe5f2041a7af"
+GET_SUMMARY_UUID                 = "cd41bd76-d133-5037-a737-0d8889cf3048"
+IMPORT_CSV_UUID                  = "8652c842-ae53-5752-8472-8b7f4dc7dd0c"
+SAVE_CLASSIFICATIONS_UUID        = "a69c78b5-1d9f-571e-b73b-b008664213f2"
+DELETE_CLASSIFICATION_UUID       = "acb46750-74b4-5aca-9306-37e3f9259056"
+RESET_CLASSIFICATIONS_UUID       = "a756aaff-1b81-5abd-84f7-5e5b27c91636"
+DELETE_ACCOUNT_TRANSACTIONS_UUID = "8390cadc-fc3b-5667-a349-40a658b882c3"
+CLEAR_TRANSACTIONS_UUID          = "eafa5cf9-7e90-5905-81d8-c4ff7eaa3763"
+GET_AMOUNT_NEIGHBORS_UUID        = "01522e3b-d18e-5a57-b127-36720fe6dfe6"
+GET_ACCOUNTS_UUID                = "85599061-3089-5ceb-ba98-fb12022239c6"
+SET_ACCOUNT_TYPE_UUID            = "0395b12d-882d-50d3-88ff-e24fe468d804"
+SAVE_RULE_UUID                   = "7b554d36-1399-5234-a982-dd6675410bc4"
+DELETE_RULE_UUID                 = "04bf01ce-9a00-51b7-848c-daea7b02640f"
+APPLY_RULES_UUID                 = "2cb67664-ce3b-58fa-a651-258107d3a62f"
+GET_CUSTOM_CATEGORIES_UUID       = "918f91b0-03ef-5ea2-ab67-34467b053057"
+SAVE_CUSTOM_CATEGORY_UUID        = "7e3223c9-8f57-5c8d-8bc5-1cb2d32244e3"
+DELETE_CUSTOM_CATEGORY_UUID      = "bc859a2c-4fef-54da-b0e1-45183a939caf"
+CREATE_SHARE_TOKEN_UUID          = "9c250ace-7ea9-5495-93d4-df9c263746d3"
+REQUEST_UNLOCK_UUID              = "9c49b16d-304c-547c-9738-544be684a29d"
+CHECK_UNLOCK_UUID                = "0a31531a-0bac-5944-ae0b-686f50d03bb0"
+GET_GITHUB_TOKEN_UUID            = "5532f9d6-a465-5f12-a189-896854f1db68"
+CREATE_FEEDBACK_ISSUE_UUID       = "e9f51d15-a08d-5353-ae04-b508af25572c"
+LIST_FEEDBACK_ISSUES_UUID        = "25e01f2e-2cad-5c33-aa5e-dd363d2074b7"
+GET_ANTHROPIC_KEY_UUID           = "a8d55e58-1163-5277-94b7-1384125cec35"
+REPORT_API_USAGE_UUID            = "864e82a2-cf13-5c03-a0f1-6c014ce48f65"
+GET_API_USAGE_STATS_UUID         = "3d10ca59-8279-5c98-af7d-301bf469c6c1"
+SESSION_HEARTBEAT_UUID           = "36d38928-a7b1-5b14-b3ba-edca5ba12027"
+ASK_ADVISOR_UUID                 = "83ad6409-187e-5bb0-acc3-90b7f25c61d1"
+ASK_TAX_RESEARCHER_UUID          = "5b16a8c1-59c9-554d-bcbe-4ade16eac755"
+
+
 _DOMAIN_TOOLS = [
-    ToolIdentity(capability="verify_passphrase", category="free", intent="Verify passphrase for timeout unlock"),
-    ToolIdentity(capability="create_session", category="free", intent="Create a tax session"),
-    ToolIdentity(capability="get_session", category="free", intent="Get session details"),
-    ToolIdentity(capability="list_sessions", category="free", intent="List patron sessions"),
-    ToolIdentity(capability="get_rules", category="free", intent="Get classification rules"),
-    ToolIdentity(capability="count_rule_matches", category="free", intent="Count transactions matching a rule pattern"),
-    ToolIdentity(capability="get_import_stats", category="free", intent="Get import statistics"),
-    ToolIdentity(capability="load_share_token", category="free", intent="Load a shared session"),
-    ToolIdentity(capability="get_transactions", category="free", intent="Get transactions with filters"),
-    ToolIdentity(capability="get_transactions_paged", category="free", intent="Server-side filtered, grouped, sorted, paginated transactions"),
-    ToolIdentity(capability="get_summary", category="free", intent="Get grouped tax summary"),
-    ToolIdentity(capability="import_csv", category="free", intent="Import CSV transactions"),
-    ToolIdentity(capability="save_classifications", category="free", intent="Bulk write classifications from FE"),
-    ToolIdentity(capability="delete_classification", category="free", intent="Remove a classification (revert to unclassified)"),
-    ToolIdentity(capability="reset_classifications", category="free", intent="Delete all classifications, keeping transactions"),
-    ToolIdentity(capability="delete_account_transactions", category="free", intent="Delete all transactions for a specific account"),
-    ToolIdentity(capability="clear_transactions", category="free", intent="Delete all transactions and classifications for a session"),
-    ToolIdentity(capability="get_amount_neighbors", category="free", intent="Fetch transactions with same amount near a date"),
-    ToolIdentity(capability="get_accounts", category="free", intent="List accounts in session with their types"),
-    ToolIdentity(capability="set_account_type", category="free", intent="Set account type (bank, card, investment, loan)"),
-    ToolIdentity(capability="save_rule", category="free", intent="Save a classification rule"),
-    ToolIdentity(capability="delete_rule", category="free", intent="Delete a classification rule"),
-    ToolIdentity(capability="apply_rules", category="free", intent="Apply rules to unclassified transactions"),
-    ToolIdentity(capability="get_custom_categories", category="free", intent="Get custom categories"),
-    ToolIdentity(capability="save_custom_category", category="free", intent="Add a custom category/subcategory"),
-    ToolIdentity(capability="delete_custom_category", category="free", intent="Delete a custom category"),
-    ToolIdentity(capability="create_share_token", category="free", intent="Create a session share token"),
-    ToolIdentity(capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
-    ToolIdentity(capability="check_unlock", category="free", intent="Check if session unlock was approved"),
-    ToolIdentity(capability="get_github_token", category="free", intent="Get GitHub token for issue reporting"),
-    ToolIdentity(capability="create_feedback_issue", category="free", intent="Create a GitHub issue for feedback"),
-    ToolIdentity(capability="list_feedback_issues", category="free", intent="List feedback issues for this patron"),
-    ToolIdentity(capability="get_anthropic_key", category="free", intent="Get Anthropic API key for FE classification"),
-    ToolIdentity(capability="report_api_usage", category="free", intent="Report Anthropic API usage from FE classification"),
-    ToolIdentity(capability="get_api_usage_stats", category="free", intent="Get aggregated API usage statistics"),
-    ToolIdentity(capability="session_heartbeat", category="free", intent="Presence heartbeat — who's active in this session"),
-    ToolIdentity(capability="ask_advisor", category="free", intent="Ask the Financial Advisor about TaxSort"),
-    ToolIdentity(capability="ask_tax_researcher", category="free", intent="Ask the Tax Code Researcher about IRS provisions"),
+    ToolIdentity(tool_id=VERIFY_PASSPHRASE_UUID, capability="verify_passphrase", category="free", intent="Verify passphrase for timeout unlock"),
+    ToolIdentity(tool_id=CREATE_SESSION_UUID, capability="create_session", category="free", intent="Create a tax session"),
+    ToolIdentity(tool_id=GET_SESSION_UUID, capability="get_session", category="free", intent="Get session details"),
+    ToolIdentity(tool_id=LIST_SESSIONS_UUID, capability="list_sessions", category="free", intent="List patron sessions"),
+    ToolIdentity(tool_id=GET_RULES_UUID, capability="get_rules", category="free", intent="Get classification rules"),
+    ToolIdentity(tool_id=COUNT_RULE_MATCHES_UUID, capability="count_rule_matches", category="free", intent="Count transactions matching a rule pattern"),
+    ToolIdentity(tool_id=GET_IMPORT_STATS_UUID, capability="get_import_stats", category="free", intent="Get import statistics"),
+    ToolIdentity(tool_id=LOAD_SHARE_TOKEN_UUID, capability="load_share_token", category="free", intent="Load a shared session"),
+    ToolIdentity(tool_id=GET_TRANSACTIONS_UUID, capability="get_transactions", category="free", intent="Get transactions with filters"),
+    ToolIdentity(tool_id=GET_TRANSACTIONS_PAGED_UUID, capability="get_transactions_paged", category="free", intent="Server-side filtered, grouped, sorted, paginated transactions"),
+    ToolIdentity(tool_id=GET_SUMMARY_UUID, capability="get_summary", category="free", intent="Get grouped tax summary"),
+    ToolIdentity(tool_id=IMPORT_CSV_UUID, capability="import_csv", category="free", intent="Import CSV transactions"),
+    ToolIdentity(tool_id=SAVE_CLASSIFICATIONS_UUID, capability="save_classifications", category="free", intent="Bulk write classifications from FE"),
+    ToolIdentity(tool_id=DELETE_CLASSIFICATION_UUID, capability="delete_classification", category="free", intent="Remove a classification (revert to unclassified)"),
+    ToolIdentity(tool_id=RESET_CLASSIFICATIONS_UUID, capability="reset_classifications", category="free", intent="Delete all classifications, keeping transactions"),
+    ToolIdentity(tool_id=DELETE_ACCOUNT_TRANSACTIONS_UUID, capability="delete_account_transactions", category="free", intent="Delete all transactions for a specific account"),
+    ToolIdentity(tool_id=CLEAR_TRANSACTIONS_UUID, capability="clear_transactions", category="free", intent="Delete all transactions and classifications for a session"),
+    ToolIdentity(tool_id=GET_AMOUNT_NEIGHBORS_UUID, capability="get_amount_neighbors", category="free", intent="Fetch transactions with same amount near a date"),
+    ToolIdentity(tool_id=GET_ACCOUNTS_UUID, capability="get_accounts", category="free", intent="List accounts in session with their types"),
+    ToolIdentity(tool_id=SET_ACCOUNT_TYPE_UUID, capability="set_account_type", category="free", intent="Set account type (bank, card, investment, loan)"),
+    ToolIdentity(tool_id=SAVE_RULE_UUID, capability="save_rule", category="free", intent="Save a classification rule"),
+    ToolIdentity(tool_id=DELETE_RULE_UUID, capability="delete_rule", category="free", intent="Delete a classification rule"),
+    ToolIdentity(tool_id=APPLY_RULES_UUID, capability="apply_rules", category="free", intent="Apply rules to unclassified transactions"),
+    ToolIdentity(tool_id=GET_CUSTOM_CATEGORIES_UUID, capability="get_custom_categories", category="free", intent="Get custom categories"),
+    ToolIdentity(tool_id=SAVE_CUSTOM_CATEGORY_UUID, capability="save_custom_category", category="free", intent="Add a custom category/subcategory"),
+    ToolIdentity(tool_id=DELETE_CUSTOM_CATEGORY_UUID, capability="delete_custom_category", category="free", intent="Delete a custom category"),
+    ToolIdentity(tool_id=CREATE_SHARE_TOKEN_UUID, capability="create_share_token", category="free", intent="Create a session share token"),
+    ToolIdentity(tool_id=REQUEST_UNLOCK_UUID, capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
+    ToolIdentity(tool_id=CHECK_UNLOCK_UUID, capability="check_unlock", category="free", intent="Check if session unlock was approved"),
+    ToolIdentity(tool_id=GET_GITHUB_TOKEN_UUID, capability="get_github_token", category="free", intent="Get GitHub token for issue reporting"),
+    ToolIdentity(tool_id=CREATE_FEEDBACK_ISSUE_UUID, capability="create_feedback_issue", category="free", intent="Create a GitHub issue for feedback"),
+    ToolIdentity(tool_id=LIST_FEEDBACK_ISSUES_UUID, capability="list_feedback_issues", category="free", intent="List feedback issues for this patron"),
+    ToolIdentity(tool_id=GET_ANTHROPIC_KEY_UUID, capability="get_anthropic_key", category="free", intent="Get Anthropic API key for FE classification"),
+    ToolIdentity(tool_id=REPORT_API_USAGE_UUID, capability="report_api_usage", category="free", intent="Report Anthropic API usage from FE classification"),
+    ToolIdentity(tool_id=GET_API_USAGE_STATS_UUID, capability="get_api_usage_stats", category="free", intent="Get aggregated API usage statistics"),
+    ToolIdentity(tool_id=SESSION_HEARTBEAT_UUID, capability="session_heartbeat", category="free", intent="Presence heartbeat — who's active in this session"),
+    ToolIdentity(tool_id=ASK_ADVISOR_UUID, capability="ask_advisor", category="free", intent="Ask the Financial Advisor about TaxSort"),
+    ToolIdentity(tool_id=ASK_TAX_RESEARCHER_UUID, capability="ask_tax_researcher", category="free", intent="Ask the Tax Code Researcher about IRS provisions"),
 ]
 
 TOOL_REGISTRY: dict[str, ToolIdentity] = {ti.tool_id: ti for ti in _DOMAIN_TOOLS}
