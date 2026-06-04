@@ -1,0 +1,62 @@
+# TaxSort
+
+> Sort a year of bank, card, and brokerage transactions into IRS tax
+> categories with AI assistance. Import CSV exports, classify each
+> transaction toward Schedule A/C line items with Claude, review and
+> override by hand, and read grouped summaries for your return. Identity is
+> a Nostr keypair (npub); usage is metered in Bitcoin Lightning satoshis —
+> no account, no email, no subscription, no KYC.
+
+TaxSort is a single-page web app backed by an MCP (Model Context Protocol)
+server. Humans use the web UI; AI agents can call the same MCP tools
+directly. TaxSort organizes and categorizes transactions; it does not
+provide tax advice.
+
+## What is on this site
+
+- **Sessions** — one workspace per tax year, holding every imported account.
+  Sessions lock after a timeout and reopen with a passphrase. A session can
+  be shared with a spouse or accountant via a share token.
+- **CSV import** — bank and brokerage export formats (SoFi, Chase, Schwab,
+  US Bank, PayPal, Coinbase, and a generic mapper), with per-account typing
+  (bank / card / investment / loan).
+- **AI classification** — Claude proposes an IRS category per transaction;
+  every proposal can be reviewed and overridden. Classification rules
+  (description pattern + optional amount filter) auto-apply to recurring
+  payees, and custom categories extend the built-in IRS set.
+- **Summaries** — spending totals grouped by IRS line item.
+- **Subscription detection** — scans imported transactions for recurring
+  charges and surfaces cancellation information.
+- **Advisors** — two Claude-backed chats: a financial advisor and a
+  tax-code researcher.
+- **Usage transparency** — Anthropic token spend per model with estimated
+  USD cost and the sats equivalent.
+
+## Payments and identity
+
+- Sign in with a Nostr npub; prove ownership via a Nostr DM challenge
+  (`request_npub_proof` / `receive_npub_proof`).
+- Pre-fund a satoshi balance with a Bitcoin Lightning invoice
+  (`purchase_credits`); tool calls debit it. `check_price` previews any
+  tool's cost.
+- All data is keyed to the patron's npub and isolated per patron.
+- Monetization is the Tollbooth DPYC protocol (https://tollbooth-dpyc.com):
+  operator-controlled dynamic per-tool pricing at the MCP layer.
+
+## For AI agents
+
+- MCP endpoint: https://taxsort-mcp.fastmcp.app/mcp (streamable HTTP)
+- Start with `taxsort_service_status` (free, no arguments), then
+  `taxsort_check_price`.
+- Core workflow tools: `create_session`, `import_csv`, `get_transactions`,
+  `save_classifications`, `get_summary`. Rules and categories:
+  `get_rules`, `save_rule`, `apply_rules`, `get_custom_categories`.
+- Advisor chats: `ask_advisor`, `ask_tax_researcher`.
+
+## Links
+
+- Web app: https://taxsort-app.pages.dev
+- MCP endpoint: https://taxsort-mcp.fastmcp.app/mcp
+- Source: https://github.com/lonniev/taxsort-mcp
+- Tollbooth DPYC (monetization SDK and network): https://tollbooth-dpyc.com
+- DPYC Oracle (free community concierge): https://dpyc-oracle.fastmcp.app/mcp
