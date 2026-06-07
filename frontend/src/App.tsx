@@ -117,6 +117,7 @@ interface VerifyResult {
   verified?: boolean;
   status?: string;
   message?: string;
+  proof_token?: string;
 }
 
 function NpubGate({ children, npub, setNpub }: {
@@ -130,6 +131,9 @@ function NpubGate({ children, npub, setNpub }: {
   );
   const [dmSent, setDmSent] = useState(false);
   const [opHash, setOpHash] = useState("");
+  // proof_token (poison) from request_npub_proof, required by
+  // receive_npub_proof to resolve the pinned rendezvous relay.
+  const [pendingProof, setPendingProof] = useState("");
 
   const verifyTool = useToolCall<VerifyResult>("request_npub_proof");
   const checkTool = useToolCall<VerifyResult>("receive_npub_proof");
@@ -150,13 +154,17 @@ function NpubGate({ children, npub, setNpub }: {
     localStorage.setItem("taxsort_npub", target);
     setNpub(target);
     setDmSent(false);
-    await verifyTool.invoke({ patron_npub: target });
+    const v = await verifyTool.invoke({ patron_npub: target });
+    if (v?.proof_token) setPendingProof(v.proof_token);
     setDmSent(true);
   }
 
   async function handleFinishLogin() {
     const target = npub || input.trim();
-    const r = await checkTool.invoke({ patron_npub: target });
+    const r = await checkTool.invoke({
+      patron_npub: target,
+      poison: pendingProof,
+    });
     if (r?.verified) {
       sessionStorage.setItem("taxsort_verified", "true");
       setVerified(true);
