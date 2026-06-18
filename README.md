@@ -177,9 +177,9 @@ Schema migration runs automatically on startup.
 
 ---
 
-## DPYC&trade; Honor Chain
+## DPYC&trade; Social Contract
 
-Part of the [DPYC&trade; Honor Chain](https://github.com/lonniev/dpyc-community) &mdash; a network of monetized MCP services where AI agents pay for what they use via Bitcoin Lightning.
+Part of the [DPYC&trade; Social Contract](https://github.com/lonniev/dpyc-community) &mdash; a network of monetized MCP services where AI agents pay for what they use via Bitcoin Lightning.
 
 ### Other Operators in the Network
 
