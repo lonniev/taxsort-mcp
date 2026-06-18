@@ -183,12 +183,21 @@ Part of the [DPYC&trade; Honor Chain](https://github.com/lonniev/dpyc-community)
 
 ### Other Operators in the Network
 
-| Operator | What it does |
+| Repo | What it does |
 |----------|-------------|
+| [tollbooth-dpyc](https://github.com/lonniev/tollbooth-dpyc) | Shared Python SDK &mdash; vault, auth, pricing, Lightning, Nostr identity |
+| [dpyc-community](https://github.com/lonniev/dpyc-community) | Governance registry &mdash; membership, advisories, threat model |
+| [dpyc-oracle](https://github.com/lonniev/dpyc-oracle) | Community concierge &mdash; free onboarding and member lookup |
+| [tollbooth-authority](https://github.com/lonniev/tollbooth-authority) | Certification backbone &mdash; Schnorr-signed certificates |
+| [tollbooth-sample](https://github.com/lonniev/tollbooth-sample) | Sample Operator (canonical template) &mdash; weather stats reference |
+| [tollbooth-pricing-studio](https://github.com/lonniev/tollbooth-pricing-studio) | iOS pricing-model editor / operator console |
+| [cypher-mcp](https://github.com/lonniev/cypher-mcp) | Monetized graph answers &mdash; named Cypher templates over Neo4j/AuraDB |
 | [schwab-mcp](https://github.com/lonniev/schwab-mcp) | Charles Schwab brokerage data &mdash; positions, quotes, options, orders |
-| [excalibur-mcp](https://github.com/lonniev/excalibur-mcp) | X (Twitter) posting &mdash; social media automation with OAuth2 |
 | [thebrain-mcp](https://github.com/lonniev/thebrain-mcp) | TheBrain knowledge graph &mdash; thoughts, links, attachments |
-| [tollbooth-sample](https://github.com/lonniev/tollbooth-sample) | Weather stats &mdash; educational reference implementation |
+| [excalibur-mcp](https://github.com/lonniev/excalibur-mcp) | X (Twitter) posting &mdash; social media automation with OAuth2 |
+| [optionality-mcp](https://github.com/lonniev/optionality-mcp) | Options analytics &mdash; brokerage-data operator |
+| [tollbooth-oauth2-collector](https://github.com/lonniev/tollbooth-oauth2-collector) | OAuth2 callback handler &mdash; advocate service |
+| [tollbooth-shortlinks](https://github.com/lonniev/tollbooth-shortlinks) | URL shortener utility |
 
 ---
 
