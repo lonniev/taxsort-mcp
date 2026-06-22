@@ -19,6 +19,7 @@ from fastmcp import FastMCP
 
 from tollbooth.tool_identity import ToolIdentity, STANDARD_IDENTITIES, capability_uuid
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
+from tollbooth.version import resolve_service_version
 from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.credential_validators import validate_btcpay_creds, validate_required
 
@@ -33,29 +34,7 @@ def _validate_taxsort_creds(creds: dict[str, str]) -> list[str]:
 
 logger = logging.getLogger(__name__)
 
-def _resolve_version(dist: str) -> str:
-    """Single source of truth: pyproject [project].version. Installed metadata
-    first, falling back to the source pyproject.toml for from-checkout deploys
-    (FastMCP Cloud runs flat py-modules apps without installing them)."""
-    from importlib.metadata import PackageNotFoundError, version
-    try:
-        return version(dist)
-    except PackageNotFoundError:
-        pass
-    try:
-        import tomllib
-        from pathlib import Path
-        for parent in (Path(__file__).resolve().parent, *Path(__file__).resolve().parents):
-            pp = parent / "pyproject.toml"
-            if pp.is_file():
-                with pp.open("rb") as fh:
-                    return tomllib.load(fh)["project"]["version"]
-    except Exception:
-        pass
-    return "0.0.0"
-
-
-__version__ = _resolve_version("taxsort-mcp")
+__version__ = resolve_service_version("taxsort-mcp", __file__)
 
 # ---------------------------------------------------------------------------
 # FastMCP app + slug decorator
