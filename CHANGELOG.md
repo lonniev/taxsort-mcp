@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+## [0.28.0] — 2026-06-29
+
+### Changed — BREAKING: sync with tollbooth-dpyc 0.57.0
+
+- **BREAKING:** renamed the possession-token tool parameter `proof` → `dpop_token` on every paid tool, in lockstep with tollbooth-dpyc 0.57.0. The SDK unified the Secure Courier possession token under one name `dpop_token`, retiring `proof_token`, `poison`, and the `proof` call parameter; `paid_tool` now extracts `kwargs["dpop_token"]`. No backward-compat shims. (38 tool signatures updated in `server.py`.)
+- chore: bumped the `tollbooth-dpyc[nostr]` pin to `==0.57.0` and regenerated `uv.lock`.
 - chore: track tollbooth-dpyc through 0.45.4 — picks up the deferred-courtship adoption flow (0.45.0) and the refund-on-raise fix where `paid_tool` surfaces `ValueError` as `tool_input_invalid` (0.45.3). No wire-API changes.
 - docs: expand the DPYC ecosystem peer list in README to the full network, including the cypher-mcp newcomer (monetized graph answers).
 
