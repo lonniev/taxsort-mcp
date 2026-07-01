@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
+import NostrProfilePanel from "./NostrProfilePanel";
 
 interface ModelUsage {
   model: string;
@@ -85,6 +86,9 @@ export default function ProfilePage() {
         </div>
         <div className="text-sm font-mono text-stone-600 break-all">{npub}</div>
       </div>
+
+      {/* Nostr kind-0 profile — self-sovereign, discovered from relays */}
+      <NostrProfilePanel npub={npub} />
 
       {/* Tollbooth Balance */}
       {balance && (
