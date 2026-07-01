@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.28.1] — 2026-06-30
+
+### Fixed — login adopts the wheel dpop_token rename
+
+- The frontend login still sent the pre-0.57.0 wire keys: `receive_npub_proof` was called with `poison` and the challenge was read from `proof_token`. The operator (on the renamed wheel) rejects `poison` and returns `dpop_token`, so sign-in was broken. Renamed both to `dpop_token` (value unchanged). Paid calls are npub-only (unchanged).
+
 All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 

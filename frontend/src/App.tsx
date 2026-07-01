@@ -117,7 +117,7 @@ interface VerifyResult {
   verified?: boolean;
   status?: string;
   message?: string;
-  proof_token?: string;
+  dpop_token?: string;  // wheel 0.57.0+ (was proof_token)
 }
 
 function NpubGate({ children, npub, setNpub }: {
@@ -155,7 +155,7 @@ function NpubGate({ children, npub, setNpub }: {
     setNpub(target);
     setDmSent(false);
     const v = await verifyTool.invoke({ patron_npub: target });
-    if (v?.proof_token) setPendingProof(v.proof_token);
+    if (v?.dpop_token) setPendingProof(v.dpop_token);
     setDmSent(true);
   }
 
@@ -163,7 +163,7 @@ function NpubGate({ children, npub, setNpub }: {
     const target = npub || input.trim();
     const r = await checkTool.invoke({
       patron_npub: target,
-      poison: pendingProof,
+      dpop_token: pendingProof,  // wire key renamed (wheel 0.57.0+); value unchanged
     });
     if (r?.verified) {
       sessionStorage.setItem("taxsort_verified", "true");
