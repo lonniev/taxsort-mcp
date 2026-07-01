@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.29.0] — 2026-06-30
+
+### Added — Nostr kind-0 profile (discover + publish)
+
+- New "Nostr Profile" panel on the Profile page: discovers the patron's kind-0 metadata from Nostr (via the operator's free `get_nostr_profile`) and, with a NIP-07 browser extension, lets them edit + publish a client-signed kind-0 (`publish_nostr_profile`) — display name, picture, lud16, NIP-05, website, about. Signing happens in the extension; the key never reaches the backend. Discovery is public (works for everyone); publishing needs a NIP-07 signer (taxsort has no in-browser nsec). Frontend-only — the tools already ship in the wheel.
+
 ## [0.28.1] — 2026-06-30
 
 ### Fixed — login adopts the wheel dpop_token rename
