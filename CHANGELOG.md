@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.29.1] — 2026-07-09
+
+### Changed — sync with tollbooth-dpyc 0.62.1
+
+- chore: bumped the `tollbooth-dpyc[nostr]` pin to `==0.62.1` (security-hardening batch — invoice-owner check on credit settlement, GCM credential vault, encrypted self-provisioning ledger, no plaintext audit) and regenerated `uv.lock`. No wire-API changes.
+
 ## [0.29.0] — 2026-06-30
 
 ### Added — Nostr kind-0 profile (discover + publish)
