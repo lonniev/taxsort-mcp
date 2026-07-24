@@ -2,8 +2,8 @@
 
 import re
 from decimal import Decimal
-from db.neon import fetch, executemany, fetchrow
 
+from db.neon import executemany, fetch, fetchrow
 
 # ── Format detection ──────────────────────────────────────────────────────────
 
@@ -32,7 +32,8 @@ def _guess_date(raw: str, fallback_year: str = "") -> str:
     Handles: "2025-01-27", "01/27/2025", "Jan 27", "Jan 27, 2025",
     "1/27", "January 27", etc.
     """
-    from datetime import datetime as _dt, date as _date
+    from datetime import date as _date
+    from datetime import datetime as _dt
 
     s = raw.strip().rstrip(",").strip()
     if not s:

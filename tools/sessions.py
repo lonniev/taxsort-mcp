@@ -2,7 +2,8 @@
 
 import uuid
 from datetime import datetime
-from db.neon import fetchrow, fetch, execute
+
+from db.neon import execute, fetch, fetchrow
 
 
 async def create_session(

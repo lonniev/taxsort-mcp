@@ -10,7 +10,8 @@ hash storage — not the proof flow itself.
 """
 
 import hashlib
-from db.neon import fetchrow, execute
+
+from db.neon import execute, fetchrow
 
 
 async def get_verification_status(npub: str) -> dict:

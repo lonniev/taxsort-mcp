@@ -6,7 +6,8 @@ they can see their own issues. No GitHub account required for patrons.
 """
 
 import httpx
-from db.neon import fetch, execute
+
+from db.neon import execute, fetch
 
 REPO = "lonniev/taxsort-mcp"
 API = f"https://api.github.com/repos/{REPO}/issues"

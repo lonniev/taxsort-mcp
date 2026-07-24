@@ -13,15 +13,13 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any
 
-from pydantic import Field
-
 from fastmcp import FastMCP
-
-from tollbooth.tool_identity import ToolIdentity, STANDARD_IDENTITIES, capability_uuid
-from tollbooth.runtime import OperatorRuntime, register_standard_tools
-from tollbooth.version import resolve_service_version
+from pydantic import Field
 from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.credential_validators import validate_btcpay_creds, validate_required
+from tollbooth.runtime import OperatorRuntime, register_standard_tools
+from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
+from tollbooth.version import resolve_service_version
 
 
 def _validate_taxsort_creds(creds: dict[str, str]) -> list[str]:
@@ -778,6 +776,7 @@ async def ask_advisor(
 ) -> dict[str, Any]:
     """Ask the Financial Advisor about using TaxSort."""
     import json as _json
+
     from tools.advisors import ask_advisor as _ask_advisor
     h = _json.loads(history) if history else []
     return await _ask_advisor(question=question, session_id=session_id, history=h)
@@ -793,6 +792,7 @@ async def ask_tax_researcher(
 ) -> dict[str, Any]:
     """Ask the Tax Code Researcher about IRS provisions."""
     import json as _json
+
     from tools.advisors import ask_tax_researcher as _ask_tax_researcher
     h = _json.loads(history) if history else []
     return await _ask_tax_researcher(question=question, session_id=session_id, history=h)

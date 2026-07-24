@@ -1,6 +1,6 @@
 """Session presence — track who's active in a session."""
 
-from db.neon import fetch, execute
+from db.neon import execute, fetch
 
 
 async def heartbeat(session_id: str, npub: str) -> dict:

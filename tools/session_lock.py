@@ -6,7 +6,8 @@ until the unlock flow completes via Secure Courier.
 """
 
 import secrets
-from db.neon import fetchrow, execute
+
+from db.neon import execute, fetchrow
 
 
 async def lock_session(npub: str) -> dict:
