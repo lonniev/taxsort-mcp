@@ -673,7 +673,7 @@ async def get_github_token(
                 "scope": "issues",
             }
         return {"token": None, "message": "No GitHub token configured. Deliver one via Secure Courier."}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return {"token": None, "error": str(e)}
 
 
@@ -689,7 +689,7 @@ async def get_anthropic_key(
         if key:
             return {"key": key}
         return {"key": None, "message": "No Anthropic API key configured. Deliver one via Secure Courier."}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return {"key": None, "error": str(e)}
 
 
@@ -822,7 +822,7 @@ async def request_unlock(
             recipient_npub=npub,
         )
         dm_sent = True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         dm_error = str(e)
         logger.warning("Failed to send unlock DM to %s: %s", npub[:20], e)
 

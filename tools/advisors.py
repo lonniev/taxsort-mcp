@@ -13,7 +13,7 @@ async def _get_api_key() -> str | None:
     try:
         creds = await runtime.load_credentials(["anthropic_api_key"])
         return creds.get("anthropic_api_key")
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 

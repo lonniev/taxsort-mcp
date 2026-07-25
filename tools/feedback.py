@@ -19,7 +19,7 @@ async def _get_github_token() -> str | None:
     try:
         creds = await runtime.load_credentials(["github_token"])
         return creds.get("github_token")
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 

@@ -50,7 +50,7 @@ async def get_rules(owner_npub: str, session_id: str = "") -> dict:
                 "ORDER BY id",
                 owner_npub,
             )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return {"rules": [], "error": f"Rules query failed: {e}"}
 
     return {
@@ -115,7 +115,7 @@ async def save_rule(
             new_description or None,
             session_id or None,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return {"error": f"Failed to save rule: {e}"}
 
     return {
@@ -206,9 +206,12 @@ async def apply_rules(owner_npub: str, session_id: str) -> dict:
         for rule in compiled:
             if not rule["pattern"].search(searchable):
                 continue
-            if rule["amount_op"] and rule["amount_val"] is not None:
-                if not _amount_matches(amount, rule["amount_op"], rule["amount_val"]):
-                    continue
+            if (
+                rule["amount_op"]
+                and rule["amount_val"] is not None
+                and not _amount_matches(amount, rule["amount_op"], rule["amount_val"])
+            ):
+                continue
             inserts.append((
                 tx["id"],
                 session_id,
@@ -265,9 +268,12 @@ async def count_rule_matches(
         searchable = f"{tx['description']} {tx.get('merchant') or ''} {tx.get('description_override') or ''}"
         if not pat.search(searchable):
             continue
-        if amount_operator and amount_value is not None:
-            if not _amount_matches(float(tx["amount"]), amount_operator, amount_value):
-                continue
+        if (
+            amount_operator
+            and amount_value is not None
+            and not _amount_matches(float(tx["amount"]), amount_operator, amount_value)
+        ):
+            continue
         count += 1
 
     return {"matches": count}

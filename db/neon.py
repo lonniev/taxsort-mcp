@@ -41,7 +41,7 @@ async def _get_vault() -> Any:
         try:
             await _ensure_domain_schema(_vault)
             logger.info("Domain schema ensured")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Domain schema init failed: %s", e)
             _schema_done = False
     return _vault
@@ -63,14 +63,14 @@ async def _ensure_domain_schema(vault: Any) -> None:
     t = vault._t
 
     stmts = [
-        f"CREATE TABLE IF NOT EXISTS {t('tax_sessions')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_sessions')} ("
         "id TEXT PRIMARY KEY, "
         "owner_npub TEXT NOT NULL, "
         "label TEXT, "
         "created_at TIMESTAMPTZ DEFAULT NOW(), "
-        "updated_at TIMESTAMPTZ DEFAULT NOW())",
+        "updated_at TIMESTAMPTZ DEFAULT NOW())"),
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_raw_transactions')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_raw_transactions')} ("
         "id TEXT NOT NULL, "
         f"session_id TEXT NOT NULL REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
         "PRIMARY KEY (id, session_id), "
@@ -81,12 +81,12 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "format TEXT NOT NULL, "
         "hint1 TEXT, hint2 TEXT, src_id TEXT, "
         "ambiguous BOOLEAN DEFAULT FALSE, "
-        "imported_at TIMESTAMPTZ DEFAULT NOW())",
+        "imported_at TIMESTAMPTZ DEFAULT NOW())"),
 
         f"CREATE INDEX IF NOT EXISTS idx_raw_tx_session ON {t('tax_raw_transactions')}(session_id)",
         f"CREATE INDEX IF NOT EXISTS idx_raw_tx_date ON {t('tax_raw_transactions')}(session_id, date)",
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_classifications')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_classifications')} ("
         "raw_transaction_id TEXT NOT NULL, "
         "session_id TEXT NOT NULL, "
         f"FOREIGN KEY (raw_transaction_id, session_id) "
@@ -99,12 +99,12 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "merchant TEXT, "
         "description_override TEXT, "
         "classified_by TEXT NOT NULL DEFAULT 'ai', "
-        "classified_at TIMESTAMPTZ DEFAULT NOW())",
+        "classified_at TIMESTAMPTZ DEFAULT NOW())"),
 
         f"CREATE INDEX IF NOT EXISTS idx_cls_session ON {t('tax_classifications')}(session_id)",
         f"CREATE INDEX IF NOT EXISTS idx_cls_category ON {t('tax_classifications')}(session_id, category)",
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_rules')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_rules')} ("
         "id SERIAL PRIMARY KEY, "
         f"session_id TEXT REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
         "owner_npub TEXT NOT NULL, "
@@ -114,17 +114,17 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "category TEXT NOT NULL, "
         "subcategory TEXT NOT NULL, "
         "new_description TEXT, "
-        "created_at TIMESTAMPTZ DEFAULT NOW())",
+        "created_at TIMESTAMPTZ DEFAULT NOW())"),
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_categories')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_categories')} ("
         "id SERIAL PRIMARY KEY, "
         "owner_npub TEXT NOT NULL, "
         "category TEXT NOT NULL, "
         "subcategory TEXT NOT NULL, "
         "created_at TIMESTAMPTZ DEFAULT NOW(), "
-        "UNIQUE (owner_npub, category, subcategory))",
+        "UNIQUE (owner_npub, category, subcategory))"),
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_api_usage')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_api_usage')} ("
         "id SERIAL PRIMARY KEY, "
         "session_id TEXT, "
         "npub TEXT NOT NULL, "
@@ -132,45 +132,45 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "input_tokens INTEGER NOT NULL DEFAULT 0, "
         "output_tokens INTEGER NOT NULL DEFAULT 0, "
         "model TEXT NOT NULL DEFAULT '', "
-        "created_at TIMESTAMPTZ DEFAULT NOW())",
+        "created_at TIMESTAMPTZ DEFAULT NOW())"),
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_share_tokens')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_share_tokens')} ("
         "token TEXT PRIMARY KEY, "
         f"session_id TEXT NOT NULL REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
         "created_by TEXT NOT NULL, "
         "expires_at TIMESTAMPTZ, "
         "include_key BOOLEAN DEFAULT FALSE, "
-        "created_at TIMESTAMPTZ DEFAULT NOW())",
+        "created_at TIMESTAMPTZ DEFAULT NOW())"),
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_verifications')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_verifications')} ("
         "npub TEXT PRIMARY KEY, "
         "passphrase_hash TEXT NOT NULL, "
-        "verified_at TIMESTAMPTZ DEFAULT NOW())",
+        "verified_at TIMESTAMPTZ DEFAULT NOW())"),
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_locks')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_locks')} ("
         "npub TEXT PRIMARY KEY, "
         "locked_at TIMESTAMPTZ DEFAULT NOW(), "
-        "unlocked BOOLEAN DEFAULT FALSE)",
+        "unlocked BOOLEAN DEFAULT FALSE)"),
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_unlock_challenges')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_unlock_challenges')} ("
         "npub TEXT PRIMARY KEY, "
         "code TEXT NOT NULL, "
         "used BOOLEAN DEFAULT FALSE, "
-        "created_at TIMESTAMPTZ DEFAULT NOW())",
+        "created_at TIMESTAMPTZ DEFAULT NOW())"),
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_presence')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_presence')} ("
         "session_id TEXT NOT NULL, "
         "npub TEXT NOT NULL, "
         "last_seen_at TIMESTAMPTZ DEFAULT NOW(), "
-        "PRIMARY KEY (session_id, npub))",
+        "PRIMARY KEY (session_id, npub))"),
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_accounts')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_accounts')} ("
         f"session_id TEXT NOT NULL REFERENCES {t('tax_sessions')}(id) ON DELETE CASCADE, "
         "account_name TEXT NOT NULL, "
         "account_type TEXT NOT NULL DEFAULT 'unknown', "
-        "PRIMARY KEY (session_id, account_name))",
+        "PRIMARY KEY (session_id, account_name))"),
 
-        f"CREATE TABLE IF NOT EXISTS {t('tax_feedback')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('tax_feedback')} ("
         "id SERIAL PRIMARY KEY, "
         "npub TEXT NOT NULL, "
         "github_issue_number INTEGER, "
@@ -178,12 +178,12 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "body TEXT, "
         "category TEXT DEFAULT 'feedback', "
         "contact TEXT, "
-        "created_at TIMESTAMPTZ DEFAULT NOW())",
+        "created_at TIMESTAMPTZ DEFAULT NOW())"),
     ]
     for stmt in stmts:
         try:
             await vault._execute(stmt)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Schema DDL failed: %s\nSQL: %s", e, stmt[:200])
 
 

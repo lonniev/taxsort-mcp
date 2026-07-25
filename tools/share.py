@@ -13,7 +13,7 @@ async def create_share_token(
 ) -> dict:
     """Create a share token for a session."""
     token = secrets.token_urlsafe(16)
-    expires_at = (datetime.now() + timedelta(days=expires_days)) if expires_days else None
+    expires_at = (datetime.now() + timedelta(days=expires_days)) if expires_days else None  # noqa: DTZ005
 
     await execute(
         """
@@ -47,7 +47,7 @@ async def load_share_token(share_token: str) -> dict:
         return {"error": "Invalid or expired share token"}
 
     expires_at = row.get("expires_at")
-    if expires_at and str(expires_at) < datetime.now().isoformat():
+    if expires_at and str(expires_at) < datetime.now().isoformat():  # noqa: DTZ005
         return {"error": "Share token has expired"}
 
     return {

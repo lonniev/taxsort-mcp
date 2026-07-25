@@ -13,7 +13,7 @@ async def create_session(
 ) -> dict:
     """Create a new TaxSort session."""
     session_id = str(uuid.uuid4())
-    year = tax_year or datetime.now().year
+    year = tax_year or datetime.now().year  # noqa: DTZ005
     lbl = label or f"{year} Taxes"
 
     await execute(
@@ -24,7 +24,7 @@ async def create_session(
         """,
         session_id, owner_npub, lbl,
     )
-    return {"session_id": session_id, "label": lbl, "created_at": datetime.now().isoformat()}
+    return {"session_id": session_id, "label": lbl, "created_at": datetime.now().isoformat()}  # noqa: DTZ005
 
 
 async def get_session(session_id: str) -> dict:
