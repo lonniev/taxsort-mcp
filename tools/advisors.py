@@ -4,6 +4,7 @@ Both use the operator's stored Anthropic API key for Claude calls.
 """
 
 import anthropic
+
 from db.neon import fetch
 
 
@@ -12,7 +13,7 @@ async def _get_api_key() -> str | None:
     try:
         creds = await runtime.load_credentials(["anthropic_api_key"])
         return creds.get("anthropic_api_key")
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 

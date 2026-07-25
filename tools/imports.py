@@ -2,8 +2,8 @@
 
 import re
 from decimal import Decimal
-from db.neon import fetch, executemany, fetchrow
 
+from db.neon import executemany, fetch, fetchrow
 
 # ── Format detection ──────────────────────────────────────────────────────────
 
@@ -32,13 +32,14 @@ def _guess_date(raw: str, fallback_year: str = "") -> str:
     Handles: "2025-01-27", "01/27/2025", "Jan 27", "Jan 27, 2025",
     "1/27", "January 27", etc.
     """
-    from datetime import datetime as _dt, date as _date
+    from datetime import date as _date
+    from datetime import datetime as _dt
 
     s = raw.strip().rstrip(",").strip()
     if not s:
         return ""
 
-    year = fallback_year or str(_date.today().year)
+    year = fallback_year or str(_date.today().year)  # noqa: DTZ011
 
     # Already ISO format
     if re.match(r'^\d{4}-\d{2}-\d{2}', s):
@@ -65,7 +66,7 @@ def _guess_date(raw: str, fallback_year: str = "") -> str:
     for fmt in ["%b %d %Y", "%b %d, %Y", "%B %d %Y", "%B %d, %Y",
                 "%b %d", "%B %d"]:
         try:
-            parsed = _dt.strptime(s if " " in s and any(c.isdigit() and int(c) > 2 for c in s.split()[-1]) else f"{s} {year}", fmt)
+            parsed = _dt.strptime(s if " " in s and any(c.isdigit() and int(c) > 2 for c in s.split()[-1]) else f"{s} {year}", fmt)  # noqa: DTZ007
             return parsed.strftime("%Y-%m-%d")
         except ValueError:
             continue
@@ -73,7 +74,7 @@ def _guess_date(raw: str, fallback_year: str = "") -> str:
     # Last resort: append year and try month-day patterns
     for fmt in ["%b %d %Y", "%B %d %Y"]:
         try:
-            parsed = _dt.strptime(f"{s} {year}", fmt)
+            parsed = _dt.strptime(f"{s} {year}", fmt)  # noqa: DTZ007
             return parsed.strftime("%Y-%m-%d")
         except ValueError:
             continue
@@ -87,7 +88,7 @@ def _pa(s: str) -> Decimal:
     cleaned = re.sub(r"[$,\s]", "", s)
     try:
         return Decimal(cleaned)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return Decimal(0)
 
 
@@ -197,7 +198,7 @@ def parse_csv(content: str, filename: str, account_name: str = "") -> tuple[list
                 date = cols[hi.get("date", hi.get("transaction date", 0))][:10]
                 desc = cols[hi.get("description", hi.get("name", hi.get("merchant", 1)))]
                 amount = _pa(cols[hi.get("amount", hi.get("transaction amount", 2))])
-        except Exception:
+        except Exception:  # noqa: BLE001, S112
             continue
 
         if not date or not desc or amount is None:

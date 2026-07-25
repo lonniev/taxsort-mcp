@@ -2,7 +2,8 @@
 
 import re
 from collections import defaultdict
-from db.neon import fetch, execute
+
+from db.neon import execute, fetch
 
 # account_type values: bank, card, investment, loan, unknown
 # "bank" = storage (checking, savings)

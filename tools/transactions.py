@@ -2,7 +2,7 @@
 
 import re
 
-from db.neon import fetch, execute, fetchrow, executemany
+from db.neon import execute, executemany, fetch, fetchrow
 
 
 def _validate_regex(pattern: str) -> str | None:

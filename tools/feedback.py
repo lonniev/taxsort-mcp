@@ -6,7 +6,8 @@ they can see their own issues. No GitHub account required for patrons.
 """
 
 import httpx
-from db.neon import fetch, execute
+
+from db.neon import execute, fetch
 
 REPO = "lonniev/taxsort-mcp"
 API = f"https://api.github.com/repos/{REPO}/issues"
@@ -18,7 +19,7 @@ async def _get_github_token() -> str | None:
     try:
         creds = await runtime.load_credentials(["github_token"])
         return creds.get("github_token")
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 

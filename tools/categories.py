@@ -1,6 +1,6 @@
 """Custom category/subcategory management."""
 
-from db.neon import fetch, execute
+from db.neon import execute, fetch
 
 
 async def get_custom_categories(owner_npub: str) -> dict:
