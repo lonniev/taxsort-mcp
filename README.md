@@ -27,8 +27,8 @@ All domain tools take `proof: str` for DPYC authentication.
 
 | Tool | Description |
 |------|-------------|
-| `verify_npub` | Start npub verification via Secure Courier DM |
-| `check_verification` | Check if npub verification completed |
+| `request_npub_proof` | Start npub verification via Secure Courier DM |
+| `receive_npub_proof` | Complete npub verification (reply to the DM to prove npub ownership) |
 | `verify_passphrase` | Verify a passphrase to unlock a timed-out session |
 | `request_unlock` | Request a session unlock after timeout |
 | `check_unlock` | Check if the unlock response is valid |
@@ -111,7 +111,7 @@ All domain tools take `proof: str` for DPYC authentication.
 
 ### Standard DPYC&trade; (from tollbooth-dpyc wheel)
 
-`check_balance`, `purchase_credits`, `check_payment`, `check_price`, `service_status`, `request_credential_channel`, `receive_credentials`, `forget_credentials`, `how_to_join`, `about`, `lookup_member`, `network_advisory`, `get_tax_rate`
+`check_balance`, `purchase_credits`, `check_payment`, `check_price`, `service_status`, `request_credential_channel`, `receive_credentials`, `forget_credentials`, `oracle_how_to_join`, `oracle_about`, `oracle_lookup_member`, `oracle_network_advisory`, `oracle_get_tax_rate`
 
 ## Server-Side Pagination
 
@@ -163,7 +163,7 @@ Schema migration runs automatically on startup.
 ### Operator Onboarding
 
 1. Generate a Nostr keypair, set `TOLLBOOTH_NOSTR_OPERATOR_NSEC`
-2. Deploy to [Horizon](https://app.fastmcp.ai) (FastMCP Cloud)
+2. Deploy to [Horizon](https://app.fastmcp.ai)
 3. Register with Authority: `register_operator(npub=..., service_url=...)`
 4. Deliver credentials via Secure Courier:
    ```json
