@@ -96,8 +96,8 @@ TaxSort is monetized via **Bitcoin Lightning micropayments** through the Tollboo
 - **No payment surveillance.** Lightning payments are peer-to-peer. No bank statement entry says "TaxSort."
 - **Instant settlement.** Credits appear in seconds, not days.
 
-### The DPYC™ Honor Chain
-TaxSort is part of the [DPYC™ Honor Chain](https://github.com/lonniev/dpyc-community) — a network of independently operated MCP services that share these principles. Each operator runs their own server, manages their own pricing, and answers to their own patrons. There is no central authority, no platform fee, no app store cut.
+### The DPYC™ Social Contract
+TaxSort is part of the [DPYC™ Social Contract](https://github.com/lonniev/dpyc-community) — a network of independently operated MCP services that share these principles. Each operator runs their own server, manages their own pricing, and answers to their own patrons. There is no central authority, no platform fee, no app store cut.
 
 ---
 
