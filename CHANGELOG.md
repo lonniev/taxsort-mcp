@@ -1,6 +1,21 @@
 # Changelog
 
-## [Unreleased]
+## [0.30.0] — 2026-08-03
+
+### Added — a test suite, and a floor under it
+
+- `tests/` — 49 pure-logic tests over the paths that decide tax outcomes: amount
+  operators (`lt`/`lte`/`gt`/`gte`/`eq`/`neq`), rule pattern matching, `save_rule`
+  validation, `count_rule_matches`, summary grouping and the IRS map, CSV import
+  helpers (format detection, dates, amounts, US Bank dedup, Chase/generic parse).
+  Includes guards that `get_summary` binds `scope`/`month` as `$N` parameters rather
+  than interpolating them — the regression 0.25.1 patched.
+- `pytest-cov` with `fail_under = 20` in `[tool.coverage.report]`, enforced by CI.
+  Current coverage is 37%. The floor is deliberately below it: the point is to catch
+  erosion back toward an empty suite, not to freeze today's number.
+
+Before this, `pytest` collected **zero** tests and CI hid that behind
+`continue-on-error`, so the badge was green while `ruff` was the only real check.
 
 ### Fixed — the frontend builds again
 
@@ -18,8 +33,15 @@
 
 - **CI builds the frontend on every PR**, with the same command Deploy Frontend runs.
   A Python-only CI is why a broken deploy went unnoticed from 2026-07-27.
-- The `pytest` step no longer swallows failures via `continue-on-error`. Exit 5
-  ("no tests collected") warns and passes; a real failure is red.
+- The `pytest` step is now a coverage gate and no longer tolerates an empty suite.
+  `continue-on-error` is gone, and so is the interim exit-5 escape hatch that let
+  "no tests collected" pass with a warning — with a suite in place, a vanished one
+  must be red. The threshold lives only in `pyproject.toml`; CI passes `--cov` flags
+  and never restates the number.
+- Tracks `tollbooth-dpyc` 0.63.3 → **0.80.0**, picking up (among much else) the
+  credential-delivery cache invalidation of 0.79.0, the per-patron OAuth refresh of
+  0.76.0, the cold-vault-read diagnosis of 0.75.0, and 0.80.0's
+  `list_canonical_identities` drift detection.
 
 ### Removed
 
