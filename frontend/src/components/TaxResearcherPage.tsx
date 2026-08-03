@@ -61,7 +61,7 @@ function ThinkingQuote() {
 
   return (
     <div className="flex gap-3">
-      <span className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold flex-shrink-0 animate-pulse">TR</span>
+      <span className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold shrink-0 animate-pulse">TR</span>
       <div>
         <span className="text-sm text-green-600 italic">Researching&hellip;</span>
         <div className="mt-2 bg-green-50 border border-green-100 rounded-lg px-4 py-3 max-w-sm transition-all duration-500">
@@ -134,7 +134,7 @@ export default function TaxResearcherPage() {
         <div className="space-y-4 mb-6">
           {thread.map((t, i) => (
             <div key={i} className="flex gap-3">
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 ${
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${
                 t.role === "user" ? "bg-stone-200 text-stone-600" : "bg-green-100 text-green-700"
               }`}>
                 {t.role === "user" ? "Y" : "TR"}

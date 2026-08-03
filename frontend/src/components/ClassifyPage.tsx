@@ -504,7 +504,7 @@ export default function ClassifyPage() {
                 <button
                   onClick={() => handleDeleteRule(r.id)}
                   disabled={deleteRuleTool.loading}
-                  className="text-stone-300 hover:text-red-500 transition-colors flex-shrink-0"
+                  className="text-stone-300 hover:text-red-500 transition-colors shrink-0"
                 >
                   &times;
                 </button>

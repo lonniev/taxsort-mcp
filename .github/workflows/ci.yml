@@ -7,6 +7,30 @@ on:
     branches: [main]
 
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # Same command Deploy Frontend runs. A break here is a break there.
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_MCP_URL: /mcp
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -45,6 +69,14 @@ jobs:
       - name: Lint
         run: ruff check .
 
+      # Exit 5 is "no tests collected" — this repo has no suite yet. Say so
+      # loudly rather than swallowing every failure with continue-on-error.
       - name: Run tests
-        run: pytest -v
-        continue-on-error: true
+        run: |
+          rc=0
+          pytest -v || rc=$?
+          if [ "$rc" -eq 5 ]; then
+            echo "::warning::No Python tests collected — taxsort-mcp has no test suite."
+            exit 0
+          fi
+          exit $rc

@@ -57,7 +57,7 @@ function ThinkingFact() {
 
   return (
     <div className="flex gap-3">
-      <span className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center text-xs font-bold flex-shrink-0 animate-pulse">FA</span>
+      <span className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center text-xs font-bold shrink-0 animate-pulse">FA</span>
       <div>
         <span className="text-sm text-amber-600 italic">Thinking&hellip;</span>
         <div className="mt-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-xs text-amber-700 max-w-sm transition-all duration-500">
@@ -129,7 +129,7 @@ export default function AdvisorPage() {
         <div className="space-y-4 mb-6">
           {thread.map((t, i) => (
             <div key={i} className="flex gap-3">
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 ${
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${
                 t.role === "user" ? "bg-stone-200 text-stone-600" : "bg-amber-100 text-amber-700"
               }`}>
                 {t.role === "user" ? "Y" : "FA"}
