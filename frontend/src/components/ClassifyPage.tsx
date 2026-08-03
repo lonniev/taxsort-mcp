@@ -121,7 +121,7 @@ export default function ClassifyPage() {
   }
 
   // Debounced match count preview
-  const matchTimer = useRef<ReturnType<typeof setTimeout>>();
+  const matchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     if (!formPattern || !sessionId || !showForm) { setMatchCount(null); setMatchError(null); return; }
     clearTimeout(matchTimer.current);

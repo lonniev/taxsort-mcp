@@ -36,7 +36,7 @@ function debugPush(type: DebugEntry["type"], message: string) {
 
 export function useDebugLog() {
   const [, setTick] = useState(0);
-  const ref = useRef<() => void>();
+  const ref = useRef<(() => void) | undefined>(undefined);
 
   if (!ref.current) {
     ref.current = () => setTick((t) => t + 1);
