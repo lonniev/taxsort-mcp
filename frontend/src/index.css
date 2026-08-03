@@ -1,6 +1,8 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+/* v3's darkMode: "class" — the app toggles a .dark class on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Dark mode: invert the key surface/text colors globally.
    This avoids adding dark: variants to every component. */

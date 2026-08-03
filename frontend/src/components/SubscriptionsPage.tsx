@@ -119,11 +119,11 @@ export default function SubscriptionsPage() {
                       <span className="text-xs text-stone-400">{sub.account}</span>
                     </div>
                   </div>
-                  <div className="text-right flex-shrink-0">
+                  <div className="text-right shrink-0">
                     <div className="text-sm font-mono font-medium text-stone-800">${fmt$(sub.amount)}</div>
                     <div className="text-xs text-stone-400">/{sub.frequency.replace("ly", "")}</div>
                   </div>
-                  <div className="text-right flex-shrink-0 w-24">
+                  <div className="text-right shrink-0 w-24">
                     <div className="text-xs text-red-600 font-mono">${fmt$(sub.annual_cost)}/yr</div>
                     <div className="text-xs text-stone-400">{sub.occurrences} charges</div>
                   </div>

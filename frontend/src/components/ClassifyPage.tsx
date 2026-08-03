@@ -121,7 +121,7 @@ export default function ClassifyPage() {
   }
 
   // Debounced match count preview
-  const matchTimer = useRef<ReturnType<typeof setTimeout>>();
+  const matchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     if (!formPattern || !sessionId || !showForm) { setMatchCount(null); setMatchError(null); return; }
     clearTimeout(matchTimer.current);
@@ -504,7 +504,7 @@ export default function ClassifyPage() {
                 <button
                   onClick={() => handleDeleteRule(r.id)}
                   disabled={deleteRuleTool.loading}
-                  className="text-stone-300 hover:text-red-500 transition-colors flex-shrink-0"
+                  className="text-stone-300 hover:text-red-500 transition-colors shrink-0"
                 >
                   &times;
                 </button>
