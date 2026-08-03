@@ -1,5 +1,31 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed — the frontend builds again
+
+- Completed the Tailwind **v3 → v4** migration that PR #48 left undone when it bumped
+  `tailwindcss` 3.4.19 → 4.3.3: PostCSS now loads `@tailwindcss/postcss`, `index.css`
+  uses `@import 'tailwindcss'` with `@plugin` and `@custom-variant dark`, and the
+  v3-only `tailwind.config.js` is gone. `autoprefixer` drops out — v4 prefixes itself.
+- Gave `useRef` an explicit initial value in `useMCP.ts` and `ClassifyPage.tsx`, which
+  React 19's `@types/react` requires. These two errors masked the Tailwind break, since
+  `tsc -b` runs before `vite build`.
+- Renamed `flex-shrink-0` → `shrink-0` (9 sites), per the v4 codemod.
+- `npm audit fix` cleared 7 of 9 advisories, all transitive and in-range.
+
+### Changed
+
+- **CI builds the frontend on every PR**, with the same command Deploy Frontend runs.
+  A Python-only CI is why a broken deploy went unnoticed from 2026-07-27.
+- The `pytest` step no longer swallows failures via `continue-on-error`. Exit 5
+  ("no tests collected") warns and passes; a real failure is red.
+
+### Removed
+
+- The `lint` script and its `eslint` dependency. eslint v9+ needs `eslint.config.js`
+  and this repo has none, so `npm run lint` never ran. `tsc -b` remains the type gate.
+
 ## 0.29.2 — 2026-07-16
 
 ### Changed — track tollbooth-dpyc 0.63.3
