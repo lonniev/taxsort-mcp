@@ -8,6 +8,8 @@ venv/
 .env
 .ruff_cache/
 .pytest_cache/
+.coverage
+htmlcov/
 .mypy_cache/
 .mcp.json
 .claude/

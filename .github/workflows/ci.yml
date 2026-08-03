@@ -69,14 +69,12 @@ jobs:
       - name: Lint
         run: ruff check .
 
-      # Exit 5 is "no tests collected" — this repo has no suite yet. Say so
-      # loudly rather than swallowing every failure with continue-on-error.
-      - name: Run tests
-        run: |
-          rc=0
-          pytest -v || rc=$?
-          if [ "$rc" -eq 5 ]; then
-            echo "::warning::No Python tests collected — taxsort-mcp has no test suite."
-            exit 0
-          fi
-          exit $rc
+      # The suite now exists, so a vanished one must be RED, not warned about —
+      # pytest's exit 5 ("no tests collected") is exactly the erosion this gate
+      # guards against. The coverage floor lives in pyproject's
+      # [tool.coverage.report] fail_under; don't restate the number here.
+      - name: Run tests with coverage gate
+        run: >
+          pytest -v
+          --cov=tools --cov=db --cov=config
+          --cov-report=term-missing
