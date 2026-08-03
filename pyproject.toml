@@ -46,7 +46,8 @@ omit = ["tests/*", "server.py"]
 [tool.coverage.report]
 # Floor catches silent erosion back toward an empty suite. Pure-logic modules
 # (rules/imports amount+match paths) are the primary net; DB-bound tools raise
-# this over time. fail_under is enforced in CI via --cov-fail-under as well.
+# this over time. This is the ONLY place the number lives — pytest-cov reads it
+# here, so CI passes --cov flags but never restates the threshold.
 fail_under = 20
 show_missing = true
 skip_covered = false
