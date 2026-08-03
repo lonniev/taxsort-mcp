@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -25,7 +24,6 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.0",
-    "eslint": "^10.0.0",
     "postcss": "^8.4.41",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.0",
