@@ -1,5 +1,8 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
 ## [0.30.0] — 2026-08-03
 
 ### Added — a test suite, and a floor under it
@@ -48,7 +51,7 @@ Before this, `pytest` collected **zero** tests and CI hid that behind
 - The `lint` script and its `eslint` dependency. eslint v9+ needs `eslint.config.js`
   and this repo has none, so `npm run lint` never ran. `tsc -b` remains the type gate.
 
-## 0.29.2 — 2026-07-16
+## [0.29.2] — 2026-07-16
 
 ### Changed — track tollbooth-dpyc 0.63.3
 
@@ -71,11 +74,6 @@ Before this, `pytest` collected **zero** tests and CI hid that behind
 ### Fixed — login adopts the wheel dpop_token rename
 
 - The frontend login still sent the pre-0.57.0 wire keys: `receive_npub_proof` was called with `poison` and the challenge was read from `proof_token`. The operator (on the renamed wheel) rejects `poison` and returns `dpop_token`, so sign-in was broken. Renamed both to `dpop_token` (value unchanged). Paid calls are npub-only (unchanged).
-
-All notable changes to this project will be documented in this file.
-Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-
-## [Unreleased]
 
 ## [0.28.0] — 2026-06-29
 
