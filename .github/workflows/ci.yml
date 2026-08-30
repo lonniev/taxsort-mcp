@@ -79,14 +79,18 @@ jobs:
             exit 1
 
 
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@v10.0.0
 
-      - name: Install ruff
-        run: pip install ruff
+      # `uv sync --locked` is how Horizon installs: fastmcp's UVEnvironment.prepare()
+      # shells out to `uv sync`, and build_command() prefixes `uv run`. Installing with
+      # pip here meant CI validated a resolution the deploy never used — and `--locked`
+      # additionally fails on a stale lock, so drift is a pre-merge error instead of a
+      # deploy-time surprise.
+      - name: Install dependencies (the lockfile Horizon deploys)
+        run: uv sync --locked --extra dev
 
       - name: Lint
-        run: ruff check .
+        run: uv run ruff check .
 
       # The suite now exists, so a vanished one must be RED, not warned about —
       # pytest's exit 5 ("no tests collected") is exactly the erosion this gate
@@ -94,7 +98,7 @@ jobs:
       # [tool.coverage.report] fail_under; don't restate the number here.
       - name: Run tests with coverage gate
         run: >
-          pytest -v
+          uv run pytest -v
           --cov=tools --cov=db --cov=config
           --cov-report=term-missing
 
