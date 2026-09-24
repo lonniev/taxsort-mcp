@@ -1,8 +1,50 @@
 @import 'tailwindcss';
+@import '@tollbooth-dpyc/web/theme.css';
+@source '../node_modules/@tollbooth-dpyc/web/dist';
 @plugin '@tailwindcss/typography';
 
 /* v3's darkMode: "class" — the app toggles a .dark class on <html>. */
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* The shared account pieces from @tollbooth-dpyc/web, in TaxSort's stone and
+   amber. The light set is written under the package's dark-mode selector too,
+   so the device's dark mode never wins: TaxSort goes dark only through its own
+   .dark class, which the second block follows. */
+:root,
+:root:not([data-theme="light"]) {
+  --tb-accent: #d97706;      /* amber-600 */
+  --tb-on-accent: #ffffff;
+  --tb-surface: #ffffff;
+  --tb-surface-2: #f5f5f4;   /* stone-100 */
+  --tb-ink: #292524;         /* stone-800 */
+  --tb-muted: #78716c;       /* stone-500 */
+  --tb-line: #e7e5e4;        /* stone-200 */
+  --tb-ok: #15803d;          /* green-700 */
+  --tb-warn-bg: #fffbeb;     /* amber-50 */
+  --tb-warn-line: #fde68a;   /* amber-200 */
+  --tb-warn-ink: #b45309;    /* amber-700 */
+  --tb-err-bg: #fef2f2;      /* red-50 */
+  --tb-err-line: #fecaca;    /* red-200 */
+  --tb-err-ink: #b91c1c;     /* red-700 */
+}
+
+:root.dark,
+:root.dark:not([data-theme="light"]) {
+  --tb-accent: #d97706;
+  --tb-on-accent: #ffffff;
+  --tb-surface: #292524;     /* stone-800 */
+  --tb-surface-2: #1c1917;   /* stone-900 */
+  --tb-ink: #e7e5e4;         /* stone-200 */
+  --tb-muted: #a8a29e;       /* stone-400 */
+  --tb-line: #44403c;        /* stone-700 */
+  --tb-ok: #4ade80;          /* green-400 */
+  --tb-warn-bg: #292118;
+  --tb-warn-line: #92400e;
+  --tb-warn-ink: #fbbf24;
+  --tb-err-bg: #2d1b1b;
+  --tb-err-line: #991b1b;
+  --tb-err-ink: #f87171;
+}
 
 /* Dark mode: invert the key surface/text colors globally.
    This avoids adding dark: variants to every component. */
