@@ -1,7 +1,16 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { configureTollbooth } from "@tollbooth-dpyc/web";
 import App from "./App";
 import "./index.css";
+
+// The shared account pieces (the Nostr profile card) read who this site is
+// from here.
+configureTollbooth({
+  slug: "taxsort",
+  appName: "TaxSort",
+  mcpUrl: import.meta.env.VITE_MCP_URL as string,
+});
 
 // Apply saved theme before first render
 {

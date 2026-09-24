@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
+import { NostrProfilePanel } from "@tollbooth-dpyc/web/react";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
-import NostrProfilePanel from "./NostrProfilePanel";
 
 interface ModelUsage {
   model: string;
@@ -88,7 +88,9 @@ export default function ProfilePage() {
       </div>
 
       {/* Nostr kind-0 profile — self-sovereign, discovered from relays */}
-      <NostrProfilePanel npub={npub} />
+      <div className="mb-6">
+        <NostrProfilePanel npub={npub} />
+      </div>
 
       {/* Tollbooth Balance */}
       {balance && (
