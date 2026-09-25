@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
+import { formatDate } from "@tollbooth-dpyc/web";
+import { useTimezone } from "@tollbooth-dpyc/web/react";
 
 interface Issue {
   number: number | null;
@@ -38,6 +40,7 @@ const STATE_BADGE: Record<string, string> = {
 };
 
 export default function FeedbackPage() {
+  const [, zone] = useTimezone();
   const { npub } = useSession();
   const createTool = useToolCall<CreateResult>("create_feedback_issue");
   const listTool = useToolCall<IssuesResult>("list_feedback_issues");
@@ -189,7 +192,7 @@ export default function FeedbackPage() {
                     </div>
                   </div>
                   <span className="text-xs text-stone-400 whitespace-nowrap">
-                    {new Date(issue.created_at).toLocaleDateString()}
+                    {formatDate(issue.created_at, zone)}
                   </span>
                 </div>
               </div>
