@@ -9,42 +9,12 @@
 import { useState, useCallback, useRef } from "react";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { debugPush } from "@tollbooth-dpyc/web";
 
 const _envUrl = import.meta.env.VITE_MCP_URL as string;
 const MCP_URL = _envUrl.startsWith("/")
   ? `${window.location.origin}${_envUrl}`
   : _envUrl;
-
-// ── Debug log (visible in on-screen panel) ─────────────────────────────────
-
-export interface DebugEntry {
-  ts: string;
-  type: "info" | "call" | "result" | "error";
-  message: string;
-}
-
-const _debugLog: DebugEntry[] = [];
-const _listeners: Set<() => void> = new Set();
-const MAX_LOG = 50;
-
-function debugPush(type: DebugEntry["type"], message: string) {
-  const ts = new Date().toLocaleTimeString();
-  _debugLog.unshift({ ts, type, message });
-  if (_debugLog.length > MAX_LOG) _debugLog.length = MAX_LOG;
-  _listeners.forEach((fn) => fn());
-}
-
-export function useDebugLog() {
-  const [, setTick] = useState(0);
-  const ref = useRef<(() => void) | undefined>(undefined);
-
-  if (!ref.current) {
-    ref.current = () => setTick((t) => t + 1);
-    _listeners.add(ref.current);
-  }
-
-  return _debugLog;
-}
 
 // ── Client ──────────��──────────────────────────────────────────────────────
 

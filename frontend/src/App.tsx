@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { DebugPanel } from "@tollbooth-dpyc/web/react";
 import SessionsPage from "./components/SessionsPage";
 import ImportPage from "./components/ImportPage";
 import AccountsPage from "./components/AccountsPage";
@@ -19,7 +20,6 @@ import Nav from "./components/Nav";
 const APP_VERSION = __APP_VERSION__;
 import LockScreen from "./components/LockScreen";
 import { useToolCall } from "./hooks/useMCP";
-import DebugPanel from "./components/DebugPanel";
 
 // ── Contexts ───────────────────────────────────────────────────────────────
 
