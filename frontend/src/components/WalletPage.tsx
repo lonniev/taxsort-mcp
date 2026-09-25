@@ -169,9 +169,12 @@ export default function WalletPage() {
               {TOP_OFF_AMOUNTS.map(amt => (
                 <button
                   key={amt}
-                  onClick={() => handlePurchase(amt)}
+                  onClick={() => setCustomAmount(String(amt))}
                   disabled={purchaseTool.loading}
-                  className="bg-stone-900 text-white text-xs px-4 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
+                  aria-pressed={customAmount === String(amt)}
+                  className={`bg-stone-900 text-white text-xs px-4 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors ${
+                    customAmount === String(amt) ? "ring-2 ring-amber-500 ring-offset-1" : ""
+                  }`}
                 >
                   {amt.toLocaleString()} sats
                 </button>
@@ -193,7 +196,7 @@ export default function WalletPage() {
                   disabled={purchaseTool.loading}
                   className="bg-amber-600 text-white text-xs px-4 py-1.5 rounded-lg hover:bg-amber-500 disabled:opacity-40"
                 >
-                  Purchase
+                  Create invoice
                 </button>
               )}
             </div>
