@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NostrProfilePanel } from "@tollbooth-dpyc/web/react";
+import { NostrProfilePanel, SessionKeyClaim } from "@tollbooth-dpyc/web/react";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
 
@@ -91,6 +91,9 @@ export default function ProfilePage() {
       <div className="mb-6">
         <NostrProfilePanel npub={npub} />
       </div>
+
+      {/* Renders nothing unless this browser holds the session key for this npub */}
+      <SessionKeyClaim npub={npub} />
 
       {/* Tollbooth Balance */}
       {balance && (

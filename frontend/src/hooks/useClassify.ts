@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import Anthropic from "@anthropic-ai/sdk";
-import { mcpCall } from "./useMCP";
+import { callTool } from "@tollbooth-dpyc/web";
 
 // ── Category / subcategory lists (mirrored from BE) ──────────────────────
 
@@ -523,7 +523,7 @@ export function useClassify(sessionId: string | null, npub: string) {
 
   const classify = useCallback(async (reclassifyAll = false) => {
     if (!sessionId) return;
-    await _runEngine(sessionId, npub, reclassifyAll, mcpCall);
+    await _runEngine(sessionId, npub, reclassifyAll, callTool);
   }, [sessionId, npub]);
 
   const pause = useCallback(() => {
@@ -536,8 +536,8 @@ export function useClassify(sessionId: string | null, npub: string) {
 
   const refreshCounts = useCallback(async () => {
     if (!sessionId) return;
-    const all = await mcpCall("get_transactions", { session_id: sessionId, npub, limit: 1, offset: 0 }) as { total: number } | null;
-    const unclassified = await mcpCall("get_transactions", {
+    const all = await callTool("get_transactions", { session_id: sessionId, npub, limit: 1, offset: 0 }) as { total: number } | null;
+    const unclassified = await callTool("get_transactions", {
       session_id: sessionId, npub, limit: 1, offset: 0, unclassified_only: true,
     }) as { total: number } | null;
     const totalN = all?.total ?? 0;

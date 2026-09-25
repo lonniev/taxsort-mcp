@@ -1,96 +1,15 @@
 /**
- * useMCP — React hooks for calling taxsort-mcp tools.
+ * useToolCall — TaxSort's React wrapper over the package client.
  *
- * Uses the official @modelcontextprotocol/sdk Client with
- * StreamableHTTPClientTransport. The SDK handles the initialize
- * handshake, session tracking, SSE parsing, and reconnection.
+ * The connection, the npub/proof envelope and the proof-bounce handling are
+ * `@tollbooth-dpyc/web`'s `callTool`. This hook only adds the loading/error
+ * state a page renders. A proof bounce still reaches the package's
+ * `onProofExpired`, which brings back the sign-in gate.
  */
 
-import { useState, useCallback, useRef } from "react";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { debugPush } from "@tollbooth-dpyc/web";
+import { useState, useCallback } from "react";
+import { callTool } from "@tollbooth-dpyc/web";
 
-const _envUrl = import.meta.env.VITE_MCP_URL as string;
-const MCP_URL = _envUrl.startsWith("/")
-  ? `${window.location.origin}${_envUrl}`
-  : _envUrl;
-
-// ── Client ──────────��──────────────────────────────────────────────────────
-
-let client: Client | null = null;
-let connecting: Promise<void> | null = null;
-
-async function getClient(): Promise<Client> {
-  if (client) return client;
-  if (connecting) {
-    await connecting;
-    return client!;
-  }
-
-  connecting = (async () => {
-    debugPush("info", `Connecting to ${MCP_URL}`);
-    const c = new Client({ name: "taxsort-app", version: "0.1.0" });
-    const transport = new StreamableHTTPClientTransport(new URL(MCP_URL));
-    await c.connect(transport);
-    debugPush("info", "Connected");
-    client = c;
-    connecting = null;
-  })();
-
-  await connecting;
-  return client!;
-}
-
-const QUIET_TOOLS = new Set(["session_heartbeat", "get_amount_neighbors", "get_anthropic_key", "get_github_token"]);
-
-export async function mcpCall(toolName: string, args: Record<string, unknown>): Promise<unknown> {
-  const quiet = QUIET_TOOLS.has(toolName);
-  if (!quiet) debugPush("call", `taxsort_${toolName}(${JSON.stringify(args).slice(0, 120)})`);
-  const c = await getClient();
-  let result;
-  try {
-    result = await c.callTool(
-      { name: `taxsort_${toolName}`, arguments: args },
-      undefined,
-      { timeout: 120_000 },
-    );
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (!quiet) debugPush("error", `taxsort_${toolName}: ${msg}`);
-    throw e;
-  }
-  if (!quiet) debugPush("result", `taxsort_${toolName} → ${JSON.stringify(result).slice(0, 200)}`);
-
-  if (result.isError) {
-    const content = result.content as Array<Record<string, unknown>> | undefined;
-    const errText = content
-      ?.filter((b) => b.type === "text")
-      .map((b) => String(b.text))
-      .join("\n") ?? "Tool call failed";
-    throw new Error(errText);
-  }
-
-  // Prefer structuredContent if available
-  const structured = (result as Record<string, unknown>).structuredContent;
-  if (structured) {
-    return structured;
-  }
-
-  // Parse content[0].text as JSON
-  const content = result.content as Array<Record<string, unknown>> | undefined;
-  const textBlocks = content?.filter((b) => b.type === "text");
-  if (textBlocks?.length) {
-    const text = String(textBlocks[0].text);
-    try { return JSON.parse(text); } catch { return text; }
-  }
-
-  return result;
-}
-
-/**
- * Hook for calling a specific MCP tool with typed result.
- */
 export function useToolCall<TResult = unknown>(toolName: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,11 +19,9 @@ export function useToolCall<TResult = unknown>(toolName: string) {
       setLoading(true);
       setError(null);
       try {
-        const result = await mcpCall(toolName, args);
-        return result as TResult;
+        return await callTool<TResult>(toolName, args);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        setError(msg);
+        setError(e instanceof Error ? e.message : "Unknown error");
         return null;
       } finally {
         setLoading(false);
@@ -114,48 +31,4 @@ export function useToolCall<TResult = unknown>(toolName: string) {
   );
 
   return { invoke, loading, error };
-}
-
-/**
- * Hook for polling a tool at an interval.
- */
-export function useToolPoll<TResult = unknown>(
-  toolName: string,
-  intervalMs: number = 3000,
-) {
-  const [data, setData] = useState<TResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const start = useCallback(
-    (args: Record<string, unknown> = {}) => {
-      setLoading(true);
-      setError(null);
-
-      const poll = async () => {
-        try {
-          const result = await mcpCall(toolName, args);
-          setData(result as TResult);
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : "Unknown error";
-          setError(msg);
-        }
-      };
-
-      poll();
-      timerRef.current = setInterval(poll, intervalMs);
-    },
-    [toolName, intervalMs],
-  );
-
-  const stop = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    setLoading(false);
-  }, []);
-
-  return { data, loading, error, start, stop };
 }
