@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
+import { formatDate } from "@tollbooth-dpyc/web";
+import { useTimezone } from "@tollbooth-dpyc/web/react";
 
 interface Session {
   session_id: string;
@@ -21,6 +23,7 @@ interface CreateResult {
 
 
 export default function SessionsPage() {
+  const [, zone] = useTimezone();
   const { sessionId: currentSessionId, sessionLabel: currentLabel, setSession, clearSession, npub } = useSession();
   const navigate = useNavigate();
 
@@ -137,7 +140,7 @@ export default function SessionsPage() {
                   <div className="text-sm font-medium text-stone-800">{s.label}</div>
                   <div className="text-xs text-stone-400 mt-0.5">
                     {s.tx_count} transactions &middot; updated{" "}
-                    {new Date(s.updated_at).toLocaleDateString()}
+                    {formatDate(s.updated_at, zone)}
                   </div>
                 </div>
                 <span className="text-stone-300 text-lg">&rarr;</span>

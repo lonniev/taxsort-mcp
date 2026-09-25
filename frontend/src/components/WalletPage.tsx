@@ -1,18 +1,13 @@
 import { useEffect, useState } from "react";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
+import { formatDate } from "@tollbooth-dpyc/web";
+import { UsageSummary, useTimezone } from "@tollbooth-dpyc/web/react";
 
+/** The check_balance notices the page shows beside the statement card. */
 interface BalanceResult {
-  balance_api_sats?: number;
-  total_deposited?: number;
-  total_consumed?: number;
-  total_expired?: number;
-  active_tranches?: number;
   expiring_within_24h?: number;
-  next_expiration?: string;
   pending_invoice_count?: number;
-  pending_invoice_ids?: string[];
-  tranches?: { id: string; amount_sats: number; remaining_sats: number; expires_at: string }[];
   vault_unavailable?: boolean;
   warning?: string;
 }
@@ -54,6 +49,9 @@ export default function WalletPage() {
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [customAmount, setCustomAmount] = useState("");
   const [showStatement, setShowStatement] = useState(false);
+  // Bumped on a settled payment so the statement card reads afresh.
+  const [settledCount, setSettledCount] = useState(0);
+  const [, zone] = useTimezone();
 
   async function loadBalance() {
     const data = await balanceTool.invoke({ npub });
@@ -86,72 +84,58 @@ export default function WalletPage() {
       setPaymentStatus(data.status ?? "unknown");
       if (data.status === "Settled") {
         loadBalance();
+        setSettledCount((n) => n + 1);
       }
     }
   }
-
-  const bal = balance?.balance_api_sats ?? 0;
 
   return (
     <div className="w-[85%] mx-auto">
       <h1 className="text-xl font-semibold mb-6 text-stone-800">Wallet</h1>
 
-      {/* Balance card */}
-      <div className="bg-white border border-stone-200 rounded-xl p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="text-xs text-stone-400 mb-1">Credit Balance</div>
-            <div className="text-3xl font-mono font-bold text-stone-800">
-              {bal.toLocaleString()} <span className="text-base font-normal text-stone-400">sats</span>
-            </div>
-          </div>
-          <button
-            onClick={() => { loadBalance(); ; }}
-            disabled={balanceTool.loading}
-            className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded"
-          >
-            {balanceTool.loading ? "\u2026" : "Refresh"}
-          </button>
+      {/* Balance and the last 30 days — the package's statement card */}
+      <UsageSummary
+        key={settledCount}
+        heading="Credit Balance"
+        classNames={{
+          root: "bg-white border border-stone-200 rounded-xl p-6 mb-6",
+          header: "flex items-center justify-between mb-4",
+          heading: "text-xs font-semibold text-stone-400 uppercase tracking-wider",
+          chip: "text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded",
+          // Balance leads, large, as the card's old headline figure.
+          figures:
+            "grid grid-cols-3 sm:grid-cols-4 gap-3 text-center items-end [&>div:first-child>div:first-child]:text-2xl [&>div:first-child>div:first-child]:font-bold",
+          figure: "flex flex-col-reverse",
+          value: "text-sm font-mono text-stone-800",
+          label: "text-xs text-stone-400",
+          subheading: "text-xs text-stone-400 mt-5 mb-2",
+          row: "flex items-center gap-3 py-2 text-xs border-b border-stone-100 last:border-b-0 [&>span:first-child]:flex-1 [&>span:first-child]:truncate",
+          tool: "font-mono text-stone-600",
+          calls: "text-stone-400",
+          sats: "font-mono text-amber-700",
+          loading: "text-xs text-stone-400",
+          error: "text-xs text-red-600",
+          empty: "text-xs text-stone-400 mt-4",
+        }}
+      />
+
+      {balance?.vault_unavailable && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 mb-4">
+          {balance.warning || "Vault not yet available — balance may be stale. Try refreshing."}
         </div>
-        {balance?.vault_unavailable && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 mb-4">
-            {balance.warning || "Vault not yet available — balance may be stale. Try refreshing."}
-          </div>
-        )}
+      )}
 
-        {balance && (
-          <div className="grid grid-cols-4 gap-3 text-center">
-            <div>
-              <div className="text-xs text-stone-400">Deposited</div>
-              <div className="text-sm font-mono text-green-700">{(balance.total_deposited ?? 0).toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="text-xs text-stone-400">Consumed</div>
-              <div className="text-sm font-mono text-amber-700">{(balance.total_consumed ?? 0).toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="text-xs text-stone-400">Expired</div>
-              <div className="text-sm font-mono text-red-500">{(balance.total_expired ?? 0).toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="text-xs text-stone-400">Tranches</div>
-              <div className="text-sm font-mono text-stone-600">{balance.active_tranches ?? 0}</div>
-            </div>
-          </div>
-        )}
+      {(balance?.pending_invoice_count ?? 0) > 0 && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+          {balance!.pending_invoice_count} pending invoice{(balance!.pending_invoice_count ?? 0) > 1 ? "s" : ""} awaiting payment
+        </div>
+      )}
 
-        {(balance?.pending_invoice_count ?? 0) > 0 && (
-          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
-            {balance!.pending_invoice_count} pending invoice{(balance!.pending_invoice_count ?? 0) > 1 ? "s" : ""} awaiting payment
-          </div>
-        )}
-
-        {(balance?.expiring_within_24h ?? 0) > 0 && (
-          <div className="mt-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">
-            {balance!.expiring_within_24h} sats expiring within 24 hours
-          </div>
-        )}
-      </div>
+      {(balance?.expiring_within_24h ?? 0) > 0 && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">
+          {balance!.expiring_within_24h} sats expiring within 24 hours
+        </div>
+      )}
 
       {/* Top off */}
       <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
@@ -321,7 +305,7 @@ export default function WalletPage() {
                   {tx.tool_name || tx.detail || tx.tx_type}
                 </span>
                 <span className="text-stone-400 whitespace-nowrap">
-                  {tx.created_at ? new Date(tx.created_at).toLocaleDateString() : ""}
+                  {tx.created_at ? formatDate(tx.created_at, zone) : ""}
                 </span>
               </div>
             ))}

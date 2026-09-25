@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NostrProfilePanel, SessionKeyClaim } from "@tollbooth-dpyc/web/react";
+import { NostrProfilePanel, SessionKeyClaim, TimezonePicker } from "@tollbooth-dpyc/web/react";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
 
@@ -93,7 +93,23 @@ export default function ProfilePage() {
       </div>
 
       {/* Renders nothing unless this browser holds the session key for this npub */}
-      <SessionKeyClaim npub={npub} />
+      <div className="mb-6 empty:hidden">
+        <SessionKeyClaim npub={npub} />
+      </div>
+
+      {/* Display time zone — every date TaxSort stamps follows it */}
+      <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
+        <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
+          Time Zone
+        </div>
+        <TimezonePicker
+          classNames={{
+            select:
+              "w-full max-w-sm border border-stone-200 rounded-lg px-3 py-1.5 text-sm bg-stone-50 text-stone-700 focus:outline-none focus:border-stone-400",
+          }}
+        />
+        <p className="text-xs text-stone-400 mt-2">Saved on this device.</p>
+      </div>
 
       {/* Tollbooth Balance */}
       {balance && (
