@@ -34,24 +34,15 @@ configureTollbooth({
   ],
 });
 
-// Cleanup, not a carry-over: the identity keys from before the move to the
-// package are never read again, so drop them rather than leave them lying
-// around. Everyone signs in once more.
+// Cleanup, not a carry-over: the identity and theme keys from before the move
+// to the package are never read again, so drop them rather than leave them
+// lying around. Everyone signs in once more, and the theme starts light.
 try {
   localStorage.removeItem("taxsort_npub");
+  localStorage.removeItem("taxsort_theme");
   sessionStorage.removeItem("taxsort_verified");
 } catch {
   /* site data blocked: there is nothing to clean */
-}
-
-// Apply saved theme before first render
-{
-  const theme = localStorage.getItem("taxsort_theme") || "light";
-  if (theme === "dark") {
-    document.documentElement.classList.add("dark");
-  } else if (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-    document.documentElement.classList.add("dark");
-  }
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

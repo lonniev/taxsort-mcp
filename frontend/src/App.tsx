@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { serviceStatus, type ServiceStatus } from "@tollbooth-dpyc/web";
-import { DebugPanel, NpubGate, useSession as useSignIn } from "@tollbooth-dpyc/web/react";
+import type { ServiceStatus } from "@tollbooth-dpyc/web";
+import { AppShell, type AppShellContext } from "@tollbooth-dpyc/web/react";
 import SessionsPage from "./components/SessionsPage";
 import ImportPage from "./components/ImportPage";
 import AccountsPage from "./components/AccountsPage";
@@ -45,15 +45,7 @@ export const useSession = () => useContext(SessionContext);
 
 // ── Status banner ──────────────────────────────────────────────────────────
 
-function StatusBanner({ status, error }: { status: ServiceStatus | null; error: string }) {
-  if (error) {
-    return (
-      <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-xs text-red-700">
-        MCP connection failed: {error}
-      </div>
-    );
-  }
-
+function StatusBanner({ status }: { status: ServiceStatus | null }) {
   if (!status) {
     return (
       <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-700">
@@ -107,11 +99,33 @@ function writeLocked(locked: boolean): void {
 
 // ── App ────────────────────────────────────────────────────────────────────
 
+// The package's AppShell holds who is signed in, the sign-in gate (with the
+// operator's fingerprint and the lapsed-sign-in note), service_status, the
+// theme and the debug log. TaxSort keeps what is its own: the tax session,
+// the inactivity lock, the status banner and the routes.
 export default function App() {
-  const signIn = useSignIn();
-  const { npub, signedIn } = signIn;
-  const [status, setStatus] = useState<ServiceStatus | null>(null);
-  const [statusError, setStatusError] = useState("");
+  return (
+    <AppShell theme="light" signedOut={(shell) => <SignedOut gate={shell.gate} />} classNames={{ root: "bg-stone-50 text-stone-900" }}>
+      {(shell) => <SignedIn shell={shell} />}
+    </AppShell>
+  );
+}
+
+function SignedOut({ gate }: { gate: ReactNode }) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center px-4 py-10">
+      {gate}
+      <p className="text-xs text-stone-400 mt-4">
+        No email. No password. No KYC.{" "}
+        <a href="/privacy" className="text-amber-600 hover:text-amber-800 underline">Privacy Policy</a>
+      </p>
+    </div>
+  );
+}
+
+function SignedIn({ shell }: { shell: AppShellContext }) {
+  const { session, status } = shell;
+  const { npub } = session;
   const [sessionId, setSessionId] = useState<string | null>(
     localStorage.getItem("taxsort_session_id"),
   );
@@ -124,14 +138,6 @@ export default function App() {
   const setLocked = useCallback((v: boolean) => {
     writeLocked(v);
     setLockedState(v);
-  }, []);
-
-  // One service_status per page load: the banner and the gate's DM
-  // fingerprint both read it.
-  useEffect(() => {
-    serviceStatus()
-      .then(setStatus)
-      .catch((e) => setStatusError(e instanceof Error ? e.message : "Connection failed"));
   }, []);
 
   function setSession(id: string, label: string) {
@@ -149,21 +155,21 @@ export default function App() {
   }
 
   function logOut() {
-    signIn.signOut();
     clearSession();
     setLocked(false);
+    session.signOut();
   }
 
   // Inactivity timer — client-side lock screen
   const resetTimer = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     const minutes = parseInt(localStorage.getItem("taxsort_timeout_minutes") ?? "15", 10);
-    if (minutes <= 0 || !signedIn) return;
+    if (minutes <= 0) return;
     timerRef.current = setTimeout(() => setLocked(true), minutes * 60 * 1000);
-  }, [signedIn, setLocked]);
+  }, [setLocked]);
 
   useEffect(() => {
-    if (!signedIn || locked) return;
+    if (locked) return;
     const events = ["mousedown", "keydown", "touchstart", "scroll"];
     const handler = () => resetTimer();
     events.forEach(e => window.addEventListener(e, handler));
@@ -172,78 +178,58 @@ export default function App() {
       events.forEach(e => window.removeEventListener(e, handler));
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [signedIn, locked, resetTimer]);
+  }, [locked, resetTimer]);
 
-  let body: ReactNode;
-  if (!signedIn) {
-    body = (
-      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center px-4 py-10">
-        <NpubGate onLogin={signIn.refresh} operatorHash={status?.operator_npub_hash} notice={signIn.notice} />
-        <p className="text-xs text-stone-400 mt-4">
-          No email. No password. No KYC.{" "}
-          <a href="/privacy" className="text-amber-600 hover:text-amber-800 underline">Privacy Policy</a>
-        </p>
-      </div>
-    );
-  } else if (locked) {
-    body = (
+  if (locked) {
+    return (
       <LockScreen
         npub={npub}
-        canSign={signIn.canSign}
+        canSign={session.canSign}
         onUnlock={() => { setLocked(false); resetTimer(); }}
         onLogOut={logOut}
       />
     );
-  } else {
-    body = (
-      <SessionContext.Provider value={{ sessionId, sessionLabel, npub, setSession, clearSession, logOut }}>
-        <BrowserRouter>
-          <div className="min-h-screen bg-stone-50 text-stone-900">
-            <StatusBanner status={status} error={statusError} />
-            <Nav />
-            <main className="px-4 py-6">
-              <Routes>
-                <Route path="/" element={<SessionsPage />} />
-                <Route
-                  path="/import"
-                  element={sessionId ? <ImportPage /> : <Navigate to="/" />}
-                />
-                <Route
-                  path="/accounts"
-                  element={sessionId ? <AccountsPage /> : <Navigate to="/" />}
-                />
-                <Route
-                  path="/classify"
-                  element={sessionId ? <ClassifyPage /> : <Navigate to="/" />}
-                />
-                <Route
-                  path="/transactions"
-                  element={sessionId ? <TransactionsPage /> : <Navigate to="/" />}
-                />
-                <Route
-                  path="/summary"
-                  element={sessionId ? <SummaryPage /> : <Navigate to="/" />}
-                />
-                <Route path="/subscriptions" element={<SubscriptionsPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/wallet" element={<WalletPage />} />
-                <Route path="/advisor" element={<AdvisorPage />} />
-                <Route path="/tax-research" element={<TaxResearcherPage />} />
-                <Route path="/feedback" element={<FeedbackPage />} />
-                <Route path="/privacy" element={<PrivacyPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-              </Routes>
-            </main>
-          </div>
-        </BrowserRouter>
-      </SessionContext.Provider>
-    );
   }
 
   return (
-    <>
-      {body}
-      <DebugPanel />
-    </>
+    <SessionContext.Provider value={{ sessionId, sessionLabel, npub, setSession, clearSession, logOut }}>
+      <BrowserRouter>
+        <StatusBanner status={status} />
+        <Nav />
+        <main className="px-4 py-6">
+          <Routes>
+            <Route path="/" element={<SessionsPage />} />
+            <Route
+              path="/import"
+              element={sessionId ? <ImportPage /> : <Navigate to="/" />}
+            />
+            <Route
+              path="/accounts"
+              element={sessionId ? <AccountsPage /> : <Navigate to="/" />}
+            />
+            <Route
+              path="/classify"
+              element={sessionId ? <ClassifyPage /> : <Navigate to="/" />}
+            />
+            <Route
+              path="/transactions"
+              element={sessionId ? <TransactionsPage /> : <Navigate to="/" />}
+            />
+            <Route
+              path="/summary"
+              element={sessionId ? <SummaryPage /> : <Navigate to="/" />}
+            />
+            <Route path="/subscriptions" element={<SubscriptionsPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/wallet" element={<WalletPage />} />
+            <Route path="/advisor" element={<AdvisorPage />} />
+            <Route path="/tax-research" element={<TaxResearcherPage />} />
+            <Route path="/feedback" element={<FeedbackPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </main>
+      </BrowserRouter>
+    </SessionContext.Provider>
   );
 }
