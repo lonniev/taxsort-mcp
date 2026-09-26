@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import type { ServiceStatus } from "@tollbooth-dpyc/web";
 import { AppShell, type AppShellContext } from "@tollbooth-dpyc/web/react";
 import SessionsPage from "./components/SessionsPage";
 import ImportPage from "./components/ImportPage";
@@ -45,8 +44,26 @@ export const useSession = () => useContext(SessionContext);
 
 // ── Status banner ──────────────────────────────────────────────────────────
 
-function StatusBanner({ status }: { status: ServiceStatus | null }) {
-  if (!status) {
+function StatusBanner({ shell }: { shell: AppShellContext }) {
+  const { status, statusState, statusError, retryStatus } = shell;
+  if (statusState === "failed") {
+    return (
+      <div role="alert" className="bg-red-50 border-b border-red-200 px-4 py-2 text-xs text-red-700 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+        <strong>MCP connection failed</strong>
+        {statusError && <span className="text-red-600 break-words min-w-0">{statusError}</span>}
+        <button
+          type="button"
+          onClick={retryStatus}
+          className="ml-auto rounded-full border border-red-300 bg-white px-3 py-0.5 font-medium text-red-700 hover:bg-red-100"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (statusState === "connecting" || !status) {
     return (
       <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-700">
         Connecting to TaxSort MCP…
@@ -124,7 +141,7 @@ function SignedOut({ gate }: { gate: ReactNode }) {
 }
 
 function SignedIn({ shell }: { shell: AppShellContext }) {
-  const { session, status } = shell;
+  const { session } = shell;
   const { npub } = session;
   const [sessionId, setSessionId] = useState<string | null>(
     localStorage.getItem("taxsort_session_id"),
@@ -194,7 +211,7 @@ function SignedIn({ shell }: { shell: AppShellContext }) {
   return (
     <SessionContext.Provider value={{ sessionId, sessionLabel, npub, setSession, clearSession, logOut }}>
       <BrowserRouter>
-        <StatusBanner status={status} />
+        <StatusBanner shell={shell} />
         <Nav />
         <main className="px-4 py-6">
           <Routes>
