@@ -3,6 +3,7 @@ import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
 import { formatDate } from "@tollbooth-dpyc/web";
 import { UsageSummary, useTimezone } from "@tollbooth-dpyc/web/react";
+import { usageClassNames } from "../utils/accountStyles";
 
 /** The check_balance notices the page shows beside the statement card. */
 interface BalanceResult {
@@ -97,26 +98,7 @@ export default function WalletPage() {
       <UsageSummary
         key={settledCount}
         heading="Credit Balance"
-        classNames={{
-          root: "bg-white border border-stone-200 rounded-xl p-6 mb-6",
-          header: "flex items-center justify-between mb-4",
-          heading: "text-xs font-semibold text-stone-400 uppercase tracking-wider",
-          chip: "text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded",
-          // Balance leads, large, as the card's old headline figure.
-          figures:
-            "grid grid-cols-3 sm:grid-cols-4 gap-3 text-center items-end [&>div:first-child>div:first-child]:text-2xl [&>div:first-child>div:first-child]:font-bold",
-          figure: "flex flex-col-reverse",
-          value: "text-sm font-mono text-stone-800",
-          label: "text-xs text-stone-400",
-          subheading: "text-xs text-stone-400 mt-5 mb-2",
-          row: "flex items-center gap-3 py-2 text-xs border-b border-stone-100 last:border-b-0 [&>span:first-child]:flex-1 [&>span:first-child]:truncate",
-          tool: "font-mono text-stone-600",
-          calls: "text-stone-400",
-          sats: "font-mono text-amber-700",
-          loading: "text-xs text-stone-400",
-          error: "text-xs text-red-600",
-          empty: "text-xs text-stone-400 mt-4",
-        }}
+        classNames={usageClassNames}
       />
 
       {balance?.vault_unavailable && (

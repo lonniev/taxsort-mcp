@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
-import { NostrProfilePanel, SessionKeyClaim, TimezonePicker } from "@tollbooth-dpyc/web/react";
+import { useEffect, useState, type ReactNode } from "react";
+import type { Theme } from "@tollbooth-dpyc/web";
+import { AccountPage } from "@tollbooth-dpyc/web/react";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
+import { accountPageClassNames, themeToggleClassNames, usageClassNames } from "../utils/accountStyles";
 
 interface ModelUsage {
   model: string;
@@ -13,12 +15,6 @@ interface ModelUsage {
 
 interface UsageResult {
   models: ModelUsage[];
-}
-
-interface BalanceResult {
-  balance_api_sats?: number;
-  total_deposited_api_sats?: number;
-  total_consumed_api_sats?: number;
 }
 
 // Anthropic pricing (per 1M tokens, USD)
@@ -33,21 +29,51 @@ function fmt$(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
+const THEME_LABELS: Record<Theme, ReactNode> = {
+  light: <><span className="mr-1.5">{"\u2600\uFE0F"}</span>Light</>,
+  dark: <><span className="mr-1.5">{"\u{1F319}"}</span>Dark</>,
+  system: <><span className="mr-1.5">{"\u{1F4BB}"}</span>System</>,
+};
+
 export default function ProfilePage() {
+  const { npub } = useSession();
+  return (
+    <AccountPage
+      npub={npub}
+      heading={<>{"\u{1F464}"} Profile</>}
+      usage={{ heading: "Credit Balance", classNames: { ...usageClassNames, root: "bg-white border border-stone-200 rounded-xl p-6" } }}
+      timezone={{
+        heading: "Time Zone",
+        note: () => "Saved on this device.",
+        classNames: {
+          select:
+            "w-full max-w-sm border border-stone-200 rounded-lg px-3 py-1.5 text-sm bg-stone-50 text-stone-700 focus:outline-none focus:border-stone-400",
+        },
+      }}
+      theme={{
+        heading: "Theme",
+        themes: ["light", "dark", "system"],
+        fallback: "light",
+        labels: THEME_LABELS,
+        classNames: themeToggleClassNames,
+      }}
+      coupons={false}
+      build={false}
+      after={<AiUsagePanel />}
+      classNames={accountPageClassNames}
+    />
+  );
+}
+
+/// What the AI classification cost, per model and in total — TaxSort's own.
+function AiUsagePanel() {
   const { npub, sessionId } = useSession();
   const usageTool = useToolCall<UsageResult>("get_api_usage_stats");
-  const balanceTool = useToolCall<BalanceResult>("check_balance");
-
   const [usage, setUsage] = useState<ModelUsage[]>([]);
-  const [balance, setBalance] = useState<BalanceResult | null>(null);
 
   async function load() {
-    const [u, b] = await Promise.all([
-      usageTool.invoke({ npub, session_id: sessionId || "" }),
-      balanceTool.invoke({ npub }),
-    ]);
+    const u = await usageTool.invoke({ npub, session_id: sessionId || "" });
     if (u?.models) setUsage(u.models);
-    if (b) setBalance(b);
   }
 
   useEffect(() => { load(); }, [npub]);
@@ -76,163 +102,97 @@ export default function ProfilePage() {
   const estimatedSats = Math.round((estimatedCostUsd / btcPriceUsd) * 100_000_000);
 
   return (
-    <div className="w-[85%] mx-auto">
-      <h1 className="text-xl font-semibold mb-6 text-stone-800">{"\u{1F464}"} Profile</h1>
-
-      {/* Identity */}
-      <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
-        <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
-          Nostr Identity
+    <div className="bg-white border border-stone-200 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
+          AI Classification Usage
         </div>
-        <div className="text-sm font-mono text-stone-600 break-all">{npub}</div>
+        <button
+          onClick={load}
+          disabled={usageTool.loading}
+          className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded"
+        >
+          Refresh
+        </button>
       </div>
 
-      {/* Nostr kind-0 profile — self-sovereign, discovered from relays */}
-      <div className="mb-6">
-        <NostrProfilePanel npub={npub} />
-      </div>
-
-      {/* Renders nothing unless this browser holds the session key for this npub */}
-      <div className="mb-6 empty:hidden">
-        <SessionKeyClaim npub={npub} />
-      </div>
-
-      {/* Display time zone — every date TaxSort stamps follows it */}
-      <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
-        <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
-          Time Zone
-        </div>
-        <TimezonePicker
-          classNames={{
-            select:
-              "w-full max-w-sm border border-stone-200 rounded-lg px-3 py-1.5 text-sm bg-stone-50 text-stone-700 focus:outline-none focus:border-stone-400",
-          }}
-        />
-        <p className="text-xs text-stone-400 mt-2">Saved on this device.</p>
-      </div>
-
-      {/* Tollbooth Balance */}
-      {balance && (
-        <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
-          <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
-            Tollbooth Credit Balance
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <div className="text-xs text-stone-400">Balance</div>
-              <div className="text-lg font-mono font-bold text-stone-800">
-                {(balance.balance_api_sats ?? 0).toLocaleString()} sats
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-stone-400">Total deposited</div>
-              <div className="text-lg font-mono text-stone-600">
-                {(balance.total_deposited_api_sats ?? 0).toLocaleString()} sats
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-stone-400">Total consumed</div>
-              <div className="text-lg font-mono text-stone-600">
-                {(balance.total_consumed_api_sats ?? 0).toLocaleString()} sats
-              </div>
-            </div>
-          </div>
-        </div>
+      {usage.length === 0 && !usageTool.loading && (
+        <p className="text-xs text-stone-400 italic">No classification runs recorded yet.</p>
       )}
 
-      {/* AI Usage & Cost */}
-      <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
-            AI Classification Usage
-          </div>
-          <button
-            onClick={load}
-            disabled={usageTool.loading}
-            className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded"
-          >
-            Refresh
-          </button>
-        </div>
-
-        {usage.length === 0 && !usageTool.loading && (
-          <p className="text-xs text-stone-400 italic">No classification runs recorded yet.</p>
-        )}
-
-        {usage.length > 0 && (
-          <>
-            {/* Per-model breakdown */}
-            <div className="space-y-2 mb-4">
-              {usage.map((m, i) => {
-                const pricing = MODEL_PRICING[m.model] ?? DEFAULT_PRICING;
-                const cost =
-                  (m.total_input_tokens / 1_000_000) * pricing.input +
-                  (m.total_output_tokens / 1_000_000) * pricing.output;
-                return (
-                  <div key={i} className="bg-stone-50 border border-stone-100 rounded-lg px-4 py-3">
-                    <div className="text-xs font-mono text-stone-600 mb-1">{m.model || "unknown"}</div>
-                    <div className="grid grid-cols-5 gap-2 text-xs">
-                      <div>
-                        <span className="text-stone-400">Runs:</span>{" "}
-                        <span className="font-mono text-stone-700">{m.runs}</span>
-                      </div>
-                      <div>
-                        <span className="text-stone-400">Calls:</span>{" "}
-                        <span className="font-mono text-stone-700">{m.total_calls}</span>
-                      </div>
-                      <div>
-                        <span className="text-stone-400">Input:</span>{" "}
-                        <span className="font-mono text-stone-700">{m.total_input_tokens.toLocaleString()}</span>
-                      </div>
-                      <div>
-                        <span className="text-stone-400">Output:</span>{" "}
-                        <span className="font-mono text-stone-700">{m.total_output_tokens.toLocaleString()}</span>
-                      </div>
-                      <div>
-                        <span className="text-stone-400">Cost:</span>{" "}
-                        <span className="font-mono text-amber-700">${fmt$(cost)}</span>
-                      </div>
+      {usage.length > 0 && (
+        <>
+          {/* Per-model breakdown */}
+          <div className="space-y-2 mb-4">
+            {usage.map((m, i) => {
+              const pricing = MODEL_PRICING[m.model] ?? DEFAULT_PRICING;
+              const cost =
+                (m.total_input_tokens / 1_000_000) * pricing.input +
+                (m.total_output_tokens / 1_000_000) * pricing.output;
+              return (
+                <div key={i} className="bg-stone-50 border border-stone-100 rounded-lg px-4 py-3">
+                  <div className="text-xs font-mono text-stone-600 mb-1">{m.model || "unknown"}</div>
+                  <div className="grid grid-cols-5 gap-2 text-xs">
+                    <div>
+                      <span className="text-stone-400">Runs:</span>{" "}
+                      <span className="font-mono text-stone-700">{m.runs}</span>
+                    </div>
+                    <div>
+                      <span className="text-stone-400">Calls:</span>{" "}
+                      <span className="font-mono text-stone-700">{m.total_calls}</span>
+                    </div>
+                    <div>
+                      <span className="text-stone-400">Input:</span>{" "}
+                      <span className="font-mono text-stone-700">{m.total_input_tokens.toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-stone-400">Output:</span>{" "}
+                      <span className="font-mono text-stone-700">{m.total_output_tokens.toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-stone-400">Cost:</span>{" "}
+                      <span className="font-mono text-amber-700">${fmt$(cost)}</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-
-            {/* Totals */}
-            <div className="border-t border-stone-200 pt-4">
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <div className="text-xs text-amber-600 mb-1">Estimated Anthropic cost</div>
-                  <div className="text-2xl font-mono font-bold text-amber-800">${fmt$(estimatedCostUsd)}</div>
-                  <div className="text-xs text-amber-500 mt-1">
-                    {totalTokens.toLocaleString()} tokens across {totalCalls} API calls
-                  </div>
                 </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="text-xs text-blue-600 mb-1">Equivalent in sats</div>
-                  <div className="text-2xl font-mono font-bold text-blue-800">{estimatedSats.toLocaleString()} sats</div>
-                  <div className="text-xs text-blue-500 mt-1">
-                    at ~${btcPriceUsd.toLocaleString()}/BTC
-                  </div>
+              );
+            })}
+          </div>
+
+          {/* Totals */}
+          <div className="border-t border-stone-200 pt-4">
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="text-xs text-amber-600 mb-1">Estimated Anthropic cost</div>
+                <div className="text-2xl font-mono font-bold text-amber-800">${fmt$(estimatedCostUsd)}</div>
+                <div className="text-xs text-amber-500 mt-1">
+                  {totalTokens.toLocaleString()} tokens across {totalCalls} API calls
                 </div>
               </div>
-
-              <div className="bg-stone-50 border border-stone-200 rounded-lg p-4 text-xs text-stone-500">
-                <p className="mb-2">
-                  <strong>Why this matters:</strong> TaxSort uses Claude AI for transaction classification.
-                  The operator pays Anthropic for this AI capacity and passes the cost to patrons via
-                  Lightning micropayments through the Tollbooth.
-                </p>
-                <p>
-                  Your toll credits cover the actual AI cost plus operator overhead.
-                  This transparency lets you see exactly what you&apos;re paying for —
-                  no hidden margins, no subscription traps.
-                </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="text-xs text-blue-600 mb-1">Equivalent in sats</div>
+                <div className="text-2xl font-mono font-bold text-blue-800">{estimatedSats.toLocaleString()} sats</div>
+                <div className="text-xs text-blue-500 mt-1">
+                  at ~${btcPriceUsd.toLocaleString()}/BTC
+                </div>
               </div>
             </div>
-          </>
-        )}
-      </div>
+
+            <div className="bg-stone-50 border border-stone-200 rounded-lg p-4 text-xs text-stone-500">
+              <p className="mb-2">
+                <strong>Why this matters:</strong> TaxSort uses Claude AI for transaction classification.
+                The operator pays Anthropic for this AI capacity and passes the cost to patrons via
+                Lightning micropayments through the Tollbooth.
+              </p>
+              <p>
+                Your toll credits cover the actual AI cost plus operator overhead.
+                This transparency lets you see exactly what you&apos;re paying for —
+                no hidden margins, no subscription traps.
+              </p>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
