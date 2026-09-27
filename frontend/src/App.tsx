@@ -18,6 +18,9 @@ import SettingsPage from "./components/SettingsPage";
 import Nav from "./components/Nav";
 import LockScreen from "./components/LockScreen";
 
+/** The site's own words above the sign-in card. */
+const WELCOME = "Your transactions, sorted to IRS lines, kept under your key.";
+
 const APP_VERSION = __APP_VERSION__;
 
 // ── Contexts ───────────────────────────────────────────────────────────────
@@ -122,7 +125,10 @@ function writeLocked(locked: boolean): void {
 // the inactivity lock, the status banner and the routes.
 export default function App() {
   return (
-    <AppShell theme="light" signedOut={(shell) => <SignedOut gate={shell.gate} />} classNames={{ root: "bg-stone-50 text-stone-900" }}>
+    <AppShell
+      theme="light"
+      gateOptions={{ welcome: WELCOME }}
+      signedOut={(shell) => <SignedOut gate={shell.gate} />} classNames={{ root: "bg-stone-50 text-stone-900" }}>
       {(shell) => <SignedIn shell={shell} />}
     </AppShell>
   );
