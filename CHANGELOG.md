@@ -3,6 +3,8 @@
 All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+Changes not yet released live in `changelog.d/`, one file per change — see the README there for why, and `scripts/changelog.py` for what folds them in at release time.
+
 ## [0.30.7] — 2026-08-24
 
 ### Security — track tollbooth-dpyc 0.88.1 (cryptography floor raised to >=49.0.0)
@@ -512,4 +514,3 @@ Picks up the wheel's runtime-name + DRY pass:
 
 - Add CI workflow for lint and test on push/PR to main
 - Initial taxsort-mcp — Tollbooth DPYC operator for tax classification
-
