@@ -11,14 +11,27 @@ wheel. Only domain-specific tools are defined here.
 from __future__ import annotations
 
 import logging
-from typing import Annotated, Any
+from typing import Any
 
 from fastmcp import FastMCP
-from pydantic import Field
+from mcp.types import Icon
 from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.credential_validators import validate_btcpay_creds, validate_required
+from tollbooth.params import DpopToken, PatronNpub
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
-from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
+from tollbooth.tool_identity import (
+    CREATES,
+    CREATES_REMOTE,
+    DELETES,
+    READS,
+    READS_REMOTE,
+    REPLACES,
+    STANDARD_IDENTITIES,
+    WRITES,
+    ToolBehavior,
+    ToolIdentity,
+    capability_uuid,
+)
 from tollbooth.version import resolve_service_version
 
 
@@ -40,6 +53,9 @@ __version__ = resolve_service_version("taxsort-mcp", __file__)
 
 mcp = FastMCP(
     "taxsort-mcp",
+    version=__version__,
+    website_url="https://taxsort-app.pages.dev",
+    icons=[Icon(src="https://tollbooth-dpyc.com/dpyc-logo.png", mimeType="image/png")],
     instructions=(
         "TaxSort MCP — Personal tax transaction storage, monetized "
         "via Tollbooth DPYC Bitcoin Lightning micropayments.\n\n"
@@ -60,15 +76,6 @@ mcp = FastMCP(
         "Use `taxsort_check_price` to preview costs."
     ),
 )
-
-# Shared npub field annotation
-NpubField = Annotated[
-    str,
-    Field(
-        description="Required. Your Nostr public key (npub1...) "
-        "for credit billing."
-    ),
-]
 
 # ---------------------------------------------------------------------------
 # Tool registry (domain tools only)
@@ -115,45 +122,49 @@ ASK_ADVISOR_UUID                 = "83ad6409-187e-5bb0-acc3-90b7f25c61d1"
 ASK_TAX_RESEARCHER_UUID          = "5b16a8c1-59c9-554d-bcbe-4ade16eac755"
 
 
+# request_unlock sends a Nostr DM and starts a fresh challenge, replacing any
+# earlier one; each call sends another DM.
+_SENDS_UNLOCK_DM = ToolBehavior(read_only=False, destructive=True, idempotent=False, open_world=True)
+
 _DOMAIN_TOOLS = [
-    ToolIdentity(tool_id=VERIFY_PASSPHRASE_UUID, capability="verify_passphrase", category="free", intent="Verify passphrase for timeout unlock"),
-    ToolIdentity(tool_id=CREATE_SESSION_UUID, capability="create_session", category="free", intent="Create a tax session"),
-    ToolIdentity(tool_id=GET_SESSION_UUID, capability="get_session", category="free", intent="Get session details"),
-    ToolIdentity(tool_id=LIST_SESSIONS_UUID, capability="list_sessions", category="free", intent="List patron sessions"),
-    ToolIdentity(tool_id=GET_RULES_UUID, capability="get_rules", category="free", intent="Get classification rules"),
-    ToolIdentity(tool_id=COUNT_RULE_MATCHES_UUID, capability="count_rule_matches", category="free", intent="Count transactions matching a rule pattern"),
-    ToolIdentity(tool_id=GET_IMPORT_STATS_UUID, capability="get_import_stats", category="free", intent="Get import statistics"),
-    ToolIdentity(tool_id=LOAD_SHARE_TOKEN_UUID, capability="load_share_token", category="free", intent="Load a shared session"),
-    ToolIdentity(tool_id=GET_TRANSACTIONS_UUID, capability="get_transactions", category="free", intent="Get transactions with filters"),
-    ToolIdentity(tool_id=GET_TRANSACTIONS_PAGED_UUID, capability="get_transactions_paged", category="free", intent="Server-side filtered, grouped, sorted, paginated transactions"),
-    ToolIdentity(tool_id=GET_SUMMARY_UUID, capability="get_summary", category="free", intent="Get grouped tax summary"),
-    ToolIdentity(tool_id=IMPORT_CSV_UUID, capability="import_csv", category="free", intent="Import CSV transactions"),
-    ToolIdentity(tool_id=SAVE_CLASSIFICATIONS_UUID, capability="save_classifications", category="free", intent="Bulk write classifications from FE"),
-    ToolIdentity(tool_id=DELETE_CLASSIFICATION_UUID, capability="delete_classification", category="free", intent="Remove a classification (revert to unclassified)"),
-    ToolIdentity(tool_id=RESET_CLASSIFICATIONS_UUID, capability="reset_classifications", category="free", intent="Delete all classifications, keeping transactions"),
-    ToolIdentity(tool_id=DELETE_ACCOUNT_TRANSACTIONS_UUID, capability="delete_account_transactions", category="free", intent="Delete all transactions for a specific account"),
-    ToolIdentity(tool_id=CLEAR_TRANSACTIONS_UUID, capability="clear_transactions", category="free", intent="Delete all transactions and classifications for a session"),
-    ToolIdentity(tool_id=GET_AMOUNT_NEIGHBORS_UUID, capability="get_amount_neighbors", category="free", intent="Fetch transactions with same amount near a date"),
-    ToolIdentity(tool_id=GET_ACCOUNTS_UUID, capability="get_accounts", category="free", intent="List accounts in session with their types"),
-    ToolIdentity(tool_id=SET_ACCOUNT_TYPE_UUID, capability="set_account_type", category="free", intent="Set account type (bank, card, investment, loan)"),
-    ToolIdentity(tool_id=SAVE_RULE_UUID, capability="save_rule", category="free", intent="Save a classification rule"),
-    ToolIdentity(tool_id=DELETE_RULE_UUID, capability="delete_rule", category="free", intent="Delete a classification rule"),
-    ToolIdentity(tool_id=APPLY_RULES_UUID, capability="apply_rules", category="free", intent="Apply rules to unclassified transactions"),
-    ToolIdentity(tool_id=GET_CUSTOM_CATEGORIES_UUID, capability="get_custom_categories", category="free", intent="Get custom categories"),
-    ToolIdentity(tool_id=SAVE_CUSTOM_CATEGORY_UUID, capability="save_custom_category", category="free", intent="Add a custom category/subcategory"),
-    ToolIdentity(tool_id=DELETE_CUSTOM_CATEGORY_UUID, capability="delete_custom_category", category="free", intent="Delete a custom category"),
-    ToolIdentity(tool_id=CREATE_SHARE_TOKEN_UUID, capability="create_share_token", category="free", intent="Create a session share token"),
-    ToolIdentity(tool_id=REQUEST_UNLOCK_UUID, capability="request_unlock", category="free", intent="Request session unlock via Secure Courier"),
-    ToolIdentity(tool_id=CHECK_UNLOCK_UUID, capability="check_unlock", category="free", intent="Check if session unlock was approved"),
-    ToolIdentity(tool_id=GET_GITHUB_TOKEN_UUID, capability="get_github_token", category="free", intent="Get GitHub token for issue reporting"),
-    ToolIdentity(tool_id=CREATE_FEEDBACK_ISSUE_UUID, capability="create_feedback_issue", category="free", intent="Create a GitHub issue for feedback"),
-    ToolIdentity(tool_id=LIST_FEEDBACK_ISSUES_UUID, capability="list_feedback_issues", category="free", intent="List feedback issues for this patron"),
-    ToolIdentity(tool_id=GET_ANTHROPIC_KEY_UUID, capability="get_anthropic_key", category="free", intent="Get Anthropic API key for FE classification"),
-    ToolIdentity(tool_id=REPORT_API_USAGE_UUID, capability="report_api_usage", category="free", intent="Report Anthropic API usage from FE classification"),
-    ToolIdentity(tool_id=GET_API_USAGE_STATS_UUID, capability="get_api_usage_stats", category="free", intent="Get aggregated API usage statistics"),
-    ToolIdentity(tool_id=SESSION_HEARTBEAT_UUID, capability="session_heartbeat", category="free", intent="Presence heartbeat — who's active in this session"),
-    ToolIdentity(tool_id=ASK_ADVISOR_UUID, capability="ask_advisor", category="free", intent="Ask the Financial Advisor about TaxSort"),
-    ToolIdentity(tool_id=ASK_TAX_RESEARCHER_UUID, capability="ask_tax_researcher", category="free", intent="Ask the Tax Code Researcher about IRS provisions"),
+    ToolIdentity(tool_id=VERIFY_PASSPHRASE_UUID, capability="verify_passphrase", category="free", title="Verify a passphrase", behavior=READS, intent="Verify passphrase for timeout unlock"),
+    ToolIdentity(tool_id=CREATE_SESSION_UUID, capability="create_session", category="free", title="Create a session", behavior=CREATES, intent="Create a tax session"),
+    ToolIdentity(tool_id=GET_SESSION_UUID, capability="get_session", category="free", title="Get a session", behavior=READS, intent="Get session details"),
+    ToolIdentity(tool_id=LIST_SESSIONS_UUID, capability="list_sessions", category="free", title="List sessions", behavior=READS, intent="List patron sessions"),
+    ToolIdentity(tool_id=GET_RULES_UUID, capability="get_rules", category="free", title="List classification rules", behavior=READS, intent="Get classification rules"),
+    ToolIdentity(tool_id=COUNT_RULE_MATCHES_UUID, capability="count_rule_matches", category="free", title="Count rule matches", behavior=READS, intent="Count transactions matching a rule pattern"),
+    ToolIdentity(tool_id=GET_IMPORT_STATS_UUID, capability="get_import_stats", category="free", title="Get import statistics", behavior=READS, intent="Get import statistics"),
+    ToolIdentity(tool_id=LOAD_SHARE_TOKEN_UUID, capability="load_share_token", category="free", title="Load a shared session", behavior=READS, intent="Load a shared session"),
+    ToolIdentity(tool_id=GET_TRANSACTIONS_UUID, capability="get_transactions", category="free", title="Get transactions", behavior=READS, intent="Get transactions with filters"),
+    ToolIdentity(tool_id=GET_TRANSACTIONS_PAGED_UUID, capability="get_transactions_paged", category="free", title="Get a page of transactions", behavior=READS, intent="Server-side filtered, grouped, sorted, paginated transactions"),
+    ToolIdentity(tool_id=GET_SUMMARY_UUID, capability="get_summary", category="free", title="Get the tax summary", behavior=READS, intent="Get grouped tax summary"),
+    ToolIdentity(tool_id=IMPORT_CSV_UUID, capability="import_csv", category="free", title="Import a CSV file", behavior=REPLACES, intent="Import CSV transactions"),
+    ToolIdentity(tool_id=SAVE_CLASSIFICATIONS_UUID, capability="save_classifications", category="free", title="Save classifications", behavior=REPLACES, intent="Bulk write classifications from FE"),
+    ToolIdentity(tool_id=DELETE_CLASSIFICATION_UUID, capability="delete_classification", category="free", title="Delete a classification", behavior=DELETES, intent="Remove a classification (revert to unclassified)"),
+    ToolIdentity(tool_id=RESET_CLASSIFICATIONS_UUID, capability="reset_classifications", category="free", title="Reset all classifications", behavior=DELETES, intent="Delete all classifications, keeping transactions"),
+    ToolIdentity(tool_id=DELETE_ACCOUNT_TRANSACTIONS_UUID, capability="delete_account_transactions", category="free", title="Delete an account's transactions", behavior=DELETES, intent="Delete all transactions for a specific account"),
+    ToolIdentity(tool_id=CLEAR_TRANSACTIONS_UUID, capability="clear_transactions", category="free", title="Clear a session's transactions", behavior=DELETES, intent="Delete all transactions and classifications for a session"),
+    ToolIdentity(tool_id=GET_AMOUNT_NEIGHBORS_UUID, capability="get_amount_neighbors", category="free", title="Find same-amount neighbors", behavior=READS, intent="Fetch transactions with same amount near a date"),
+    ToolIdentity(tool_id=GET_ACCOUNTS_UUID, capability="get_accounts", category="free", title="List accounts", behavior=READS, intent="List accounts in session with their types"),
+    ToolIdentity(tool_id=SET_ACCOUNT_TYPE_UUID, capability="set_account_type", category="free", title="Set an account type", behavior=REPLACES, intent="Set account type (bank, card, investment, loan)"),
+    ToolIdentity(tool_id=SAVE_RULE_UUID, capability="save_rule", category="free", title="Save a classification rule", behavior=CREATES, intent="Save a classification rule"),
+    ToolIdentity(tool_id=DELETE_RULE_UUID, capability="delete_rule", category="free", title="Delete a classification rule", behavior=DELETES, intent="Delete a classification rule"),
+    ToolIdentity(tool_id=APPLY_RULES_UUID, capability="apply_rules", category="free", title="Apply classification rules", behavior=REPLACES, intent="Apply rules to unclassified transactions"),
+    ToolIdentity(tool_id=GET_CUSTOM_CATEGORIES_UUID, capability="get_custom_categories", category="free", title="List custom categories", behavior=READS, intent="Get custom categories"),
+    ToolIdentity(tool_id=SAVE_CUSTOM_CATEGORY_UUID, capability="save_custom_category", category="free", title="Add a custom category", behavior=WRITES, intent="Add a custom category/subcategory"),
+    ToolIdentity(tool_id=DELETE_CUSTOM_CATEGORY_UUID, capability="delete_custom_category", category="free", title="Delete a custom category", behavior=DELETES, intent="Delete a custom category"),
+    ToolIdentity(tool_id=CREATE_SHARE_TOKEN_UUID, capability="create_share_token", category="free", title="Create a share token", behavior=CREATES, intent="Create a session share token"),
+    ToolIdentity(tool_id=REQUEST_UNLOCK_UUID, capability="request_unlock", category="free", title="Request a session unlock", behavior=_SENDS_UNLOCK_DM, intent="Request session unlock via Secure Courier"),
+    ToolIdentity(tool_id=CHECK_UNLOCK_UUID, capability="check_unlock", category="free", title="Check a session unlock", behavior=WRITES, intent="Check if session unlock was approved"),
+    ToolIdentity(tool_id=GET_GITHUB_TOKEN_UUID, capability="get_github_token", category="free", title="Get the GitHub token", behavior=READS, intent="Get GitHub token for issue reporting"),
+    ToolIdentity(tool_id=CREATE_FEEDBACK_ISSUE_UUID, capability="create_feedback_issue", category="free", title="Send feedback", behavior=CREATES_REMOTE, intent="Create a GitHub issue for feedback"),
+    ToolIdentity(tool_id=LIST_FEEDBACK_ISSUES_UUID, capability="list_feedback_issues", category="free", title="List my feedback", behavior=READS_REMOTE, intent="List feedback issues for this patron"),
+    ToolIdentity(tool_id=GET_ANTHROPIC_KEY_UUID, capability="get_anthropic_key", category="free", title="Get the Anthropic key", behavior=READS, intent="Get Anthropic API key for FE classification"),
+    ToolIdentity(tool_id=REPORT_API_USAGE_UUID, capability="report_api_usage", category="free", title="Report API usage", behavior=CREATES, intent="Report Anthropic API usage from FE classification"),
+    ToolIdentity(tool_id=GET_API_USAGE_STATS_UUID, capability="get_api_usage_stats", category="free", title="Get API usage statistics", behavior=READS, intent="Get aggregated API usage statistics"),
+    ToolIdentity(tool_id=SESSION_HEARTBEAT_UUID, capability="session_heartbeat", category="free", title="Session heartbeat", behavior=WRITES, intent="Presence heartbeat — who's active in this session"),
+    ToolIdentity(tool_id=ASK_ADVISOR_UUID, capability="ask_advisor", category="free", title="Ask the financial advisor", behavior=READS_REMOTE, intent="Ask the Financial Advisor about TaxSort"),
+    ToolIdentity(tool_id=ASK_TAX_RESEARCHER_UUID, capability="ask_tax_researcher", category="free", title="Ask the tax researcher", behavior=READS_REMOTE, intent="Ask the Tax Code Researcher about IRS provisions"),
 ]
 
 TOOL_REGISTRY: dict[str, ToolIdentity] = {ti.tool_id: ti for ti in _DOMAIN_TOOLS}
@@ -242,9 +253,15 @@ tool = register_standard_tools(
 @runtime.paid_tool(capability_uuid("verify_passphrase"))
 async def verify_passphrase(
     passphrase: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Verify a passphrase to unlock a timed-out session."""
+    """Verify a passphrase to unlock a timed-out session.
+
+    Compares the passphrase against the hash stored when this npub was proven.
+
+    Args:
+        passphrase: The passphrase the patron replied with when proving this npub, exactly as typed.
+    """
     from tools.verification import verify_passphrase as _verify
     return await _verify(npub=npub, passphrase=passphrase)
 
@@ -256,9 +273,14 @@ async def verify_passphrase(
 async def create_session(
     label: str = "",
     tax_year: int = 0,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Create a new TaxSort session for a tax year."""
+    """Create a new TaxSort session for a tax year.
+
+    Args:
+        label: Display name for the session; empty means "<tax_year> Taxes".
+        tax_year: Four-digit tax year (e.g. 2025); 0 means the current calendar year.
+    """
     from tools.sessions import create_session as _create_session
     return await _create_session(owner_npub=npub, label=label, tax_year=tax_year)
 
@@ -267,9 +289,13 @@ async def create_session(
 @runtime.paid_tool(capability_uuid("get_session"))
 async def get_session(
     session_id: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Get session details and summary stats."""
+    """Get session details and summary stats.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+    """
     from tools.sessions import get_session as _get_session
     return await _get_session(session_id=session_id)
 
@@ -277,7 +303,7 @@ async def get_session(
 @tool
 @runtime.paid_tool(capability_uuid("list_sessions"))
 async def list_sessions(
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """List all sessions owned by the current patron."""
     from tools.sessions import list_sessions as _list_sessions
@@ -293,9 +319,22 @@ async def import_csv(
     content: str,
     filename: str,
     account_name: str = "",
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Import a CSV file into a session. Content is the raw CSV text. Optional account_name overrides the filename-derived account."""
+    """Import a CSV file into a session.
+
+    The bank format (Chase, US Bank, Schwab, SoFi, PayPal, Coinbase, a
+    checkbook register, or generic) is detected from the header row.
+    Rows already in the session are skipped. A checkbook register also
+    writes its payee and category onto matching bank transactions
+    (same amount, within one day).
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+        content: The whole CSV file as text, header row first; comma- or tab-delimited.
+        filename: The file's name (e.g. "chase-4821-2025.csv"); its stem names the account unless account_name is given, and a 20xx year in it dates checkbook rows that lack a year.
+        account_name: Account name to file these transactions under; empty means the filename without its extension.
+    """
     from tools.imports import import_csv as _import_csv
     return await _import_csv(session_id=session_id, content=content, filename=filename, account_name=account_name)
 
@@ -304,9 +343,13 @@ async def import_csv(
 @runtime.paid_tool(capability_uuid("get_import_stats"))
 async def get_import_stats(
     session_id: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Get import statistics for a session."""
+    """Get import statistics for a session.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+    """
     from tools.imports import get_import_stats as _get_import_stats
     return await _get_import_stats(session_id=session_id)
 
@@ -327,13 +370,26 @@ async def get_transactions(
     unclassified_only: bool = False,
     limit: int = 200,
     offset: int = 0,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Get transactions for a session with optional filters.
 
     Returns raw transactions LEFT JOINed with their classifications.
     Use unclassified_only=true to fetch pages of transactions needing
     classification by the FE. Use date_from/date_to for date range queries.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+        category: Only transactions classified in this category (e.g. "Schedule C", "Schedule A", "Personal", "Internal Transfer", "Duplicate"); empty for all. Ignored when unclassified_only is true.
+        subcategory: Only transactions with this exact subcategory (e.g. "Office Supplies"); empty for all.
+        month: Only transactions in this month, as YYYY-MM; empty for all.
+        search: Case-insensitive regular expression matched against the description, merchant and description override; empty for no search.
+        account: Only transactions from this account name, as get_accounts lists it; empty for all.
+        date_from: Earliest transaction date to include, as YYYY-MM-DD; empty for no lower bound.
+        date_to: Latest transaction date to include, as YYYY-MM-DD; empty for no upper bound.
+        unclassified_only: True to return only transactions with no classification yet.
+        limit: Maximum number of transactions to return (default 200).
+        offset: Number of matching transactions to skip, for paging (default 0).
     """
     from tools.transactions import get_transactions as _get_transactions
     return await _get_transactions(
@@ -361,13 +417,29 @@ async def get_transactions_paged(
     sort_dir: str = "asc",
     page: int = 0,
     page_size: int = 200,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Server-side filtered, grouped, sorted, paginated transactions.
 
     group_sort controls the order of groups (A-Z vs Z-A).
     sort_col + sort_dir control row order within each group.
     When group_by='none', only sort_col + sort_dir apply.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+        category: Only transactions classified in this category (e.g. "Schedule C", "Personal"); empty for all.
+        subcategory: Only transactions with this exact subcategory (e.g. "Office Supplies"); empty for all.
+        month: Only transactions in this month, as YYYY-MM; empty for all.
+        search: Case-insensitive regular expression matched against the description, merchant and description override; empty for no search.
+        account: Only transactions from this account name, as get_accounts lists it; empty for all.
+        unclassified_only: True to return only transactions with no classification yet; takes precedence over classified_only.
+        classified_only: True to return only transactions that have a classification.
+        group_by: How rows are grouped: none, category, subcategory, taxline, month, account or merchant, or two joined by "+" (e.g. "month+category").
+        group_sort: Order of the groups: "asc" (A-Z) or "desc" (Z-A).
+        sort_col: Column that orders rows within each group: date, description, amount, account or category.
+        sort_dir: Row order within each group: "asc" or "desc".
+        page: Zero-based page number.
+        page_size: Rows per page (default 200).
     """
     from tools.transactions import get_transactions_paged as _get_paged
     return await _get_paged(
@@ -385,15 +457,21 @@ async def get_transactions_paged(
 async def save_classifications(
     session_id: str,
     classifications: str = "[]",
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Bulk write classifications from the FE.
+
+    A transaction that already has a classification has it replaced.
 
     classifications is a JSON array of objects, each with:
       - id: raw_transaction_id
       - category, subcategory (required)
       - confidence, reason, merchant, description_override (optional)
       - classified_by: 'ai' | 'rule' | 'manual' (default 'ai')
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+        classifications: JSON array (as a string) of classification objects, shaped as above; "[]" saves nothing.
     """
     import json as _json
     try:
@@ -410,9 +488,14 @@ async def save_classifications(
 async def delete_classification(
     session_id: str,
     transaction_id: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Remove a classification, reverting the transaction to unclassified."""
+    """Remove a classification, reverting the transaction to unclassified.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+        transaction_id: The transaction's id as get_transactions returns it (e.g. "tx-1a2b3c4d").
+    """
     from tools.transactions import delete_classification as _delete
     return await _delete(session_id=session_id, transaction_id=transaction_id)
 
@@ -421,9 +504,13 @@ async def delete_classification(
 @runtime.paid_tool(capability_uuid("clear_transactions"))
 async def clear_transactions(
     session_id: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Delete all transactions and classifications for a session, so CSVs can be re-imported."""
+    """Delete all transactions and classifications for a session, so CSVs can be re-imported.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+    """
     from tools.transactions import clear_transactions as _clear
     return await _clear(session_id=session_id)
 
@@ -433,9 +520,14 @@ async def clear_transactions(
 async def delete_account_transactions(
     session_id: str,
     account: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Delete all transactions and classifications for a specific imported account."""
+    """Delete all transactions and classifications for a specific imported account.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+        account: The account name exactly as get_accounts lists it.
+    """
     from tools.transactions import delete_account_transactions as _del
     return await _del(session_id=session_id, account=account)
 
@@ -444,9 +536,13 @@ async def delete_account_transactions(
 @runtime.paid_tool(capability_uuid("reset_classifications"))
 async def reset_classifications(
     session_id: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Delete all classifications but keep the imported transactions."""
+    """Delete all classifications but keep the imported transactions.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+    """
     from tools.transactions import reset_classifications as _reset
     return await _reset(session_id=session_id)
 
@@ -459,9 +555,19 @@ async def get_amount_neighbors(
     date: str,
     days: int = 14,
     exclude_id: str = "",
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Fetch transactions with the same amount within ±days of a date. Used by the classifier to detect duplicates from overlapping CSV imports."""
+    """Fetch transactions with the same amount within ±days of a date.
+
+    Used by the classifier to detect duplicates from overlapping CSV imports.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+        amount: The exact signed transaction amount in dollars to match (negative for money out, positive for money in).
+        date: Center date of the window, as YYYY-MM-DD.
+        days: Half-width of the window in days on each side of date (default 14).
+        exclude_id: A transaction id to leave out of the results, usually the one being checked; empty to exclude nothing.
+    """
     from tools.transactions import get_amount_neighbors as _get
     return await _get(session_id=session_id, amount=amount, date=date, days=days, exclude_id=exclude_id)
 
@@ -470,9 +576,13 @@ async def get_amount_neighbors(
 @runtime.paid_tool(capability_uuid("get_accounts"))
 async def get_accounts(
     session_id: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """List all accounts in this session with their types and transaction counts."""
+    """List all accounts in this session with their types and transaction counts.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+    """
     from tools.accounts import get_accounts as _get
     return await _get(session_id=session_id)
 
@@ -483,9 +593,15 @@ async def set_account_type(
     session_id: str,
     account_name: str,
     account_type: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Set an account's type: bank (checking/savings), card (credit/debit), investment, or loan."""
+    """Set an account's type: bank (checking/savings), card (credit/debit), investment, or loan.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+        account_name: The account name exactly as get_accounts lists it.
+        account_type: One of bank, card, investment, loan or unknown.
+    """
     from tools.accounts import set_account_type as _set
     return await _set(session_id=session_id, account_name=account_name, account_type=account_type)
 
@@ -498,9 +614,18 @@ async def get_summary(
     group_by: str = "taxline",
     scope: str = "tax",
     month: str = "",
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Get a grouped spending summary for tax reporting."""
+    """Get a grouped spending summary for tax reporting.
+
+    Expenses are money out (negative amounts) and income is money in, in dollars.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+        group_by: Grouping: taxline, subcategory, category, month or account, or two joined by "+" (e.g. "category+month").
+        scope: Which categories to total: "tax" (Schedule C and Schedule A), "all" (everything except Duplicate), or one category: "Schedule C", "Schedule A", "Internal Transfer", "Personal" or "Duplicate". Anything else means "all".
+        month: Only this month, as YYYY-MM; empty for the whole session.
+    """
     from tools.transactions import get_summary as _get_summary
     return await _get_summary(
         session_id=session_id, group_by=group_by, scope=scope, month=month,
@@ -513,9 +638,13 @@ async def get_summary(
 @runtime.paid_tool(capability_uuid("get_rules"))
 async def get_rules(
     session_id: str = "",
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Get all classification rules for the current patron."""
+    """Get all classification rules for the current patron.
+
+    Args:
+        session_id: TaxSort session id; when given, returns your global rules plus the rules scoped to this session. Empty returns all your rules.
+    """
     from tools.rules import get_rules as _get_rules
     return await _get_rules(owner_npub=npub, session_id=session_id)
 
@@ -530,7 +659,7 @@ async def save_rule(
     amount_operator: str = "",
     amount_value: float | None = None,
     session_id: str = "",
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Create a classification rule.
 
@@ -539,6 +668,15 @@ async def save_rule(
     amount_operator (lt, lte, gt, gte, eq, neq) and amount_value to filter
     by amount. When the compound constraint matches, category, subcategory,
     and optionally description (new_description) are written.
+
+    Args:
+        description_pattern: Regular expression matched case-insensitively against the transaction's description, merchant and description override.
+        category: Category the rule assigns (e.g. "Schedule C", "Personal").
+        subcategory: Subcategory the rule assigns (e.g. "Office Supplies").
+        new_description: Replacement description written onto matching transactions; empty leaves descriptions as they are.
+        amount_operator: Optional amount test: lt, lte, gt, gte, eq or neq; empty for no amount test.
+        amount_value: Signed amount in dollars the amount_operator compares against (negative for money out); required when amount_operator is set.
+        session_id: TaxSort session id to scope the rule to that session; empty makes it a global rule for all your sessions.
     """
     from tools.rules import save_rule as _save_rule
     return await _save_rule(
@@ -557,9 +695,13 @@ async def save_rule(
 @runtime.paid_tool(capability_uuid("delete_rule"))
 async def delete_rule(
     rule_id: int,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Delete a classification rule by ID."""
+    """Delete a classification rule by ID.
+
+    Args:
+        rule_id: The rule's numeric id, as get_rules returns it.
+    """
     from tools.rules import delete_rule as _delete_rule
     return await _delete_rule(owner_npub=npub, rule_id=rule_id)
 
@@ -568,9 +710,17 @@ async def delete_rule(
 @runtime.paid_tool(capability_uuid("apply_rules"))
 async def apply_rules(
     session_id: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Apply rules to unclassified transactions in a session."""
+    """Apply your classification rules to the transactions in a session.
+
+    Each transaction takes the first matching rule (global and
+    session-scoped, in rule-id order); its classification is written,
+    replacing any it already had.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+    """
     from tools.rules import apply_rules as _apply_rules
     return await _apply_rules(owner_npub=npub, session_id=session_id)
 
@@ -582,9 +732,16 @@ async def count_rule_matches(
     description_pattern: str,
     amount_operator: str = "",
     amount_value: float | None = None,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Count how many transactions match a rule pattern (live preview)."""
+    """Count how many transactions match a rule pattern (live preview).
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+        description_pattern: Regular expression matched case-insensitively against the transaction's description, merchant and description override.
+        amount_operator: Optional amount test: lt, lte, gt, gte, eq or neq; empty for no amount test.
+        amount_value: Signed amount in dollars the amount_operator compares against (negative for money out).
+    """
     from tools.rules import count_rule_matches as _count
     return await _count(
         session_id=session_id,
@@ -597,7 +754,7 @@ async def count_rule_matches(
 @tool
 @runtime.paid_tool(capability_uuid("get_custom_categories"))
 async def get_custom_categories(
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Get custom categories defined by this user."""
     from tools.categories import get_custom_categories as _get
@@ -609,9 +766,14 @@ async def get_custom_categories(
 async def save_custom_category(
     category: str,
     subcategory: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Add a custom category/subcategory (e.g. Personal / Auto Gas)."""
+    """Add a custom category/subcategory (e.g. Personal / Auto Gas).
+
+    Args:
+        category: Category name the subcategory sits under (e.g. "Personal").
+        subcategory: New subcategory name (e.g. "Auto Gas").
+    """
     from tools.categories import save_custom_category as _save
     return await _save(owner_npub=npub, category=category, subcategory=subcategory)
 
@@ -620,9 +782,13 @@ async def save_custom_category(
 @runtime.paid_tool(capability_uuid("delete_custom_category"))
 async def delete_custom_category(
     category_id: int,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Delete a custom category."""
+    """Delete a custom category.
+
+    Args:
+        category_id: The custom category's numeric id, as get_custom_categories returns it.
+    """
     from tools.categories import delete_custom_category as _del
     return await _del(owner_npub=npub, category_id=category_id)
 
@@ -634,9 +800,14 @@ async def delete_custom_category(
 async def create_share_token(
     session_id: str,
     expires_days: int = 30,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Create a share token so another user can access this session."""
+    """Create a share token so another user can access this session.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+        expires_days: Days until the token expires (default 30); 0 means it never expires.
+    """
     from tools.share import create_share_token as _create_share_token
     return await _create_share_token(
         owner_npub=npub, session_id=session_id,
@@ -648,9 +819,13 @@ async def create_share_token(
 @runtime.paid_tool(capability_uuid("load_share_token"))
 async def load_share_token(
     share_token: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Load a shared session via a share token."""
+    """Load a shared session via a share token.
+
+    Args:
+        share_token: The token string create_share_token returned.
+    """
     from tools.share import load_share_token as _load_share_token
     return await _load_share_token(share_token=share_token)
 
@@ -660,7 +835,7 @@ async def load_share_token(
 @tool
 @runtime.paid_tool(capability_uuid("get_github_token"))
 async def get_github_token(
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Get the GitHub token for creating issues in the taxsort-mcp repo."""
     try:
@@ -680,7 +855,7 @@ async def get_github_token(
 @tool
 @runtime.paid_tool(capability_uuid("get_anthropic_key"))
 async def get_anthropic_key(
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Get the Anthropic API key for FE-driven classification."""
     try:
@@ -703,9 +878,19 @@ async def report_api_usage(
     input_tokens: int,
     output_tokens: int,
     model: str = "",
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Report Anthropic API usage from FE classification for cost tracking."""
+    """Report Anthropic API usage from FE classification for cost tracking.
+
+    Each call records one more usage row.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+        calls: Number of Anthropic API calls in this classification run.
+        input_tokens: Total input tokens those calls used.
+        output_tokens: Total output tokens those calls used.
+        model: Anthropic model id the run used (e.g. "claude-sonnet-4-20250514").
+    """
     from tools.usage import report_usage
     return await report_usage(
         session_id=session_id, npub=npub,
@@ -718,9 +903,13 @@ async def report_api_usage(
 @runtime.paid_tool(capability_uuid("get_api_usage_stats"))
 async def get_api_usage_stats(
     session_id: str = "",
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Get aggregated API usage statistics for cost analysis."""
+    """Get aggregated API usage statistics for cost analysis.
+
+    Args:
+        session_id: TaxSort session id to total just that session; empty totals all your sessions.
+    """
     from tools.usage import get_usage_stats
     return await get_usage_stats(session_id=session_id, npub=npub)
 
@@ -734,9 +923,19 @@ async def create_feedback_issue(
     body: str = "",
     category: str = "feedback",
     contact: str = "",
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Create a GitHub issue for bug reports, feature requests, or feedback."""
+    """Create a GitHub issue for bug reports, feature requests, or feedback.
+
+    The issue opens in the taxsort-mcp GitHub repo, prefixed "[Feedback]".
+    Without an operator GitHub token, a prefilled new-issue link is returned instead.
+
+    Args:
+        title: Issue title, plain text.
+        body: Issue body, Markdown.
+        category: One of feedback, bug, feature or question; also becomes a "cat:<category>" label.
+        contact: Optional way to reach the reporter (e.g. an email or Nostr handle), added to the issue body; empty to stay anonymous.
+    """
     from tools.feedback import create_issue
     return await create_issue(npub=npub, title=title, body=body, category=category, contact=contact)
 
@@ -744,7 +943,7 @@ async def create_feedback_issue(
 @tool
 @runtime.paid_tool(capability_uuid("list_feedback_issues"))
 async def list_feedback_issues(
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """List feedback issues submitted by this patron."""
     from tools.feedback import list_my_issues
@@ -757,9 +956,15 @@ async def list_feedback_issues(
 @runtime.paid_tool(capability_uuid("session_heartbeat"))
 async def session_heartbeat(
     session_id: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Presence heartbeat. Returns who else is active in this session."""
+    """Presence heartbeat. Returns who else is active in this session.
+
+    Records you as active now; anyone seen in the last 60 seconds counts.
+
+    Args:
+        session_id: TaxSort session id (the UUID string create_session returns; list_sessions lists yours).
+    """
     from tools.presence import heartbeat as _heartbeat
     return await _heartbeat(session_id=session_id, npub=npub)
 
@@ -772,9 +977,18 @@ async def ask_advisor(
     question: str,
     session_id: str = "",
     history: str = "",
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Ask the Financial Advisor about using TaxSort."""
+    """Ask the Financial Advisor about using TaxSort.
+
+    The question goes to Anthropic's Claude with a summary of the session's
+    classified totals.
+
+    Args:
+        question: The question, in plain words.
+        session_id: TaxSort session id whose classified totals ground the answer; empty for none.
+        history: Earlier turns as a JSON array string of {"role": "user"|"assistant", "text": "..."}; the last 6 are used. Empty for a new conversation.
+    """
     import json as _json
 
     from tools.advisors import ask_advisor as _ask_advisor
@@ -788,9 +1002,18 @@ async def ask_tax_researcher(
     question: str,
     session_id: str = "",
     history: str = "",
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Ask the Tax Code Researcher about IRS provisions."""
+    """Ask the Tax Code Researcher about IRS provisions.
+
+    The question goes to Anthropic's Claude with a summary of the session's
+    classified totals.
+
+    Args:
+        question: The question, in plain words.
+        session_id: TaxSort session id whose classified totals ground the answer; empty for none.
+        history: Earlier turns as a JSON array string of {"role": "user"|"assistant", "text": "..."}; the last 6 are used. Empty for a new conversation.
+    """
     import json as _json
 
     from tools.advisors import ask_tax_researcher as _ask_tax_researcher
@@ -803,9 +1026,13 @@ async def ask_tax_researcher(
 @tool
 @runtime.paid_tool(capability_uuid("request_unlock"))
 async def request_unlock(
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Request a session unlock after timeout."""
+    """Request a session unlock after timeout.
+
+    Sends the patron a Nostr DM asking them to reply "Approve Unlock",
+    and starts a fresh unlock challenge.
+    """
     from tools.session_lock import request_unlock as _request_unlock
 
     dm_sent = False
@@ -837,9 +1064,15 @@ async def request_unlock(
 @runtime.paid_tool(capability_uuid("check_unlock"))
 async def check_unlock(
     response: str,
-    npub: NpubField = "", dpop_token: str = "",
+    npub: PatronNpub = "", dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Check if the unlock response is valid."""
+    """Check if the unlock response is valid.
+
+    A valid response spends the challenge and unlocks the patron's session.
+
+    Args:
+        response: The patron's reply to the unlock DM; "Approve Unlock" (any case) unlocks.
+    """
     from tools.session_lock import check_unlock as _check_unlock
     return await _check_unlock(npub=npub, response=response)
 
