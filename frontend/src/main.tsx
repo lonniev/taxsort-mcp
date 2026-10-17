@@ -11,6 +11,7 @@ configureTollbooth({
   slug: "taxsort",
   appName: "TaxSort",
   mcpUrl: import.meta.env.VITE_MCP_URL as string,
+  operatorUrl: "https://taxsort-mcp.fastmcp.app",
   // Routine polls, the operator's AI key, and every call whose arguments or
   // answer carry transaction rows, account names, merchant rules or tax
   // questions: a patron's tax data never reaches the debug panel. Their
