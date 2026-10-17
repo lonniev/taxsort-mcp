@@ -39,7 +39,7 @@ def _guess_date(raw: str, fallback_year: str = "") -> str:
     if not s:
         return ""
 
-    year = fallback_year or str(_date.today().year)  # noqa: DTZ011
+    year = fallback_year or str(_date.today().year)
 
     # Already ISO format
     if re.match(r'^\d{4}-\d{2}-\d{2}', s):
@@ -66,7 +66,7 @@ def _guess_date(raw: str, fallback_year: str = "") -> str:
     for fmt in ["%b %d %Y", "%b %d, %Y", "%B %d %Y", "%B %d, %Y",
                 "%b %d", "%B %d"]:
         try:
-            parsed = _dt.strptime(s if " " in s and any(c.isdigit() and int(c) > 2 for c in s.split()[-1]) else f"{s} {year}", fmt)  # noqa: DTZ007
+            parsed = _dt.strptime(s if " " in s and any(c.isdigit() and int(c) > 2 for c in s.split()[-1]) else f"{s} {year}", fmt)
             return parsed.strftime("%Y-%m-%d")
         except ValueError:
             continue
@@ -74,7 +74,7 @@ def _guess_date(raw: str, fallback_year: str = "") -> str:
     # Last resort: append year and try month-day patterns
     for fmt in ["%b %d %Y", "%B %d %Y"]:
         try:
-            parsed = _dt.strptime(f"{s} {year}", fmt)  # noqa: DTZ007
+            parsed = _dt.strptime(f"{s} {year}", fmt)
             return parsed.strftime("%Y-%m-%d")
         except ValueError:
             continue
