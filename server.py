@@ -224,6 +224,9 @@ runtime = OperatorRuntime(
         "Your response will be encrypted and signed by your Nostr key."
     ),
     on_npub_proven=_on_npub_proven,
+    # Connections authenticate as holders: each npub proven through one stays
+    # with it, so tool calls pass only the npub.
+    holder_auth_url="https://taxsort-mcp.fastmcp.app",
 )
 
 # ---------------------------------------------------------------------------
