@@ -164,8 +164,8 @@ Schema migration runs automatically on startup.
 
 1. Generate a Nostr keypair, set `TOLLBOOTH_NOSTR_OPERATOR_NSEC`
 2. Deploy to [Horizon](https://app.fastmcp.ai)
-3. Register with Authority: `register_operator(npub=..., service_url=...)`
-4. Deliver credentials via Secure Courier:
+3. Get adopted by an Authority: call `request_adoption(authority_npub=..., service_url=...)` on your own MCP, signed with your operator nsec; the Authority's owner approves it
+4. Deliver credentials via Secure Courier (`request_credential_channel(sender_npub=<operator npub>, service=...)` returns a `nonce`; reply to the DM, then `receive_credentials(sender_npub=..., service=..., nonce=...)`):
    ```json
    {
      "btcpay_host": "https://btcpay.example.com",
