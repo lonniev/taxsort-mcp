@@ -17,7 +17,7 @@ from fastmcp import FastMCP
 from mcp.types import Icon
 from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.credential_validators import validate_btcpay_creds, validate_required
-from tollbooth.params import DpopToken, PatronNpub
+from tollbooth.params import PatronNpub
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import (
     CREATES,
@@ -256,7 +256,7 @@ tool = register_standard_tools(
 @runtime.paid_tool(capability_uuid("verify_passphrase"))
 async def verify_passphrase(
     passphrase: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Verify a passphrase to unlock a timed-out session.
 
@@ -276,7 +276,7 @@ async def verify_passphrase(
 async def create_session(
     label: str = "",
     tax_year: int = 0,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Create a new TaxSort session for a tax year.
 
@@ -292,7 +292,7 @@ async def create_session(
 @runtime.paid_tool(capability_uuid("get_session"))
 async def get_session(
     session_id: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Get session details and summary stats.
 
@@ -306,7 +306,7 @@ async def get_session(
 @tool
 @runtime.paid_tool(capability_uuid("list_sessions"))
 async def list_sessions(
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """List all sessions owned by the current patron."""
     from tools.sessions import list_sessions as _list_sessions
@@ -322,7 +322,7 @@ async def import_csv(
     content: str,
     filename: str,
     account_name: str = "",
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Import a CSV file into a session.
 
@@ -346,7 +346,7 @@ async def import_csv(
 @runtime.paid_tool(capability_uuid("get_import_stats"))
 async def get_import_stats(
     session_id: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Get import statistics for a session.
 
@@ -373,7 +373,7 @@ async def get_transactions(
     unclassified_only: bool = False,
     limit: int = 200,
     offset: int = 0,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Get transactions for a session with optional filters.
 
@@ -420,7 +420,7 @@ async def get_transactions_paged(
     sort_dir: str = "asc",
     page: int = 0,
     page_size: int = 200,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Server-side filtered, grouped, sorted, paginated transactions.
 
@@ -460,7 +460,7 @@ async def get_transactions_paged(
 async def save_classifications(
     session_id: str,
     classifications: str = "[]",
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Bulk write classifications from the FE.
 
@@ -491,7 +491,7 @@ async def save_classifications(
 async def delete_classification(
     session_id: str,
     transaction_id: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Remove a classification, reverting the transaction to unclassified.
 
@@ -507,7 +507,7 @@ async def delete_classification(
 @runtime.paid_tool(capability_uuid("clear_transactions"))
 async def clear_transactions(
     session_id: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Delete all transactions and classifications for a session, so CSVs can be re-imported.
 
@@ -523,7 +523,7 @@ async def clear_transactions(
 async def delete_account_transactions(
     session_id: str,
     account: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Delete all transactions and classifications for a specific imported account.
 
@@ -539,7 +539,7 @@ async def delete_account_transactions(
 @runtime.paid_tool(capability_uuid("reset_classifications"))
 async def reset_classifications(
     session_id: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Delete all classifications but keep the imported transactions.
 
@@ -558,7 +558,7 @@ async def get_amount_neighbors(
     date: str,
     days: int = 14,
     exclude_id: str = "",
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Fetch transactions with the same amount within ±days of a date.
 
@@ -579,7 +579,7 @@ async def get_amount_neighbors(
 @runtime.paid_tool(capability_uuid("get_accounts"))
 async def get_accounts(
     session_id: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """List all accounts in this session with their types and transaction counts.
 
@@ -596,7 +596,7 @@ async def set_account_type(
     session_id: str,
     account_name: str,
     account_type: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Set an account's type: bank (checking/savings), card (credit/debit), investment, or loan.
 
@@ -617,7 +617,7 @@ async def get_summary(
     group_by: str = "taxline",
     scope: str = "tax",
     month: str = "",
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Get a grouped spending summary for tax reporting.
 
@@ -641,7 +641,7 @@ async def get_summary(
 @runtime.paid_tool(capability_uuid("get_rules"))
 async def get_rules(
     session_id: str = "",
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Get all classification rules for the current patron.
 
@@ -662,7 +662,7 @@ async def save_rule(
     amount_operator: str = "",
     amount_value: float | None = None,
     session_id: str = "",
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Create a classification rule.
 
@@ -698,7 +698,7 @@ async def save_rule(
 @runtime.paid_tool(capability_uuid("delete_rule"))
 async def delete_rule(
     rule_id: int,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Delete a classification rule by ID.
 
@@ -713,7 +713,7 @@ async def delete_rule(
 @runtime.paid_tool(capability_uuid("apply_rules"))
 async def apply_rules(
     session_id: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Apply your classification rules to the transactions in a session.
 
@@ -735,7 +735,7 @@ async def count_rule_matches(
     description_pattern: str,
     amount_operator: str = "",
     amount_value: float | None = None,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Count how many transactions match a rule pattern (live preview).
 
@@ -757,7 +757,7 @@ async def count_rule_matches(
 @tool
 @runtime.paid_tool(capability_uuid("get_custom_categories"))
 async def get_custom_categories(
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Get custom categories defined by this user."""
     from tools.categories import get_custom_categories as _get
@@ -769,7 +769,7 @@ async def get_custom_categories(
 async def save_custom_category(
     category: str,
     subcategory: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Add a custom category/subcategory (e.g. Personal / Auto Gas).
 
@@ -785,7 +785,7 @@ async def save_custom_category(
 @runtime.paid_tool(capability_uuid("delete_custom_category"))
 async def delete_custom_category(
     category_id: int,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Delete a custom category.
 
@@ -803,7 +803,7 @@ async def delete_custom_category(
 async def create_share_token(
     session_id: str,
     expires_days: int = 30,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Create a share token so another user can access this session.
 
@@ -822,7 +822,7 @@ async def create_share_token(
 @runtime.paid_tool(capability_uuid("load_share_token"))
 async def load_share_token(
     share_token: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Load a shared session via a share token.
 
@@ -838,7 +838,7 @@ async def load_share_token(
 @tool
 @runtime.paid_tool(capability_uuid("get_github_token"))
 async def get_github_token(
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Get the GitHub token for creating issues in the taxsort-mcp repo."""
     try:
@@ -858,7 +858,7 @@ async def get_github_token(
 @tool
 @runtime.paid_tool(capability_uuid("get_anthropic_key"))
 async def get_anthropic_key(
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Get the Anthropic API key for FE-driven classification."""
     try:
@@ -881,7 +881,7 @@ async def report_api_usage(
     input_tokens: int,
     output_tokens: int,
     model: str = "",
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Report Anthropic API usage from FE classification for cost tracking.
 
@@ -906,7 +906,7 @@ async def report_api_usage(
 @runtime.paid_tool(capability_uuid("get_api_usage_stats"))
 async def get_api_usage_stats(
     session_id: str = "",
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Get aggregated API usage statistics for cost analysis.
 
@@ -926,7 +926,7 @@ async def create_feedback_issue(
     body: str = "",
     category: str = "feedback",
     contact: str = "",
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Create a GitHub issue for bug reports, feature requests, or feedback.
 
@@ -946,7 +946,7 @@ async def create_feedback_issue(
 @tool
 @runtime.paid_tool(capability_uuid("list_feedback_issues"))
 async def list_feedback_issues(
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """List feedback issues submitted by this patron."""
     from tools.feedback import list_my_issues
@@ -959,7 +959,7 @@ async def list_feedback_issues(
 @runtime.paid_tool(capability_uuid("session_heartbeat"))
 async def session_heartbeat(
     session_id: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Presence heartbeat. Returns who else is active in this session.
 
@@ -980,7 +980,7 @@ async def ask_advisor(
     question: str,
     session_id: str = "",
     history: str = "",
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Ask the Financial Advisor about using TaxSort.
 
@@ -1005,7 +1005,7 @@ async def ask_tax_researcher(
     question: str,
     session_id: str = "",
     history: str = "",
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Ask the Tax Code Researcher about IRS provisions.
 
@@ -1029,7 +1029,7 @@ async def ask_tax_researcher(
 @tool
 @runtime.paid_tool(capability_uuid("request_unlock"))
 async def request_unlock(
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Request a session unlock after timeout.
 
@@ -1067,7 +1067,7 @@ async def request_unlock(
 @runtime.paid_tool(capability_uuid("check_unlock"))
 async def check_unlock(
     response: str,
-    npub: PatronNpub = "", dpop_token: DpopToken = "",
+    npub: PatronNpub = "",
 ) -> dict[str, Any]:
     """Check if the unlock response is valid.
 
