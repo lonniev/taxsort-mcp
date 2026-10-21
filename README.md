@@ -12,7 +12,7 @@ Import bank CSV exports (SoFi, Chase, Schwab, US Bank, PayPal, Coinbase), classi
 
 ## Tools
 
-All domain tools take `proof: str` for DPYC authentication.
+Domain tools take the patron's `npub` and nothing else for identity: the connection proves it, either by signing each request with the npub's key (NIP-98) or as an OAuth holder connection that earned a grant through `request_npub_proof` / `receive_npub_proof`. The patron chooses the grant's lifetime, up to 30 days.
 
 ### Sessions
 
@@ -27,8 +27,8 @@ All domain tools take `proof: str` for DPYC authentication.
 
 | Tool | Description |
 |------|-------------|
-| `request_npub_proof` | Start npub verification via Secure Courier DM |
-| `receive_npub_proof` | Complete npub verification (reply to the DM to prove npub ownership) |
+| `request_npub_proof` | Start npub verification via Secure Courier DM; returns a `nonce` (standard tool) |
+| `receive_npub_proof` | Complete npub verification with that `nonce`; the connection then holds the npub (standard tool) |
 | `verify_passphrase` | Verify a passphrase to unlock a timed-out session |
 | `request_unlock` | Request a session unlock after timeout |
 | `check_unlock` | Check if the unlock response is valid |
@@ -111,7 +111,7 @@ All domain tools take `proof: str` for DPYC authentication.
 
 ### Standard DPYC&trade; (from tollbooth-dpyc wheel)
 
-`check_balance`, `purchase_credits`, `check_payment`, `check_price`, `service_status`, `request_credential_channel`, `receive_credentials`, `forget_credentials`, `oracle_how_to_join`, `oracle_about`, `oracle_lookup_member`, `oracle_network_advisory`, `oracle_get_tax_rate`
+`register_standard_tools()` mounts the wheel's full set, including `session_status`, `check_balance`, `account_statement`, `purchase_credits`, `check_payment`, `check_price`, `service_status`, `request_credential_channel`, `receive_credentials`, `forget_credentials`, `request_npub_proof`, `receive_npub_proof`, `check_proof_status`, `held_identities`, the pricing-model and coupon tools, `request_adoption`, `report_issue`, and the delegated `oracle_*` tools. See the [tollbooth-dpyc README](https://github.com/lonniev/tollbooth-dpyc) for the list.
 
 ## Server-Side Pagination
 
@@ -145,7 +145,8 @@ Examples: `<-95` (debits exceeding $95), `[0..10)` (range via two rules), `gte 5
 ## Architecture
 
 - **Pure MCP** &mdash; no custom REST endpoints. Horizon exposes Streamable HTTP (JSON-RPC 2.0)
-- **One env var** &mdash; `TOLLBOOTH_NOSTR_OPERATOR_NSEC`. Neon database provisioned automatically by Authority. BTCPay and Anthropic API key delivered via Secure Courier
+- **Web app** &mdash; `frontend/` (React + Vite on Cloudflare Pages, https://taxsort-app.pages.dev) calls the same MCP tools
+- **One env var** &mdash; `TOLLBOOTH_NOSTR_OPERATOR_NSEC`. Neon database provisioned automatically by Authority. BTCPay, the Anthropic API key and an optional GitHub token (for feedback issues) delivered via Secure Courier
 - **Per-npub isolation** &mdash; each patron's transactions, rules, and sessions are keyed by their Nostr public key
 - **NeonVault** &mdash; all persistence via Neon's HTTP SQL API (httpx, no asyncpg)
 - **Tollbooth DPYC&trade;** &mdash; pre-funded Lightning balances, Authority-certified purchases, constraint-driven pricing
@@ -158,7 +159,7 @@ export TOLLBOOTH_NOSTR_OPERATOR_NSEC=nsec1...
 python server.py
 ```
 
-Schema migration runs automatically on startup.
+The domain schema is created automatically the first time the vault is used.
 
 ### Operator Onboarding
 
@@ -171,7 +172,8 @@ Schema migration runs automatically on startup.
      "btcpay_host": "https://btcpay.example.com",
      "btcpay_api_key": "...",
      "btcpay_store_id": "...",
-     "anthropic_api_key": "sk-ant-..."
+     "anthropic_api_key": "sk-ant-...",
+     "github_token": "(optional) token that can open issues for feedback"
    }
    ```
 
@@ -195,7 +197,12 @@ Part of the [DPYC&trade; Social Contract](https://github.com/lonniev/dpyc-commun
 | [schwab-mcp](https://github.com/lonniev/schwab-mcp) | Charles Schwab brokerage data &mdash; positions, quotes, options, orders |
 | [thebrain-mcp](https://github.com/lonniev/thebrain-mcp) | TheBrain knowledge graph &mdash; thoughts, links, attachments |
 | [excalibur-mcp](https://github.com/lonniev/excalibur-mcp) | X (Twitter) posting &mdash; social media automation with OAuth2 |
-| [optionality-mcp](https://github.com/lonniev/optionality-mcp) | Options analytics &mdash; brokerage-data operator |
+| [optionality-mcp](https://github.com/lonniev/optionality-mcp) | Options-trading practice game |
+| [goodearth-mcp](https://github.com/lonniev/goodearth-mcp) | Region-scoped climate analytics for small farms |
+| [beesknees-mcp](https://github.com/lonniev/beesknees-mcp) | The Bee's Knees &mdash; a multiplayer race to the queen |
+| [roastify-mcp](https://github.com/lonniev/roastify-mcp) | Roastify coffee catalog and packaging artwork |
+| [ChartRemotely-mcp](https://github.com/lonniev/ChartRemotely-mcp) | Puts a security on a desktop chart remotely |
+| [tollbooth-web](https://github.com/lonniev/tollbooth-web) | Shared browser SDK for operator front ends |
 | [tollbooth-oauth2-collector](https://github.com/lonniev/tollbooth-oauth2-collector) | OAuth2 callback handler &mdash; advocate service |
 | [tollbooth-shortlinks](https://github.com/lonniev/tollbooth-shortlinks) | URL shortener utility |
 
