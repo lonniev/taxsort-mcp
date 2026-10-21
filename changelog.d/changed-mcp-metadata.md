@@ -1,1 +1,0 @@
-- Every TaxSort tool carries a plain title and its behaviour (reads, writes, deletes, or reaches GitHub, Anthropic or Nostr), and every parameter says what it is and its format; `npub` and `dpop_token` use the fleet's shared descriptions; the server reports its own version, website and icon.

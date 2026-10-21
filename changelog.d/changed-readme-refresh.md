@@ -1,1 +1,0 @@
-- README matches the code: tools take only `npub` (the connection proves it; the per-call `proof` argument is gone), the standard-tool list points at the wheel's full set, the optional `github_token` operator credential and the web app are documented, and the network list is current.
