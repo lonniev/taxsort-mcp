@@ -1,1 +1,0 @@
-- The README's operator onboarding uses `request_adoption` (the Authority's owner approves) in place of the removed `register_operator`, and names the courier's `sender_npub` and `nonce`.

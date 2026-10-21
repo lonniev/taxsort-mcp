@@ -5,6 +5,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Changes not yet released live in `changelog.d/`, one file per change — see the README there for why, and `scripts/changelog.py` for what folds them in at release time.
 
+## [0.31.0] — 2026-10-21
+
+### Changed
+
+- Connections authenticate as holders (tollbooth-dpyc 0.101.1 holder bearer): connecting from Claude.ai is an Authorization Code flow with no login page, each npub proven through a connection stays with it, and tool calls pass only `npub`. The web app reaches the MCP through the shared proxy (web 1.8.2) as an anonymous caller and proves itself as before.
+
+- Every TaxSort tool carries a plain title and its behaviour (reads, writes, deletes, or reaches GitHub, Anthropic or Nostr), and every parameter says what it is and its format; `npub` and `dpop_token` use the fleet's shared descriptions; the server reports its own version, website and icon.
+
+- Pins tollbooth-dpyc 0.102.0: a request signed with an npub's own key (NIP-98) acts as that npub with no grant.
+
+- Pins tollbooth-dpyc 0.102.1: a request signed with an npub's own key (NIP-98) acts as that npub with no grant.
+
+- The README's operator onboarding uses `request_adoption` (the Authority's owner approves) in place of the removed `register_operator`, and names the courier's `sender_npub` and `nonce`.
+
+- README matches the code: tools take only `npub` (the connection proves it; the per-call `proof` argument is gone), the standard-tool list points at the wheel's full set, the optional `github_token` operator credential and the web app are documented, and the network list is current.
+
+- Dependencies refreshed to current releases (mcp/fastmcp 1.27.0/3.4.7 → 2.3.0/4.1.0; frontend minor/patch). No service stays on old transitive versions.
+
+- Tools take only `npub`; the connection proves it (a request signed with the npub's key, or an OAuth connection that holds it after the DM). The `dpop_token` argument is gone, and the Courier phrase is `nonce`. Pins tollbooth-dpyc 0.103.0.
+
+- The web app moves to @tollbooth-dpyc/web 1.9.0: a tab that holds the signed-in key signs each request, and DM sign-in connects to the operator as a holder (one quick redirect, no login page) — no proof rides in tool arguments.
+
 ## [0.30.7] — 2026-08-24
 
 ### Security — track tollbooth-dpyc 0.88.1 (cryptography floor raised to >=49.0.0)
