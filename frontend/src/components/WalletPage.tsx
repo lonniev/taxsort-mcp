@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
-import { formatDate } from "@tollbooth-dpyc/web";
-import { UsageSummary, useTimezone } from "@tollbooth-dpyc/web/react";
+import { awaitingWords, formatDate, parseSats, payLink } from "@tollbooth-dpyc/web";
+import { UsageSummary, useTimezone, useTopUp } from "@tollbooth-dpyc/web/react";
 import { usageClassNames } from "../utils/accountStyles";
 
 /** The check_balance notices the page shows beside the statement card. */
@@ -11,23 +11,6 @@ interface BalanceResult {
   pending_invoice_count?: number;
   vault_unavailable?: boolean;
   warning?: string;
-}
-
-interface PurchaseResult {
-  invoice_id?: string;
-  checkout_link?: string;
-  lightning_invoice?: string;
-  amount_sats?: number;
-  error?: string;
-  success?: boolean;
-}
-
-interface PaymentResult {
-  invoice_id?: string;
-  status?: string;
-  credits_granted?: number;
-  balance_api_sats?: number;
-  message?: string;
 }
 
 interface StatementResult {
@@ -40,14 +23,10 @@ export default function WalletPage() {
   const { npub } = useSession();
 
   const balanceTool = useToolCall<BalanceResult>("check_balance");
-  const purchaseTool = useToolCall<PurchaseResult>("purchase_credits");
-  const paymentTool = useToolCall<PaymentResult>("check_payment");
   const statementTool = useToolCall<StatementResult>("account_statement");
 
   const [balance, setBalance] = useState<BalanceResult | null>(null);
   const [statement, setStatement] = useState<StatementResult | null>(null);
-  const [purchase, setPurchase] = useState<PurchaseResult | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [customAmount, setCustomAmount] = useState("");
   const [showStatement, setShowStatement] = useState(false);
   // Bumped on a settled payment so the statement card reads afresh.
@@ -70,25 +49,15 @@ export default function WalletPage() {
   }, []);
 
 
-  async function handlePurchase(amount: number) {
-    setPurchase(null);
-    setPaymentStatus(null);
-    const data = await purchaseTool.invoke({ amount_sats: amount, npub });
-    if (data) setPurchase(data);
-  }
-
-  async function handleCheckPayment() {
-    if (!purchase?.invoice_id) return;
-    setPaymentStatus(null);
-    const data = await paymentTool.invoke({ invoice_id: purchase.invoice_id, npub });
-    if (data) {
-      setPaymentStatus(data.status ?? "unknown");
-      if (data.status === "Settled") {
-        loadBalance();
-        setSettledCount((n) => n + 1);
-      }
-    }
-  }
+  // purchase_credits → invoice → check_payment is the package's: an open
+  // invoice is checked on its own until it settles, and "Check now" still works.
+  const { state, watching, create, check, cancel, reset } = useTopUp({
+    onSettled: () => {
+      loadBalance();
+      setSettledCount((n) => n + 1);
+    },
+  });
+  const custom = parseSats(customAmount);
 
   return (
     <div className="w-[85%] mx-auto">
@@ -129,14 +98,14 @@ export default function WalletPage() {
           Purchase credits via Bitcoin Lightning. Credits are used for tool calls.
         </p>
 
-        {!purchase && (
+        {(state.phase === "idle" || state.phase === "creating") && (
           <>
             <div className="flex flex-wrap gap-2 mb-3">
               {TOP_OFF_AMOUNTS.map(amt => (
                 <button
                   key={amt}
                   onClick={() => setCustomAmount(String(amt))}
-                  disabled={purchaseTool.loading}
+                  disabled={state.phase === "creating"}
                   aria-pressed={customAmount === String(amt)}
                   className={`bg-stone-900 text-white text-xs px-4 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors ${
                     customAmount === String(amt) ? "ring-2 ring-amber-500 ring-offset-1" : ""
@@ -153,105 +122,105 @@ export default function WalletPage() {
                 value={customAmount}
                 onChange={e => setCustomAmount(e.target.value.replace(/\D/g, ""))}
                 onKeyDown={e => {
-                  if (e.key === "Enter" && customAmount) handlePurchase(parseInt(customAmount, 10));
+                  if (e.key === "Enter" && custom) create(custom);
                 }}
               />
-              {customAmount && (
+              {custom && (
                 <button
-                  onClick={() => handlePurchase(parseInt(customAmount, 10))}
-                  disabled={purchaseTool.loading}
+                  onClick={() => create(custom)}
+                  disabled={state.phase === "creating"}
                   className="bg-amber-600 text-white text-xs px-4 py-1.5 rounded-lg hover:bg-amber-500 disabled:opacity-40"
                 >
                   Create invoice
                 </button>
               )}
             </div>
-            {purchaseTool.loading && (
+            {state.phase === "creating" && (
               <p className="text-xs text-amber-600 mt-2">Creating Lightning invoice&hellip; this may take a moment.</p>
+            )}
+            {state.phase === "idle" && state.message && (
+              <p className="text-xs text-red-700 mt-2">{state.message}</p>
             )}
           </>
         )}
 
-        {purchase && !purchase.error && purchase.success !== false && (
+        {state.phase === "awaiting" && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
             <div className="text-xs font-semibold text-amber-700 mb-2">
-              Lightning Invoice &mdash; {purchase.amount_sats?.toLocaleString()} sats
+              Lightning Invoice &mdash; {state.invoice.sats.toLocaleString()} sats
             </div>
 
-            {purchase.lightning_invoice && (
+            {state.invoice.bolt11 && (
               <div className="mb-3">
                 <div className="text-xs text-stone-400 mb-1">BOLT11 Invoice (copy to Lightning wallet):</div>
                 <div
                   className="font-mono text-xs text-amber-800 bg-white px-3 py-2 rounded border border-amber-200 break-all cursor-pointer select-all"
-                  onClick={() => navigator.clipboard.writeText(purchase.lightning_invoice!)}
+                  onClick={() => navigator.clipboard.writeText(state.invoice.bolt11!)}
                   title="Click to copy"
                 >
-                  {purchase.lightning_invoice}
+                  {state.invoice.bolt11}
                 </div>
               </div>
             )}
 
-            {purchase.checkout_link && (
-              <a
-                href={purchase.checkout_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block bg-amber-600 text-white text-xs px-4 py-2 rounded-lg hover:bg-amber-500 transition-colors mb-3"
-              >
-                Open Payment Page &rarr;
-              </a>
-            )}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {state.invoice.bolt11 && (
+                <a
+                  href={payLink(state.invoice) ?? "#"}
+                  className="inline-block bg-amber-600 text-white text-xs px-4 py-2 rounded-lg hover:bg-amber-500 transition-colors"
+                >
+                  Open in wallet
+                </a>
+              )}
+              {state.invoice.checkoutLink && (
+                <a
+                  href={state.invoice.checkoutLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-xs px-4 py-2 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-100 transition-colors"
+                >
+                  Open Payment Page &rarr;
+                </a>
+              )}
+            </div>
 
             <div className="flex gap-2 mt-2">
               <button
-                onClick={handleCheckPayment}
-                disabled={paymentTool.loading}
+                onClick={check}
+                disabled={state.checking}
                 className="bg-stone-900 text-white text-xs px-4 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40"
               >
-                {paymentTool.loading ? "Checking\u2026" : "Check Payment"}
+                {state.checking ? "Checking\u2026" : "Check now"}
               </button>
               <button
-                onClick={() => { setPurchase(null); setPaymentStatus(null); }}
+                onClick={cancel}
                 className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-3 py-2 rounded-lg"
               >
                 Cancel
               </button>
             </div>
 
-            {paymentStatus && (
-              <div className={`mt-3 text-xs px-3 py-2 rounded-lg border ${
-                paymentStatus === "Settled"
-                  ? "bg-green-50 border-green-200 text-green-700"
-                  : paymentStatus === "Expired"
-                  ? "bg-red-50 border-red-200 text-red-600"
-                  : "bg-stone-50 border-stone-200 text-stone-600"
-              }`}>
-                {paymentStatus === "Settled" && "Settled! Credits added to your balance."}
-                {paymentStatus === "Expired" && "Invoice expired. Create a new one."}
-                {paymentStatus === "Pending" && "Still pending. Pay the Lightning invoice and check again."}
-                {!["Settled", "Expired", "Pending"].includes(paymentStatus) && `Status: ${paymentStatus}`}
-              </div>
-            )}
+            <div className="mt-3 text-xs px-3 py-2 rounded-lg border bg-stone-50 border-stone-200 text-stone-600" aria-live="polite">
+              {awaitingWords(state.status, watching)}
+            </div>
           </div>
         )}
 
-        {purchase && (purchase.error || purchase.success === false) && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-700">
-            {purchase.error ?? "Purchase failed. The operator may not have sufficient certified sats."}
-            <button
-              onClick={() => { setPurchase(null); ; }}
-              className="block mt-2 text-red-500 hover:text-red-700 underline"
-            >
-              Try again
+        {state.phase === "settled" && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-xs text-green-700">
+            Settled! {state.credited.toLocaleString()} sats added to your balance.
+            <button onClick={reset} className="block mt-2 text-green-700 hover:text-green-900 underline">
+              Done
             </button>
           </div>
         )}
 
-        {purchaseTool.error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-3 text-xs text-red-700">
-            {purchaseTool.error.includes("timeout") || purchaseTool.error.includes("-32001")
-              ? "Request timed out. The operator may not have certified sats available. Check the operator status above."
-              : purchaseTool.error}
+        {state.phase === "failed" && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-700">
+            {state.message}
+            <button onClick={reset} className="block mt-2 text-red-500 hover:text-red-700 underline">
+              Try again
+            </button>
           </div>
         )}
       </div>
