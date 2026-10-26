@@ -1,0 +1,1 @@
+- The wallet's top-up now runs on the shared package: Open in wallet opens your own Lightning wallet, the page watches for your payment by itself, and the button reads "Check now".
