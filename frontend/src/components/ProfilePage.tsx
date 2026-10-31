@@ -57,7 +57,6 @@ export default function ProfilePage() {
         labels: THEME_LABELS,
         classNames: themeToggleClassNames,
       }}
-      coupons={false}
       build={false}
       after={<AiUsagePanel />}
       classNames={accountPageClassNames}
