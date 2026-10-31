@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import '@tollbooth-dpyc/web/theme.css';
+@import '@tollbooth-dpyc/web/wallet.css';
 @source '../node_modules/@tollbooth-dpyc/web/dist';
 @plugin '@tailwindcss/typography';
 
@@ -50,6 +51,12 @@
   --tb-notice-bg: #2a1b36;
   --tb-notice-line: #6b21a8;
   --tb-notice-ink: #d8b4fe;
+}
+
+/* The shared wallet in TaxSort's stone and amber: it reads the --tb-* set above,
+   in either mode, with the figures in the mono the rest of the app sets them in. */
+:root {
+  --tb-wallet-figure-font: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* Dark mode: invert the key surface/text colors globally.
