@@ -1,0 +1,1 @@
+- Force a Horizon redeploy so the live service catches up to main (`301c864`). Deploy-verify saw stale wheel `0330b16` / version `0.31.0` for ~12 min after the frontend-deps merge; bump package metadata to `0.31.1` and refresh `.horizon-trigger`.
