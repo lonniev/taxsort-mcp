@@ -1,22 +1,24 @@
-import { useState, useEffect, useRef, useCallback, createContext, useContext, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, createContext, useContext, lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppShell, type AppShellContext } from "@tollbooth-dpyc/web/react";
 import SessionsPage from "./components/SessionsPage";
-import ImportPage from "./components/ImportPage";
-import AccountsPage from "./components/AccountsPage";
-import ProfilePage from "./components/ProfilePage";
-import TransactionsPage from "./components/TransactionsPage";
-import ClassifyPage from "./components/ClassifyPage";
-import SummaryPage from "./components/SummaryPage";
-import AdvisorPage from "./components/AdvisorPage";
-import TaxResearcherPage from "./components/TaxResearcherPage";
-import SubscriptionsPage from "./components/SubscriptionsPage";
-import WalletPage from "./components/WalletPage";
-import FeedbackPage from "./components/FeedbackPage";
-import PrivacyPage from "./components/PrivacyPage";
-import SettingsPage from "./components/SettingsPage";
 import Nav from "./components/Nav";
 import LockScreen from "./components/LockScreen";
+
+// Each page past the front door is its own chunk, fetched the first time it opens.
+const ImportPage = lazy(() => import("./components/ImportPage"));
+const AccountsPage = lazy(() => import("./components/AccountsPage"));
+const ProfilePage = lazy(() => import("./components/ProfilePage"));
+const TransactionsPage = lazy(() => import("./components/TransactionsPage"));
+const ClassifyPage = lazy(() => import("./components/ClassifyPage"));
+const SummaryPage = lazy(() => import("./components/SummaryPage"));
+const AdvisorPage = lazy(() => import("./components/AdvisorPage"));
+const TaxResearcherPage = lazy(() => import("./components/TaxResearcherPage"));
+const SubscriptionsPage = lazy(() => import("./components/SubscriptionsPage"));
+const WalletPage = lazy(() => import("./components/WalletPage"));
+const FeedbackPage = lazy(() => import("./components/FeedbackPage"));
+const PrivacyPage = lazy(() => import("./components/PrivacyPage"));
+const SettingsPage = lazy(() => import("./components/SettingsPage"));
 
 /** The site's own words above the sign-in card. */
 const WELCOME = "Your transactions, sorted to IRS lines, kept under your key.";
@@ -220,37 +222,39 @@ function SignedIn({ shell }: { shell: AppShellContext }) {
         <StatusBanner shell={shell} />
         <Nav />
         <main className="px-4 py-6">
-          <Routes>
-            <Route path="/" element={<SessionsPage />} />
-            <Route
-              path="/import"
-              element={sessionId ? <ImportPage /> : <Navigate to="/" />}
-            />
-            <Route
-              path="/accounts"
-              element={sessionId ? <AccountsPage /> : <Navigate to="/" />}
-            />
-            <Route
-              path="/classify"
-              element={sessionId ? <ClassifyPage /> : <Navigate to="/" />}
-            />
-            <Route
-              path="/transactions"
-              element={sessionId ? <TransactionsPage /> : <Navigate to="/" />}
-            />
-            <Route
-              path="/summary"
-              element={sessionId ? <SummaryPage /> : <Navigate to="/" />}
-            />
-            <Route path="/subscriptions" element={<SubscriptionsPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/wallet" element={<WalletPage />} />
-            <Route path="/advisor" element={<AdvisorPage />} />
-            <Route path="/tax-research" element={<TaxResearcherPage />} />
-            <Route path="/feedback" element={<FeedbackPage />} />
-            <Route path="/privacy" element={<PrivacyPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
+          <Suspense fallback={<p className="text-sm text-stone-400 text-center py-8">Loading…</p>}>
+            <Routes>
+              <Route path="/" element={<SessionsPage />} />
+              <Route
+                path="/import"
+                element={sessionId ? <ImportPage /> : <Navigate to="/" />}
+              />
+              <Route
+                path="/accounts"
+                element={sessionId ? <AccountsPage /> : <Navigate to="/" />}
+              />
+              <Route
+                path="/classify"
+                element={sessionId ? <ClassifyPage /> : <Navigate to="/" />}
+              />
+              <Route
+                path="/transactions"
+                element={sessionId ? <TransactionsPage /> : <Navigate to="/" />}
+              />
+              <Route
+                path="/summary"
+                element={sessionId ? <SummaryPage /> : <Navigate to="/" />}
+              />
+              <Route path="/subscriptions" element={<SubscriptionsPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/wallet" element={<WalletPage />} />
+              <Route path="/advisor" element={<AdvisorPage />} />
+              <Route path="/tax-research" element={<TaxResearcherPage />} />
+              <Route path="/feedback" element={<FeedbackPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Routes>
+          </Suspense>
         </main>
       </BrowserRouter>
     </SessionContext.Provider>
