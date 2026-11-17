@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
+import { useLanguageLocale } from "@tollbooth-dpyc/web/react";
+import { useT } from "../i18n";
 
 interface ImportResult {
   filename: string;
@@ -90,6 +92,8 @@ function guessAccountName(filename: string): string {
 }
 
 export default function ImportPage() {
+  const t = useT();
+  const locale = useLanguageLocale();
   const { sessionId, npub } = useSession();
   const navigate = useNavigate();
 
@@ -142,9 +146,9 @@ export default function ImportPage() {
     const newResults: ImportResult[] = [];
 
     for (const entry of entries) {
-      setPhase(`Reading ${entry.file.name}\u2026`);
+      setPhase(t("views.import.reading", { file: entry.file.name }));
       const content = await entry.file.text();
-      setPhase(`Importing ${entry.file.name}\u2026`);
+      setPhase(t("views.import.importing", { file: entry.file.name }));
       const data = await importTool.invoke({
         session_id: sessionId,
         content,
@@ -183,7 +187,7 @@ export default function ImportPage() {
 
   return (
     <div className="w-[85%] mx-auto">
-      <h1 className="text-xl font-semibold mb-6 text-stone-800">Import transactions</h1>
+      <h1 className="text-xl font-semibold mb-6 text-stone-800">{t("views.import.title")}</h1>
 
       {/* Clear session data */}
       <div className="mb-4">
@@ -192,29 +196,29 @@ export default function ImportPage() {
             onClick={() => { setClearResult(null); setConfirmClear(true); }}
             className="text-xs text-stone-400 hover:text-red-500 transition-colors"
           >
-            Clear all transactions&hellip;
+            {t("views.import.clearAll")}
           </button>
         ) : (
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-center gap-3">
-            <span className="text-sm text-red-700">Delete all transactions and classifications?</span>
+            <span className="text-sm text-red-700">{t("views.import.confirmClear")}</span>
             <button
               onClick={handleClear}
               disabled={clearTool.loading}
               className="bg-red-600 text-white text-xs px-3 py-1.5 rounded hover:bg-red-500 disabled:opacity-40"
             >
-              {clearTool.loading ? "Clearing\u2026" : "Yes, clear"}
+              {clearTool.loading ? t("views.common.clearing") : t("views.import.yesClear")}
             </button>
             <button
               onClick={() => setConfirmClear(false)}
               className="text-xs text-stone-400 hover:text-stone-600"
             >
-              Cancel
+              {t("views.common.cancel")}
             </button>
           </div>
         )}
         {clearResult && (
           <div className="mt-2 text-xs text-stone-500">
-            Cleared {clearResult.transactions_deleted} transactions and {clearResult.classifications_deleted} classifications.
+            {t("views.import.cleared", { transactions: clearResult.transactions_deleted, classifications: clearResult.classifications_deleted })}
           </div>
         )}
       </div>
@@ -223,7 +227,7 @@ export default function ImportPage() {
       {sources.length > 0 && (
         <div className="bg-white border border-stone-200 rounded-xl p-5 mb-4">
           <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
-            Imported Sources
+            {t("views.import.sources")}
           </div>
           <div className="space-y-2">
             {sources.map((s, i) => (
@@ -232,17 +236,17 @@ export default function ImportPage() {
                   {FMT_LABELS[s.format] ?? s.format}
                 </span>
                 <span className="font-medium text-stone-700 flex-1">{s.account}</span>
-                <span className="text-stone-400">{s.count} txns</span>
+                <span className="text-stone-400">{t("views.common.transactions", { count: s.count })}</span>
                 <span className="text-stone-400">{s.date_range}</span>
                 <button
                   onClick={async () => {
                     if (!sessionId) return;
-                    if (!confirm(`Remove all ${s.count} transactions from "${s.account}"?\nClassifications for these transactions will also be deleted.`)) return;
+                    if (!confirm(t("views.import.confirmRemove", { count: s.count, account: s.account }))) return;
                     const r = await deleteAcctTool.invoke({ session_id: sessionId, account: s.account, npub });
                     if (r) loadStats();
                   }}
                   disabled={deleteAcctTool.loading}
-                  title={`Remove all transactions from ${s.account}`}
+                  title={t("views.import.removeTitle", { account: s.account })}
                   className="text-stone-300 hover:text-red-500 transition-colors"
                 >
                   &times;
@@ -261,7 +265,7 @@ export default function ImportPage() {
         onDrop={e => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
       >
         <div className="text-2xl mb-2 text-stone-300">&uarr;</div>
-        <p className="text-sm text-stone-500">Drop CSV files or click to browse</p>
+        <p className="text-sm text-stone-500">{t("views.import.drop")}</p>
         <p className="text-xs text-stone-400 mt-1">
           SoFi Relay &middot; US Bank &middot; Schwab &middot; PayPal &middot; Chase &middot; Coinbase &middot; Checkbook
         </p>
@@ -279,7 +283,7 @@ export default function ImportPage() {
       {entries.length > 0 && (
         <div className="space-y-2 mb-4">
           <div className="text-xs text-stone-400 mb-1">
-            Assign each file to an account. Files with the same account name are treated as the same source.
+            {t("views.import.assign")}
           </div>
           {entries.map((entry, i) => {
             const shared = accountGroups.get(entry.accountName)! > 1;
@@ -291,21 +295,21 @@ export default function ImportPage() {
                   </span>
                   <span className="flex-1 truncate text-sm text-stone-700">{entry.file.name}</span>
                   <span className="text-xs text-stone-400 font-mono">
-                    {(entry.file.size / 1024).toFixed(1)} KB
+                    {t("views.import.size", { size: (entry.file.size / 1024).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })}
                   </span>
                   <button onClick={() => removeEntry(i)} className="text-stone-300 hover:text-red-400 text-sm">&times;</button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-stone-400 whitespace-nowrap">Account:</label>
+                  <label className="text-xs text-stone-400 whitespace-nowrap">{t("views.import.account")}</label>
                   <input
                     value={entry.accountName}
                     onChange={e => setAccountName(i, e.target.value)}
                     className="flex-1 text-sm border border-stone-200 rounded px-2 py-1 bg-stone-50 focus:outline-none focus:border-stone-400"
-                    placeholder="e.g. Chase 8890"
+                    placeholder={t("views.import.accountPlaceholder")}
                   />
                   {shared && (
-                    <span className="text-xs text-blue-600" title="Multiple files share this account name">
-                      grouped
+                    <span className="text-xs text-blue-600" title={t("views.import.groupedTitle")}>
+                      {t("views.import.grouped")}
                     </span>
                   )}
                 </div>
@@ -319,7 +323,7 @@ export default function ImportPage() {
               disabled={importing}
               className="bg-stone-900 text-white text-sm px-5 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
             >
-              {importing ? "Importing\u2026" : "Import files"}
+              {importing ? t("views.import.importingButton") : t("views.import.importFiles")}
             </button>
             {phase && <span className="text-xs text-stone-400">{phase}</span>}
           </div>
@@ -330,24 +334,24 @@ export default function ImportPage() {
       {hasResults && (
         <div className="bg-white border border-stone-200 rounded-xl p-5 mb-4">
           <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
-            Import results
+            {t("views.import.results")}
           </div>
           {results.map((r, i) => (
             <div key={i} className="text-sm mb-2 last:mb-0">
               <span className="font-medium text-stone-700">{r.filename}</span>
               <span className="text-stone-400 ml-2">
-                {r.added} new
+                {t("views.import.added", { count: r.added })}
                 {r.deduped > 0 && (
-                  <span className="text-blue-600 ml-1">&middot; {r.deduped} duplicates removed</span>
+                  <span className="text-blue-600 ml-1">{t("views.import.deduped", { count: r.deduped })}</span>
                 )}
                 {r.ambiguous > 0 && (
-                  <span className="text-amber-600 ml-1">&middot; {r.ambiguous} ambiguous</span>
+                  <span className="text-amber-600 ml-1">{t("views.import.ambiguous", { count: r.ambiguous })}</span>
                 )}
               </span>
             </div>
           ))}
           <div className="mt-3 pt-3 border-t border-stone-100 text-xs text-stone-400">
-            {results[results.length - 1]?.total_in_session ?? 0} total transactions in session
+            {t("views.import.totalInSession", { count: results[results.length - 1]?.total_in_session ?? 0 })}
           </div>
         </div>
       )}
@@ -359,19 +363,19 @@ export default function ImportPage() {
             onClick={() => navigate("/accounts")}
             className="bg-stone-700 text-white text-sm px-5 py-2 rounded-lg hover:bg-stone-600 transition-colors"
           >
-            Review Accounts &rarr;
+            {t("views.import.reviewAccounts")}
           </button>
           <button
             onClick={() => navigate("/classify")}
             className="bg-amber-600 text-white text-sm px-5 py-2 rounded-lg hover:bg-amber-500 transition-colors"
           >
-            Classify with Claude &rarr;
+            {t("views.import.classify")}
           </button>
           <button
             onClick={() => navigate("/transactions")}
             className="text-sm text-stone-400 hover:text-stone-600"
           >
-            View transactions
+            {t("views.import.viewTransactions")}
           </button>
         </div>
       )}

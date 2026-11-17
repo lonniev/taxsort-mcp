@@ -8,6 +8,7 @@
 import { useState, useCallback } from "react";
 import Anthropic from "@anthropic-ai/sdk";
 import { useToolCall } from "./useMCP";
+import { tr } from "../i18n";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -315,7 +316,7 @@ export function useSubscriptions(sessionId: string | null, npub: string) {
       });
       setPhase("done");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Subscription scan failed");
+      setError(e instanceof Error ? e.message : tr("lib.subscriptions.failed"));
       setPhase("error");
     }
   }, [sessionId, npub]);

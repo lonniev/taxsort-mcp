@@ -3,6 +3,7 @@ import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
 import { formatDate } from "@tollbooth-dpyc/web";
 import { useTimezone } from "@tollbooth-dpyc/web/react";
+import { useT, type Translate } from "../i18n";
 
 interface Issue {
   number: number | null;
@@ -27,11 +28,23 @@ interface CreateResult {
 }
 
 const CATEGORIES = [
-  { value: "feedback", label: "General Feedback", color: "bg-blue-100 text-blue-700" },
-  { value: "bug", label: "Bug Report", color: "bg-red-100 text-red-700" },
-  { value: "feature", label: "Feature Request", color: "bg-green-100 text-green-700" },
-  { value: "question", label: "Question", color: "bg-amber-100 text-amber-700" },
-];
+  { value: "feedback", color: "bg-blue-100 text-blue-700" },
+  { value: "bug", color: "bg-red-100 text-red-700" },
+  { value: "feature", color: "bg-green-100 text-green-700" },
+  { value: "question", color: "bg-amber-100 text-amber-700" },
+] as const;
+
+/** A category's name in the reader's language; one the server sends that we don't know reads as sent. */
+function categoryLabel(t: Translate, value: string): string {
+  return CATEGORIES.some(c => c.value === value)
+    ? t(`views.feedback.cat.${value as (typeof CATEGORIES)[number]["value"]}`)
+    : value;
+}
+
+/** An issue's state in the reader's language, or as the server sent it. */
+function stateLabel(t: Translate, state: string): string {
+  return state === "open" || state === "closed" || state === "submitted" ? t(`views.feedback.state.${state}`) : state;
+}
 
 const STATE_BADGE: Record<string, string> = {
   open: "bg-green-100 text-green-700",
@@ -40,6 +53,7 @@ const STATE_BADGE: Record<string, string> = {
 };
 
 export default function FeedbackPage() {
+  const t = useT();
   const [, zone] = useTimezone();
   const { npub } = useSession();
   const createTool = useToolCall<CreateResult>("create_feedback_issue");
@@ -73,7 +87,7 @@ export default function FeedbackPage() {
       setBody("");
       loadIssues();
     } else {
-      setSubmitResult({ ok: false, message: data?.error || data?.message || "Failed to create issue." });
+      setSubmitResult({ ok: false, message: data?.error || data?.message || t("views.feedback.failed") });
     }
   }
 
@@ -83,16 +97,15 @@ export default function FeedbackPage() {
 
   return (
     <div className="w-[85%] mx-auto">
-      <h1 className="text-xl font-semibold mb-6 text-stone-800">Feedback</h1>
+      <h1 className="text-xl font-semibold mb-6 text-stone-800">{t("views.feedback.title")}</h1>
 
       {/* Submit form */}
       <div className="bg-white border border-stone-200 rounded-xl p-5 mb-6">
         <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
-          Submit Feedback
+          {t("views.feedback.submitHeading")}
         </div>
         <p className="text-xs text-stone-500 mb-4">
-          Bug reports, feature requests, and questions are tracked as GitHub Issues.
-          No GitHub account required.
+          {t("views.feedback.intro")}
         </p>
 
         <div className="flex flex-wrap gap-2 mb-3">
@@ -106,21 +119,21 @@ export default function FeedbackPage() {
                   : "border-stone-200 text-stone-400 hover:border-stone-300"
               }`}
             >
-              {c.label}
+              {categoryLabel(t, c.value)}
             </button>
           ))}
         </div>
 
         <input
           className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm bg-stone-50 focus:outline-none focus:border-stone-400 mb-3"
-          placeholder="Short summary..."
+          placeholder={t("views.feedback.titlePlaceholder")}
           value={title}
           onChange={e => setTitle(e.target.value)}
         />
 
         <textarea
           className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm bg-stone-50 focus:outline-none focus:border-stone-400 mb-4 h-24 resize-y"
-          placeholder="Describe the issue, suggestion, or question..."
+          placeholder={t("views.feedback.bodyPlaceholder")}
           value={body}
           onChange={e => setBody(e.target.value)}
         />
@@ -130,7 +143,7 @@ export default function FeedbackPage() {
           disabled={createTool.loading || !title.trim()}
           className="bg-stone-900 text-white text-sm px-5 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
         >
-          {createTool.loading ? "Submitting\u2026" : "Submit"}
+          {createTool.loading ? t("views.feedback.submitting") : t("views.feedback.submit")}
         </button>
 
         {submitResult?.ok && (
@@ -150,19 +163,19 @@ export default function FeedbackPage() {
       <div className="bg-white border border-stone-200 rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
           <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
-            Recent Issues
+            {t("views.feedback.recent")}
           </div>
           <button
             onClick={loadIssues}
             disabled={listTool.loading}
             className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded"
           >
-            {listTool.loading ? "\u2026" : "Refresh"}
+            {listTool.loading ? "\u2026" : t("views.common.refresh")}
           </button>
         </div>
 
         {listTool.loading && issues.length === 0 && (
-          <p className="text-xs text-stone-400 text-center py-4">Loading&hellip;</p>
+          <p className="text-xs text-stone-400 text-center py-4">{t("views.common.loading")}</p>
         )}
 
         {issues.length > 0 && (
@@ -176,18 +189,18 @@ export default function FeedbackPage() {
                     </div>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${STATE_BADGE[issue.state] ?? STATE_BADGE.open}`}>
-                        {issue.state}
+                        {stateLabel(t, issue.state)}
                       </span>
                       {issue.labels.filter(l => l.startsWith("cat:")).map(l => (
                         <span key={l} className={`text-xs px-2 py-0.5 rounded-full ${catColor(l.replace("cat:", ""))}`}>
-                          {l.replace("cat:", "")}
+                          {categoryLabel(t, l.replace("cat:", ""))}
                         </span>
                       ))}
                       {issue.number && (
                         <span className="text-xs text-stone-400">#{issue.number}</span>
                       )}
                       {issue.comments > 0 && (
-                        <span className="text-xs text-blue-500">{issue.comments} comment{issue.comments > 1 ? "s" : ""}</span>
+                        <span className="text-xs text-blue-500">{t("views.feedback.comments", { count: issue.comments })}</span>
                       )}
                     </div>
                   </div>
@@ -201,7 +214,7 @@ export default function FeedbackPage() {
         )}
 
         {!listTool.loading && issues.length === 0 && (
-          <p className="text-xs text-stone-400 text-center py-4">No feedback issues yet.</p>
+          <p className="text-xs text-stone-400 text-center py-4">{t("views.feedback.none")}</p>
         )}
       </div>
     </div>

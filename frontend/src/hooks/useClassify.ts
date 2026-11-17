@@ -11,6 +11,7 @@
 import { useState, useCallback, useEffect } from "react";
 import Anthropic from "@anthropic-ai/sdk";
 import { callTool } from "@tollbooth-dpyc/web";
+import { tr } from "../i18n";
 
 // ── Category / subcategory lists (mirrored from BE) ──────────────────────
 
@@ -258,7 +259,7 @@ async function _runEngine(
     const keyResult = await mcpCall("get_anthropic_key", { npub }) as { key: string | null } | null;
     const apiKey = keyResult?.key;
     if (!apiKey) {
-      _setState(s => ({ ...s, phase: "error", errors: ["No Anthropic API key available."] }));
+      _setState(s => ({ ...s, phase: "error", errors: [tr("lib.classify.noKey")] }));
       _running = false;
       return;
     }
@@ -394,7 +395,7 @@ async function _runEngine(
       } catch {
         _setState(s => ({
           ...s,
-          errors: [...s.errors, `Iteration ${iteration + 1}: failed to parse LLM response`],
+          errors: [...s.errors, tr("lib.classify.parseFailed", { round: iteration + 1 })],
         }));
         break;
       }
@@ -499,8 +500,7 @@ async function _runEngine(
       _setState(s => ({
         ...s,
         errors: [...s.errors,
-          "The AI classification service is out of credits. " +
-          "Please ask the TaxSort operator to renew their Anthropic API balance."
+          tr("lib.classify.outOfCredits"),
         ],
       }));
     }

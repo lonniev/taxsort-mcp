@@ -2,6 +2,10 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useSession } from "../App";
 import ReasonText from "./ReasonText";
+import { Tx, useLanguageLocale } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS } from "../i18n";
+import { decimal, signedAmount, usd } from "../utils/money";
+import { groupOptions, sortOptions } from "../utils/tableOptions";
 import { useToolCall } from "../hooks/useMCP";
 import { useCategories } from "../hooks/useCategories";
 import type { Column } from "./SortableTable";
@@ -54,6 +58,8 @@ const CAT_COLOR: Record<string, string> = {
 };
 
 export default function TransactionsPage() {
+  const t = useT();
+  const locale = useLanguageLocale();
   const { sessionId, npub } = useSession();
   const [searchParams] = useSearchParams();
 
@@ -126,7 +132,7 @@ export default function TransactionsPage() {
         setTotal(data.total ?? 0);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load transactions");
+      setError(e instanceof Error ? e.message : t("views.transactions.loadFailed"));
     }
     setLoading(false);
   }, [sessionId, isGrouped, baseParams, page]);
@@ -149,7 +155,7 @@ export default function TransactionsPage() {
         setGroupRows(byGroup);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load transactions");
+      setError(e instanceof Error ? e.message : t("views.transactions.loadFailed"));
     }
     setLoading(false);
   }, [sessionId, isGrouped, baseParams]);
@@ -222,7 +228,7 @@ export default function TransactionsPage() {
       npub,
     });
     if (result?.updated !== undefined) {
-      setRuleApplied(`Rule applied — ${result.updated} transactions updated`);
+      setRuleApplied(t("views.transactions.ruleApplied", { count: result.updated }));
       isGrouped ? fetchGrouped() : fetchFlat();
     }
   }
@@ -235,7 +241,7 @@ export default function TransactionsPage() {
 
   async function revert() {
     if (!selected || !sessionId) return;
-    if (!confirm("Remove classification? Transaction will become unclassified.")) return;
+    if (!confirm(t("views.transactions.confirmRevert"))) return;
     await deleteClassTool.invoke({
       session_id: sessionId,
       transaction_id: selected.id,
@@ -245,23 +251,11 @@ export default function TransactionsPage() {
     isGrouped ? fetchGrouped() : fetchFlat();
   }
 
-  const GROUP_OPTIONS = [
-    ["none", "No grouping"],
-    ["category", "Category"],
-    ["subcategory", "Subcategory"],
-    ["taxline", "Tax Line (IRS)"],
-    ["month", "Month"],
-    ["account", "Account"],
-    ["merchant", "Merchant"],
-    ["month+category", "Month + Category"],
-    ["category+subcategory", "Category + Sub"],
-  ];
-
-  const SCOPE_OPTIONS = [
-    ["all", "All transactions"],
-    ["tax", "Tax items (Sch A + C)"],
-    ["Schedule C", "Schedule C only"],
-    ["Schedule A", "Schedule A only"],
+  const scopeOptions = [
+    ["all", t("views.transactions.scopeAll")],
+    ["tax", t("views.transactions.scopeTax")],
+    ["Schedule C", t("views.transactions.scopeC")],
+    ["Schedule A", t("views.transactions.scopeA")],
   ];
 
   // Server handles filter + group + sort + pagination.
@@ -270,77 +264,77 @@ export default function TransactionsPage() {
   const txColumns: Column<Transaction>[] = useMemo(() => [
     {
       key: "date",
-      label: "Date",
-      sortValue: t => t.date,
+      label: t("views.table.date"),
+      sortValue: tx => tx.date,
       className: "font-mono text-xs text-stone-400 whitespace-nowrap",
-      render: t => t.date,
+      render: tx => tx.date,
     },
     {
       key: "description",
-      label: "Description",
-      sortValue: t => (t.merchant ?? t.description).toLowerCase(),
+      label: t("views.table.description"),
+      sortValue: tx => (tx.merchant ?? tx.description).toLowerCase(),
       className: "max-w-xs",
-      render: t => (
+      render: tx => (
         <>
           <div className="truncate font-medium text-stone-700">
-            {t.merchant ?? t.description}
+            {tx.merchant ?? tx.description}
           </div>
-          {t.merchant && t.merchant !== t.description && (
-            <div className="text-xs text-stone-400 truncate" title={t.description}>{t.description}</div>
+          {tx.merchant && tx.merchant !== tx.description && (
+            <div className="text-xs text-stone-400 truncate" title={tx.description}>{tx.description}</div>
           )}
-          {t.ambiguous && <div className="text-xs text-red-500">Indistinguishable duplicate</div>}
-          {t.hint2 && <div className="text-xs text-blue-500">{t.hint1} &rsaquo; {t.hint2}</div>}
-          {t.reason && <div className="text-xs text-stone-400 italic"><ReasonText reason={t.reason} /></div>}
+          {tx.ambiguous && <div className="text-xs text-red-500">{t("views.table.indistinguishable")}</div>}
+          {tx.hint2 && <div className="text-xs text-blue-500">{tx.hint1} &rsaquo; {tx.hint2}</div>}
+          {tx.reason && <div className="text-xs text-stone-400 italic"><ReasonText reason={tx.reason} /></div>}
         </>
       ),
     },
     {
       key: "amount",
-      label: "Amount",
+      label: t("views.table.amount"),
       align: "right" as const,
-      sortValue: t => t.amount,
+      sortValue: tx => tx.amount,
       className: "font-mono whitespace-nowrap",
-      render: t => (
-        <span className={t.amount >= 0 ? "text-green-700" : "text-stone-700"}>
-          {t.amount >= 0 ? "+" : ""}{t.amount.toFixed(2)}
+      render: tx => (
+        <span className={tx.amount >= 0 ? "text-green-700" : "text-stone-700"}>
+          {signedAmount(tx.amount, locale)}
         </span>
       ),
     },
     {
       key: "account",
-      label: "Account",
-      sortValue: t => t.account,
-      render: t => <span className="text-xs text-stone-500">{t.account}</span>,
+      label: t("views.table.account"),
+      sortValue: tx => tx.account,
+      render: tx => <span className="text-xs text-stone-500">{tx.account}</span>,
     },
     {
       key: "category",
-      label: "Category",
-      sortValue: t => t.category ?? "zzz",
-      render: t => (
+      label: t("views.table.category"),
+      sortValue: tx => tx.category ?? "zzz",
+      render: tx => (
         <>
-          <span className={`text-xs font-medium ${CAT_COLOR[t.category ?? "Unclassified"] ?? "text-stone-400"}`}>
-            {t.category ?? "\u2014"}
+          <span className={`text-xs font-medium ${CAT_COLOR[tx.category ?? "Unclassified"] ?? "text-stone-400"}`}>
+            {tx.category ?? "\u2014"}
           </span>
-          {t.subcategory && t.subcategory !== t.category && (
-            <div className="text-xs text-stone-400 truncate max-w-32">{t.subcategory}</div>
+          {tx.subcategory && tx.subcategory !== tx.category && (
+            <div className="text-xs text-stone-400 truncate max-w-32">{tx.subcategory}</div>
           )}
-          {t.classified_by === "manual" && <span className="text-xs text-blue-400 ml-1">manual</span>}
-          {t.classified_by === "rule" && <span className="text-xs text-purple-400 ml-1">rule</span>}
+          {tx.classified_by === "manual" && <span className="text-xs text-blue-400 ml-1">{t("views.common.manual")}</span>}
+          {tx.classified_by === "rule" && <span className="text-xs text-purple-400 ml-1">{t("views.common.rule")}</span>}
         </>
       ),
     },
-  ], []);
+  ], [t, locale]);
 
   // Category chiclets removed — this page shows raw imported data.
 
   return (
     <div className="w-[85%] mx-auto relative">
       <div className="flex items-center gap-2 mb-5">
-        <h1 className="text-xl font-semibold text-stone-800">Transactions</h1>
+        <h1 className="text-xl font-semibold text-stone-800">{t("views.transactions.title")}</h1>
         <span className="relative group">
           <span className="text-stone-300 hover:text-stone-500 cursor-help text-sm">&#9432;</span>
           <span className="absolute left-6 top-0 hidden group-hover:block bg-stone-800 text-white text-xs rounded-lg px-3 py-2 w-64 z-50 shadow-lg">
-            Transactions shows your raw CSV line items before categorization — the unprocessed accounting journal.
+            {t("views.transactions.about")}
           </span>
         </span>
       </div>
@@ -365,47 +359,43 @@ export default function TransactionsPage() {
             onClick={() => isGrouped ? fetchGrouped() : fetchFlat()}
             className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded ml-1"
           >
-            {loading ? "Loading\u2026" : "Refresh"}
+            {loading ? t("views.common.loading") : t("views.common.refresh")}
           </button>
-          <span className="ml-auto text-xs text-stone-400">{total} transactions</span>
+          <span className="ml-auto text-xs text-stone-400">{t("views.common.transactions", { count: total })}</span>
         </div>
 
         {/* Group by + Scope */}
         <div className="flex items-center gap-3 mb-3">
           <div className="flex items-center gap-1.5">
-            <label className="text-xs text-stone-400">Group</label>
+            <label className="text-xs text-stone-400">{t("views.table.group")}</label>
             <select value={groupBy} onChange={e => { setGroupBy(e.target.value); setPage(0); }}
               className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50">
-              {GROUP_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              {groupOptions(t).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
             {isGrouped && (
               <button onClick={() => { setGroupSort(d => d === "asc" ? "desc" : "asc"); setPage(0); }}
                 className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100"
-                title="Group order">
+                title={t("views.table.groupOrder")}>
                 {groupSort === "asc" ? "A\u2192Z" : "Z\u2192A"}
               </button>
             )}
           </div>
           <div className="flex items-center gap-1.5">
-            <label className="text-xs text-stone-400">Show</label>
+            <label className="text-xs text-stone-400">{t("views.transactions.show")}</label>
             <select value={scope} onChange={e => { setScope(e.target.value); setPage(0); }}
               className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50">
-              {SCOPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              {scopeOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-1.5">
-            <label className="text-xs text-stone-400">Sort by</label>
+            <label className="text-xs text-stone-400">{t("views.table.sortBy")}</label>
             <select value={sortCol} onChange={e => { setSortCol(e.target.value); setPage(0); }}
               className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50">
-              <option value="date">Date</option>
-              <option value="description">Description</option>
-              <option value="amount">Amount</option>
-              <option value="account">Account</option>
-              <option value="category">Category</option>
+              {sortOptions(t).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
             <button onClick={() => { setSortDir(d => d === "asc" ? "desc" : "asc"); setPage(0); }}
               className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100"
-              title="Sort direction">
+              title={t("views.table.sortDirection")}>
               {sortDir === "asc" ? "\u25B2" : "\u25BC"}
             </button>
           </div>
@@ -415,7 +405,7 @@ export default function TransactionsPage() {
         <div className="flex items-center gap-2 mb-4">
           <input
             className="flex-1 border border-stone-200 rounded-lg px-3 py-1.5 text-xs bg-stone-50 focus:outline-none focus:border-stone-400 font-mono"
-            placeholder="Search descriptions (regex)..."
+            placeholder={t("views.table.searchPlaceholder")}
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             onKeyDown={e => {
@@ -424,8 +414,8 @@ export default function TransactionsPage() {
           />
           <input
             className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 w-36 font-mono"
-            placeholder="e.g. <-95, [0..10), !33"
-            title="Amount filter: <, <=, >, >=, =, !=, !N, not N, gt/gte/lt/lte/eq/neq N, [lo..hi), (lo..hi], lo..hi"
+            placeholder={t("views.transactions.amountPlaceholder")}
+            title={t("views.transactions.amountTitle")}
             value={amountExpr}
             onChange={e => setAmountExpr(e.target.value)}
           />
@@ -434,7 +424,7 @@ export default function TransactionsPage() {
               onClick={() => { setSearch(searchInput); setPage(0); }}
               className="text-xs bg-stone-900 text-white px-3 py-1.5 rounded-lg"
             >
-              Search
+              {t("views.common.search")}
             </button>
           )}
           {(search || subFilter || amountExpr) && (
@@ -442,13 +432,13 @@ export default function TransactionsPage() {
               onClick={() => { setSearch(""); setSearchInput(""); setSubFilter(""); setAmountExpr(""); setPage(0); }}
               className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded"
             >
-              Clear filters
+              {t("views.transactions.clearFilters")}
             </button>
           )}
         </div>
         {subFilter && (
           <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mb-4">
-            Filtered by subcategory: <strong>{subFilter}</strong>
+            <Tx ns={WORDS} k="views.transactions.subFilter" vars={{ sub: subFilter }} components={{ b: <strong /> }} />
           </div>
         )}
 
@@ -461,7 +451,7 @@ export default function TransactionsPage() {
               }}
               className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-0.5 rounded"
             >
-              {collapsed.size >= groups.length ? "Expand All" : "Collapse All"}
+              {collapsed.size >= groups.length ? t("views.table.expandAll") : t("views.table.collapseAll")}
             </button>
           </div>
         )}
@@ -492,7 +482,7 @@ export default function TransactionsPage() {
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs">
                       <span className={g.total_amount >= 0 ? "text-green-700" : "text-stone-700"}>
-                        {g.total_amount.toFixed(2)}
+                        {decimal(g.total_amount, locale)}
                       </span>
                     </td>
                   </tr>,
@@ -524,7 +514,7 @@ export default function TransactionsPage() {
             </thead>
             <tbody>
               {txns.length === 0 ? (
-                <tr><td colSpan={txColumns.length} className="px-3 py-8 text-center text-stone-400 text-xs">No transactions match this filter.</td></tr>
+                <tr><td colSpan={txColumns.length} className="px-3 py-8 text-center text-stone-400 text-xs">{t("views.transactions.noMatch")}</td></tr>
               ) : txns.map(t => (
                 <tr key={t.id} className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer" onClick={() => openEdit(t)}>
                   {txColumns.map(col => (
@@ -540,13 +530,13 @@ export default function TransactionsPage() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-2.5 mt-2 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-400">
             <div className="flex gap-2">
-              <button onClick={() => setPage(0)} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30" title="First page">|&larr;</button>
-              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
+              <button onClick={() => setPage(0)} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30" title={t("views.table.firstPage")}>|&larr;</button>
+              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30">{t("views.table.prev")}</button>
             </div>
-            <span>Page {page + 1} of {totalPages} ({total} total)</span>
+            <span>{t("views.table.page", { page: page + 1, pages: totalPages, total })}</span>
             <div className="flex gap-2">
-              <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
-              <button onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30" title="Last page">&rarr;|</button>
+              <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30">{t("views.table.next")}</button>
+              <button onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30" title={t("views.table.lastPage")}>&rarr;|</button>
             </div>
           </div>
         )}
@@ -562,13 +552,13 @@ export default function TransactionsPage() {
             </div>
 
             <div className="px-4 py-3 border-b border-stone-100 text-xs text-stone-400 space-y-0.5">
-              <div>{selected.date} &middot; <span className={selected.amount >= 0 ? "text-green-700" : "text-stone-600"}>${Math.abs(selected.amount).toFixed(2)}</span> &middot; {selected.account}</div>
-              {selected.hint1 && <div className="text-blue-500">{selected.hint1}{selected.hint2 ? ` &rsaquo; ${selected.hint2}` : ""}</div>}
-              {selected.ambiguous && <div className="text-red-500">Indistinguishable duplicate in CSV</div>}
+              <div>{selected.date} &middot; <span className={selected.amount >= 0 ? "text-green-700" : "text-stone-600"}>{usd(Math.abs(selected.amount), locale)}</span> &middot; {selected.account}</div>
+              {selected.hint1 && <div className="text-blue-500">{selected.hint1}{selected.hint2 ? ` \u203A ${selected.hint2}` : ""}</div>}
+              {selected.ambiguous && <div className="text-red-500">{t("views.transactions.ambiguousInCsv")}</div>}
             </div>
 
             <div className="px-4 py-3 space-y-2.5">
-              <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Classification</div>
+              <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider">{t("views.transactions.classification")}</div>
               <select
                 value={editCat}
                 onChange={e => { setEditCat(e.target.value); setEditSub((allCatSubs[e.target.value] ?? [])[0] ?? ""); }}
@@ -592,10 +582,10 @@ export default function TransactionsPage() {
                   disabled={saveClassTool.loading}
                   className="flex-1 bg-stone-900 text-white text-xs py-1.5 rounded-lg hover:bg-stone-700 disabled:opacity-40"
                 >
-                  {saveClassTool.loading ? "Saving\u2026" : "Save"}
+                  {saveClassTool.loading ? t("views.common.saving") : t("views.common.save")}
                 </button>
                 {selected.classified && (
-                  <button onClick={revert} className="text-xs border border-stone-200 px-3 py-1.5 rounded-lg text-stone-400 hover:text-red-500 hover:border-red-200" title="Remove classification">&larrhk;</button>
+                  <button onClick={revert} className="text-xs border border-stone-200 px-3 py-1.5 rounded-lg text-stone-400 hover:text-red-500 hover:border-red-200" title={t("views.transactions.removeTitle")}>&larrhk;</button>
                 )}
               </div>
               <button
@@ -611,20 +601,19 @@ export default function TransactionsPage() {
                 }}
                 className="w-full text-xs border border-stone-200 py-1.5 rounded-lg text-stone-400 hover:text-amber-700 hover:border-amber-200 mt-1"
               >
-                Find similar transactions
+                {t("views.transactions.findSimilar")}
               </button>
 
               {/* Rule creation prompt */}
               {rulePrompt && (
                 <div className="mt-3 pt-3 border-t border-stone-100">
                   <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">
-                    Create a Rule?
+                    {t("views.transactions.ruleHeading")}
                   </div>
                   {!ruleApplied && (
                     <>
                       <p className="text-xs text-stone-500 mb-2">
-                        Apply <strong>{rulePrompt.category} / {rulePrompt.subcategory}</strong> to
-                        transactions matching regex:
+                        <Tx ns={WORDS} k="views.transactions.ruleApply" vars={{ category: rulePrompt.category, sub: rulePrompt.subcategory }} components={{ b: <strong /> }} />
                       </p>
                       <input
                         className="w-full text-xs font-mono border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 mb-2"
@@ -637,13 +626,13 @@ export default function TransactionsPage() {
                           disabled={saveRuleTool.loading}
                           className="flex-1 bg-amber-600 text-white text-xs py-1.5 rounded-lg hover:bg-amber-500 disabled:opacity-40"
                         >
-                          {saveRuleTool.loading ? "Saving\u2026" : "Save Rule"}
+                          {saveRuleTool.loading ? t("views.common.saving") : t("views.transactions.saveRule")}
                         </button>
                         <button
                           onClick={dismissRulePrompt}
                           className="text-xs text-stone-400 hover:text-stone-600 border border-stone-200 px-3 py-1.5 rounded-lg"
                         >
-                          Skip
+                          {t("views.transactions.skip")}
                         </button>
                       </div>
                     </>
@@ -651,7 +640,7 @@ export default function TransactionsPage() {
                   {ruleApplied === "saved" && (
                     <div className="space-y-2">
                       <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                        Rule saved: <span className="font-mono">/{rulePrompt.keyword}/</span> &rarr; {rulePrompt.category} / {rulePrompt.subcategory}
+                        <Tx ns={WORDS} k="views.transactions.ruleSaved" vars={{ pattern: rulePrompt.keyword, category: rulePrompt.category, sub: rulePrompt.subcategory }} components={{ code: <span className="font-mono" /> }} />
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -659,13 +648,13 @@ export default function TransactionsPage() {
                           disabled={applyRulesTool.loading}
                           className="flex-1 bg-stone-900 text-white text-xs py-1.5 rounded-lg hover:bg-stone-700 disabled:opacity-40"
                         >
-                          {applyRulesTool.loading ? "Applying\u2026" : "Apply to All Matching"}
+                          {applyRulesTool.loading ? t("views.common.applying") : t("views.transactions.applyAll")}
                         </button>
                         <button
                           onClick={dismissRulePrompt}
                           className="text-xs text-stone-400 hover:text-stone-600 border border-stone-200 px-3 py-1.5 rounded-lg"
                         >
-                          Done
+                          {t("views.common.done")}
                         </button>
                       </div>
                     </div>
@@ -679,7 +668,7 @@ export default function TransactionsPage() {
                         onClick={dismissRulePrompt}
                         className="w-full text-xs text-stone-400 hover:text-stone-600 border border-stone-200 py-1.5 rounded-lg"
                       >
-                        Done
+                        {t("views.common.done")}
                       </button>
                     </div>
                   )}

@@ -6,10 +6,12 @@
  */
 
 import { useNavigate } from "react-router-dom";
+import { useT } from "../i18n";
 
 const LINK_RE = /\b(dup|twin):([a-zA-Z0-9_-]+)/g;
 
 export default function ReasonText({ reason }: { reason: string }) {
+  const t = useT();
   const navigate = useNavigate();
 
   const parts: Array<{ text: string; id?: string; label?: string }> = [];
@@ -23,7 +25,7 @@ export default function ReasonText({ reason }: { reason: string }) {
     parts.push({
       text: match[0],
       id: match[2],
-      label: match[1] === "dup" ? "duplicate of" : "twin",
+      label: match[1] === "dup" ? t("views.reason.duplicateOf") : t("views.reason.twin"),
     });
     lastIndex = start + match[0].length;
   }
@@ -46,7 +48,7 @@ export default function ReasonText({ reason }: { reason: string }) {
               navigate(`/transactions?search=${encodeURIComponent(p.id!)}`);
             }}
             className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 underline cursor-pointer"
-            title={`Navigate to transaction ${p.id}`}
+            title={t("views.reason.goTo", { id: p.id })}
           >
             <span className="text-blue-400">{p.label}:</span>
             <span className="font-mono">{p.id}</span>

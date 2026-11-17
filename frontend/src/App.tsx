@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext, lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AppShell, type AppShellContext } from "@tollbooth-dpyc/web/react";
+import { AppShell, LanguageChooser, Tx, type AppShellContext } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS } from "./i18n";
 import SessionsPage from "./components/SessionsPage";
 import Nav from "./components/Nav";
 import LockScreen from "./components/LockScreen";
@@ -19,9 +20,6 @@ const WalletPage = lazy(() => import("./components/WalletPage"));
 const FeedbackPage = lazy(() => import("./components/FeedbackPage"));
 const PrivacyPage = lazy(() => import("./components/PrivacyPage"));
 const SettingsPage = lazy(() => import("./components/SettingsPage"));
-
-/** The site's own words above the sign-in card. */
-const WELCOME = "Your transactions, sorted to IRS lines, kept under your key.";
 
 const APP_VERSION = __APP_VERSION__;
 
@@ -50,19 +48,20 @@ export const useSession = () => useContext(SessionContext);
 // ── Status banner ──────────────────────────────────────────────────────────
 
 function StatusBanner({ shell }: { shell: AppShellContext }) {
+  const t = useT();
   const { status, statusState, statusError, retryStatus } = shell;
   if (statusState === "failed") {
     return (
       <div role="alert" className="bg-red-50 border-b border-red-200 px-4 py-2 text-xs text-red-700 flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
-        <strong>MCP connection failed</strong>
+        <strong>{t("ui.app.statusFailed")}</strong>
         {statusError && <span className="text-red-600 break-words min-w-0">{statusError}</span>}
         <button
           type="button"
           onClick={retryStatus}
           className="ml-auto rounded-full border border-red-300 bg-white px-3 py-0.5 font-medium text-red-700 hover:bg-red-100"
         >
-          Retry
+          {t("ui.app.retry")}
         </button>
       </div>
     );
@@ -71,7 +70,7 @@ function StatusBanner({ shell }: { shell: AppShellContext }) {
   if (statusState === "connecting" || !status) {
     return (
       <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-700">
-        Connecting to TaxSort MCP…
+        {t("ui.app.connecting")}
       </div>
     );
   }
@@ -80,16 +79,16 @@ function StatusBanner({ shell }: { shell: AppShellContext }) {
     <div className="bg-green-50 border-b border-green-200 px-4 py-2 text-xs text-green-700 flex items-center gap-3">
       <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
       <span>
-        Connected to <strong>{status.service}</strong> v{status.version}
+        <Tx ns={WORDS} k="ui.app.connected" vars={{ version: status.version ?? "" }} components={{ service: <strong>{status.service}</strong> }} />
         {" "}&middot; tollbooth-dpyc v{status.tollbooth_dpyc_version}
         {" "}&middot; FE v{APP_VERSION}
         {status.operator_npub_hash && (
-          <span className="ml-2 font-mono text-green-600" title="Operator npub fingerprint — verify this matches DMs from TaxSort">
+          <span className="ml-2 font-mono text-green-600" title={t("ui.app.fingerprintTitle")}>
             {"\u{1F512}"} {status.operator_npub_hash}
           </span>
         )}
         {status.vault_configured === false && (
-          <span className="text-amber-600 ml-2">(vault not yet configured)</span>
+          <span className="text-amber-600 ml-2">{t("ui.app.vaultNotConfigured")}</span>
         )}
       </span>
     </div>
@@ -126,29 +125,42 @@ function writeLocked(locked: boolean): void {
 // theme and the debug log. TaxSort keeps what is its own: the tax session,
 // the inactivity lock, the status banner and the routes.
 export default function App() {
+  const t = useT();
   return (
     <AppShell
       theme="light"
-      gateOptions={{ welcome: WELCOME }}
+      gateOptions={{ welcome: t("ui.app.welcome") }}
       signedOut={(shell) => <SignedOut gate={shell.gate} />} classNames={{ root: "bg-stone-50 text-stone-900" }}>
       {(shell) => <SignedIn shell={shell} />}
     </AppShell>
   );
 }
 
+/** The language row under the sign-in card, where a visitor reaches it before signing in. */
+export const languageLook = {
+  root: "flex flex-wrap justify-center gap-1.5",
+  chip: "rounded-full border border-stone-200 px-2.5 py-0.5 text-xs text-stone-500 hover:bg-stone-100",
+  active: "border-amber-400! text-amber-700!",
+};
+
 function SignedOut({ gate }: { gate: ReactNode }) {
+  const t = useT();
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-4 py-10">
       {gate}
       <p className="text-xs text-stone-400 mt-4">
-        No email. No password. No KYC.{" "}
-        <a href="/privacy" className="text-amber-600 hover:text-amber-800 underline">Privacy Policy</a>
+        {t("ui.app.signedOutNote")}{" "}
+        <a href="/privacy" className="text-amber-600 hover:text-amber-800 underline">{t("ui.app.privacyLink")}</a>
       </p>
+      <div className="mt-4">
+        <LanguageChooser classNames={languageLook} />
+      </div>
     </div>
   );
 }
 
 function SignedIn({ shell }: { shell: AppShellContext }) {
+  const t = useT();
   const { session } = shell;
   const { npub } = session;
   const [sessionId, setSessionId] = useState<string | null>(
@@ -222,7 +234,7 @@ function SignedIn({ shell }: { shell: AppShellContext }) {
         <StatusBanner shell={shell} />
         <Nav />
         <main className="px-4 py-6">
-          <Suspense fallback={<p className="text-sm text-stone-400 text-center py-8">Loading…</p>}>
+          <Suspense fallback={<p className="text-sm text-stone-400 text-center py-8">{t("ui.app.loading")}</p>}>
             <Routes>
               <Route path="/" element={<SessionsPage />} />
               <Route

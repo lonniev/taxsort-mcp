@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { getSessionNsec } from "@tollbooth-dpyc/web";
 import { useToolCall } from "../hooks/useMCP";
+import { useT } from "../i18n";
 
 interface VerifyResult {
   verified?: boolean;
@@ -18,6 +19,7 @@ export default function LockScreen({ npub, canSign, onUnlock, onLogOut }: {
   onUnlock: () => void;
   onLogOut: () => void;
 }) {
+  const t = useT();
   const verifyTool = useToolCall<VerifyResult>("verify_passphrase");
 
   const [passphrase, setPassphrase] = useState("");
@@ -28,14 +30,14 @@ export default function LockScreen({ npub, canSign, onUnlock, onLogOut }: {
     setError(null);
     if (canSign) {
       if (passphrase.trim() === getSessionNsec()) onUnlock();
-      else setError("That is not the key this browser signed in with.");
+      else setError(t("ui.lock.wrongKey"));
       return;
     }
     const r = await verifyTool.invoke({ npub, passphrase: passphrase.trim() });
     if (r?.verified) {
       onUnlock();
     } else {
-      setError(r?.error || "Incorrect passphrase.");
+      setError(r?.error || t("ui.lock.wrongPassphrase"));
     }
   }
 
@@ -44,21 +46,21 @@ export default function LockScreen({ npub, canSign, onUnlock, onLogOut }: {
       <div className="bg-white border border-stone-200 rounded-xl p-8 max-w-md w-full shadow-lg">
         <div className="flex items-center gap-2 mb-4">
           <span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse" />
-          <h1 className="text-lg font-semibold text-stone-800">Session Timed Out</h1>
+          <h1 className="text-lg font-semibold text-stone-800">{t("ui.lock.title")}</h1>
         </div>
 
         <p className="text-xs text-stone-400 font-mono mb-4 break-all">{npub}</p>
 
         <p className="text-sm text-stone-500 mb-5">
           {canSign
-            ? "Paste the nsec you signed in with to resume."
-            : "Enter your passphrase to resume. This is the passphrase you replied with when you signed in by Nostr DM."}
+            ? t("ui.lock.pasteNsec")
+            : t("ui.lock.enterPassphrase")}
         </p>
 
         <input
           type="password"
           className="w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm bg-stone-50 focus:outline-none focus:border-stone-400 mb-3"
-          placeholder={canSign ? "nsec1\u2026" : "Your passphrase\u2026"}
+          placeholder={canSign ? "nsec1\u2026" : t("ui.lock.passphrasePlaceholder")}
           value={passphrase}
           onChange={e => setPassphrase(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") handleUnlock(); }}
@@ -70,7 +72,7 @@ export default function LockScreen({ npub, canSign, onUnlock, onLogOut }: {
           disabled={!passphrase.trim() || verifyTool.loading}
           className="w-full bg-amber-600 text-white text-sm py-2.5 rounded-lg hover:bg-amber-500 disabled:opacity-40 transition-colors mb-3"
         >
-          {verifyTool.loading ? "Verifying\u2026" : "Unlock"}
+          {verifyTool.loading ? t("ui.lock.verifying") : t("ui.lock.unlock")}
         </button>
 
         {error && (
@@ -84,7 +86,7 @@ export default function LockScreen({ npub, canSign, onUnlock, onLogOut }: {
             onClick={onLogOut}
             className="text-xs text-stone-400 hover:text-red-500 transition-colors"
           >
-            Sign out (you will sign in again)
+            {t("ui.lock.signOut")}
           </button>
         </div>
       </div>

@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
+import { Tx, useLanguageLocale } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS, type Translate } from "../i18n";
+import { usd } from "../utils/money";
 
 interface Account {
   name: string;
@@ -36,13 +39,14 @@ interface TxResult {
   transactions: Transaction[];
 }
 
-const ACCOUNT_TYPES = [
-  { value: "bank", label: "Bank", desc: "Checking or savings account" },
-  { value: "card", label: "Card", desc: "Credit or debit card" },
-  { value: "investment", label: "Investment", desc: "Brokerage or crypto" },
-  { value: "loan", label: "Loan", desc: "Mortgage, auto, student" },
-  { value: "unknown", label: "Unknown", desc: "Not yet categorized" },
-];
+/** The account types the server stores; their names and hints are in the catalog. */
+const ACCOUNT_TYPES = ["bank", "card", "investment", "loan", "unknown"] as const;
+type AccountType = (typeof ACCOUNT_TYPES)[number];
+
+const isAccountType = (v: string): v is AccountType => (ACCOUNT_TYPES as readonly string[]).includes(v);
+
+/** A stored account type's name in the reader's language, or as stored when we don't know it. */
+const typeLabel = (t: Translate, v: string): string => (isAccountType(v) ? t(`views.accounts.type.${v}`) : v);
 
 const TYPE_COLORS: Record<string, string> = {
   bank: "bg-blue-100 text-blue-800",
@@ -52,11 +56,9 @@ const TYPE_COLORS: Record<string, string> = {
   unknown: "bg-stone-100 text-stone-500",
 };
 
-function fmt$(n: number) {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 export default function AccountsPage() {
+  const t = useT();
+  const locale = useLanguageLocale();
   const { sessionId, npub } = useSession();
   const accountsTool = useToolCall<AccountsResult>("get_accounts");
   const setTypeTool = useToolCall<SetTypeResult>("set_account_type");
@@ -118,26 +120,24 @@ export default function AccountsPage() {
 
   return (
     <div className="w-[85%] mx-auto">
-      <h1 className="text-xl font-semibold mb-2 text-stone-800">Accounts</h1>
+      <h1 className="text-xl font-semibold mb-2 text-stone-800">{t("views.accounts.title")}</h1>
       <p className="text-sm text-stone-500 mb-6">
-        Tag each account so the classifier can detect duplicates from overlapping CSV exports
-        and identify transfers between your own accounts.
-        Set account types <strong>before</strong> classifying for best results.
+        <Tx ns={WORDS} k="views.accounts.intro" components={{ b: <strong /> }} />
       </p>
 
       {!loaded && (
-        <p className="text-sm text-stone-400">Loading accounts&hellip;</p>
+        <p className="text-sm text-stone-400">{t("views.accounts.loading")}</p>
       )}
 
       {loaded && accounts.length === 0 && (
-        <p className="text-sm text-stone-400">No transactions imported yet. Import CSVs first.</p>
+        <p className="text-sm text-stone-400">{t("views.accounts.empty")}</p>
       )}
 
       {/* Alias groups */}
       {aliasGroups.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
           <div className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2">
-            Detected account aliases (same last-4 digits)
+            {t("views.accounts.aliases")}
           </div>
           {aliasGroups.map((group, i) => (
             <div key={i} className="text-sm text-blue-800 mb-1">
@@ -145,7 +145,7 @@ export default function AccountsPage() {
             </div>
           ))}
           <p className="text-xs text-blue-500 mt-2">
-            The classifier will treat transactions from aliased accounts as potential duplicates.
+            {t("views.accounts.aliasesNote")}
           </p>
         </div>
       )}
@@ -161,18 +161,18 @@ export default function AccountsPage() {
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-stone-300 text-xs">{expanded === a.name ? "\u25BC" : "\u25B6"}</span>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded ${TYPE_COLORS[a.type] ?? TYPE_COLORS.unknown}`}>
-                    {a.type}
+                    {typeLabel(t, a.type)}
                   </span>
                   <span className="font-medium text-stone-700 flex-1">{a.name}</span>
                   {a.last4 && (
                     <span className="text-xs font-mono text-stone-400">***{a.last4}</span>
                   )}
-                  <span className="text-xs text-stone-400">{a.tx_count} txns</span>
+                  <span className="text-xs text-stone-400">{t("views.common.transactions", { count: a.tx_count })}</span>
                 </div>
                 <div className="text-xs text-stone-400 ml-7 mb-1">{a.date_range}</div>
                 {a.formats?.length > 0 && (
                   <div className="text-xs text-stone-400 ml-7">
-                    Sources: {a.formats.map((f, i) => (
+                    {t("views.accounts.sources")} {a.formats.map((f, i) => (
                       <span key={i} className="inline-block bg-stone-100 text-stone-500 font-mono px-1.5 py-0.5 rounded mr-1">{f}</span>
                     ))}
                   </div>
@@ -181,19 +181,19 @@ export default function AccountsPage() {
 
               {/* Type picker */}
               <div className="px-4 py-2 border-t border-stone-100 flex gap-1.5 flex-wrap" onClick={e => e.stopPropagation()}>
-                {ACCOUNT_TYPES.map(t => (
+                {ACCOUNT_TYPES.map(type => (
                   <button
-                    key={t.value}
-                    onClick={() => handleSetType(a.name, t.value)}
+                    key={type}
+                    onClick={() => handleSetType(a.name, type)}
                     disabled={setTypeTool.loading}
-                    title={t.desc}
+                    title={t(`views.accounts.type.${type}Hint`)}
                     className={`text-xs px-2.5 py-1 rounded transition-colors ${
-                      a.type === t.value
+                      a.type === type
                         ? "bg-stone-900 text-white"
                         : "bg-stone-100 text-stone-500 hover:bg-stone-200"
                     }`}
                   >
-                    {t.label}
+                    {t(`views.accounts.type.${type}`)}
                   </button>
                 ))}
               </div>
@@ -202,32 +202,32 @@ export default function AccountsPage() {
               {expanded === a.name && (
                 <div className="border-t border-stone-200 bg-stone-50 px-4 py-3">
                   {expandLoading && (
-                    <div className="text-xs text-stone-400 py-2">Loading transactions&hellip;</div>
+                    <div className="text-xs text-stone-400 py-2">{t("views.accounts.loadingTransactions")}</div>
                   )}
                   {!expandLoading && expandedTxns.length === 0 && (
-                    <div className="text-xs text-stone-400 py-2">No transactions found.</div>
+                    <div className="text-xs text-stone-400 py-2">{t("views.accounts.noTransactions")}</div>
                   )}
                   {!expandLoading && expandedTxns.length > 0 && (
                     <div className="overflow-auto max-h-64">
                       <table className="w-full text-xs">
                         <thead className="sticky top-0 bg-stone-50">
                           <tr className="text-stone-400 uppercase tracking-wider">
-                            <th className="text-left py-1 pr-3">Date</th>
-                            <th className="text-left py-1 pr-3">Description</th>
-                            <th className="text-left py-1 pr-3">Category</th>
-                            <th className="text-right py-1">Amount</th>
+                            <th className="text-left py-1 pr-3">{t("views.table.date")}</th>
+                            <th className="text-left py-1 pr-3">{t("views.table.description")}</th>
+                            <th className="text-left py-1 pr-3">{t("views.table.category")}</th>
+                            <th className="text-right py-1">{t("views.table.amount")}</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {expandedTxns.map(t => (
-                            <tr key={t.id} className="border-t border-stone-100">
-                              <td className="py-1 pr-3 text-stone-500 font-mono whitespace-nowrap">{t.date}</td>
-                              <td className="py-1 pr-3 text-stone-700">{t.description}</td>
+                          {expandedTxns.map(tx => (
+                            <tr key={tx.id} className="border-t border-stone-100">
+                              <td className="py-1 pr-3 text-stone-500 font-mono whitespace-nowrap">{tx.date}</td>
+                              <td className="py-1 pr-3 text-stone-700">{tx.description}</td>
                               <td className="py-1 pr-3 text-stone-400">
-                                {t.category && <span>{t.category}{t.subcategory ? ` / ${t.subcategory}` : ""}</span>}
+                                {tx.category && <span>{tx.category}{tx.subcategory ? ` / ${tx.subcategory}` : ""}</span>}
                               </td>
                               <td className="py-1 text-right font-mono text-stone-700">
-                                {t.amount < 0 ? "-" : ""}${fmt$(Math.abs(t.amount))}
+                                {usd(tx.amount, locale)}
                               </td>
                             </tr>
                           ))}
