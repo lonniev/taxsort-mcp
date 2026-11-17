@@ -3,6 +3,10 @@ import { useSession } from "../App";
 import type { Column } from "./SortableTable";
 import { useToolCall } from "../hooks/useMCP";
 import ReasonText from "./ReasonText";
+import { useLanguageLocale } from "@tollbooth-dpyc/web/react";
+import { useT } from "../i18n";
+import { decimal, signedAmount } from "../utils/money";
+import { groupOptions, sortOptions } from "../utils/tableOptions";
 
 interface Transaction {
   id: string;
@@ -41,21 +45,11 @@ const CAT_COLOR: Record<string, string> = {
   "Unclassified": "text-red-500",
 };
 
-const GROUP_OPTIONS: [string, string][] = [
-  ["none", "No grouping"],
-  ["category", "Category"],
-  ["subcategory", "Subcategory"],
-  ["taxline", "Tax Line (IRS)"],
-  ["month", "Month"],
-  ["account", "Account"],
-  ["merchant", "Merchant"],
-  ["month+category", "Month + Category"],
-  ["category+subcategory", "Category + Sub"],
-];
-
 const PAGE_SIZE = 200;
 
 export default function SummaryPage() {
+  const t = useT();
+  const locale = useLanguageLocale();
   const { sessionId, npub } = useSession();
   const pagedTool = useToolCall<PagedResult>("get_transactions_paged");
 
@@ -191,64 +185,64 @@ export default function SummaryPage() {
   const txColumns: Column<Transaction>[] = useMemo(() => [
     {
       key: "date",
-      label: "Date",
-      sortValue: t => t.date,
+      label: t("views.table.date"),
+      sortValue: tx => tx.date,
       className: "font-mono text-xs text-stone-400 whitespace-nowrap",
-      render: t => t.date,
+      render: tx => tx.date,
     },
     {
       key: "description",
-      label: "Description",
-      sortValue: t => (t.merchant ?? t.description).toLowerCase(),
+      label: t("views.table.description"),
+      sortValue: tx => (tx.merchant ?? tx.description).toLowerCase(),
       className: "max-w-xs",
-      render: t => (
+      render: tx => (
         <>
-          <div className="truncate font-medium text-stone-700">{t.merchant ?? t.description}</div>
-          {t.merchant && t.merchant !== t.description && (
-            <div className="text-xs text-stone-400 truncate" title={t.description}>{t.description}</div>
+          <div className="truncate font-medium text-stone-700">{tx.merchant ?? tx.description}</div>
+          {tx.merchant && tx.merchant !== tx.description && (
+            <div className="text-xs text-stone-400 truncate" title={tx.description}>{tx.description}</div>
           )}
-          {t.ambiguous && <div className="text-xs text-red-500">Indistinguishable duplicate</div>}
-          {t.hint2 && <div className="text-xs text-blue-500">{t.hint1} &rsaquo; {t.hint2}</div>}
-          {t.reason && <div className="text-xs text-stone-400 italic"><ReasonText reason={t.reason} /></div>}
+          {tx.ambiguous && <div className="text-xs text-red-500">{t("views.table.indistinguishable")}</div>}
+          {tx.hint2 && <div className="text-xs text-blue-500">{tx.hint1} &rsaquo; {tx.hint2}</div>}
+          {tx.reason && <div className="text-xs text-stone-400 italic"><ReasonText reason={tx.reason} /></div>}
         </>
       ),
     },
     {
       key: "amount",
-      label: "Amount",
+      label: t("views.table.amount"),
       align: "right" as const,
-      sortValue: t => t.amount,
+      sortValue: tx => tx.amount,
       className: "font-mono whitespace-nowrap",
-      render: t => (
-        <span className={t.amount >= 0 ? "text-green-700" : "text-stone-700"}>
-          {t.amount >= 0 ? "+" : ""}{t.amount.toFixed(2)}
+      render: tx => (
+        <span className={tx.amount >= 0 ? "text-green-700" : "text-stone-700"}>
+          {signedAmount(tx.amount, locale)}
         </span>
       ),
     },
     {
       key: "account",
-      label: "Account",
-      sortValue: t => t.account,
-      render: t => <span className="text-xs text-stone-500">{t.account}</span>,
+      label: t("views.table.account"),
+      sortValue: tx => tx.account,
+      render: tx => <span className="text-xs text-stone-500">{tx.account}</span>,
     },
     {
       key: "category",
-      label: "Category",
-      sortValue: t => t.category ?? "zzz",
-      render: t => (
+      label: t("views.table.category"),
+      sortValue: tx => tx.category ?? "zzz",
+      render: tx => (
         <>
-          <span className={`text-xs font-medium ${CAT_COLOR[t.category ?? "Unclassified"] ?? "text-stone-400"}`}>
-            {t.category ?? "\u2014"}
+          <span className={`text-xs font-medium ${CAT_COLOR[tx.category ?? "Unclassified"] ?? "text-stone-400"}`}>
+            {tx.category ?? "\u2014"}
           </span>
-          {t.subcategory && t.subcategory !== t.category && (
-            <div className="text-xs text-stone-400 truncate max-w-32">{t.subcategory}</div>
+          {tx.subcategory && tx.subcategory !== tx.category && (
+            <div className="text-xs text-stone-400 truncate max-w-32">{tx.subcategory}</div>
           )}
-          {t.classified_by === "manual" && <span className="text-xs text-blue-400 ml-1">manual</span>}
-          {t.classified_by === "rule" && <span className="text-xs text-purple-400 ml-1">rule</span>}
+          {tx.classified_by === "manual" && <span className="text-xs text-blue-400 ml-1">{t("views.common.manual")}</span>}
+          {tx.classified_by === "rule" && <span className="text-xs text-purple-400 ml-1">{t("views.common.rule")}</span>}
         </>
       ),
     },
-  ], []);
+  ], [t, locale]);
 
   const colHeader = (col: Column<Transaction>) => (
     <th key={col.key}
@@ -271,14 +265,14 @@ export default function SummaryPage() {
   return (
     <div className="w-[85%] mx-auto relative">
       <div className="flex items-center gap-2 mb-5">
-        <h1 className="text-xl font-semibold text-stone-800">Categorized</h1>
+        <h1 className="text-xl font-semibold text-stone-800">{t("views.summary.title")}</h1>
         <span className="relative group">
           <span className="text-stone-300 hover:text-stone-500 cursor-help text-sm">&#9432;</span>
           <span className="absolute left-6 top-0 hidden group-hover:block bg-stone-800 text-white text-xs rounded-lg px-3 py-2 w-64 z-50 shadow-lg">
-            Categorized shows your AI-categorized activities — the accounting journal after rules and AI have assigned tax categories.
+            {t("views.summary.about")}
           </span>
         </span>
-        {loading && <span className="text-xs text-stone-400">Loading&hellip;</span>}
+        {loading && <span className="text-xs text-stone-400">{t("views.common.loading")}</span>}
       </div>
 
       {/* Category chiclets */}
@@ -287,40 +281,36 @@ export default function SummaryPage() {
           <button key={f} onClick={() => { setScope(f); setPage(0); }}
             className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
               scope === f ? "bg-stone-100 border-stone-400 font-medium text-stone-800" : "border-stone-200 text-stone-400 hover:border-stone-300"
-            }`}>{f === "all" ? "All" : f}</button>
+            }`}>{f === "all" ? t("views.table.all") : f}</button>
         ))}
         <button onClick={() => isGrouped ? fetchGroups() : fetchFlat()}
-          className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded ml-1">Refresh</button>
-        <span className="ml-auto text-xs text-stone-400">{total} categorized</span>
+          className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded ml-1">{t("views.common.refresh")}</button>
+        <span className="ml-auto text-xs text-stone-400">{t("views.summary.count", { count: total })}</span>
       </div>
 
       {/* Group + Sort controls */}
       <div className="flex items-center gap-4 mb-3 flex-wrap">
         <div className="flex items-center gap-1.5">
-          <label className="text-xs text-stone-400">Group</label>
+          <label className="text-xs text-stone-400">{t("views.table.group")}</label>
           <select value={groupBy} onChange={e => { setGroupBy(e.target.value); setPage(0); setGroupRows(new Map()); }}
             className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50">
-            {GROUP_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            {groupOptions(t).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           {isGrouped && (
             <button onClick={() => { setGroupSort(d => d === "asc" ? "desc" : "asc"); setPage(0); setGroupRows(new Map()); }}
-              className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100" title="Group order">
+              className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100" title={t("views.table.groupOrder")}>
               {groupSort === "asc" ? "A\u2192Z" : "Z\u2192A"}
             </button>
           )}
         </div>
         <div className="flex items-center gap-1.5">
-          <label className="text-xs text-stone-400">Sort by</label>
+          <label className="text-xs text-stone-400">{t("views.table.sortBy")}</label>
           <select value={sortCol} onChange={e => { setSortCol(e.target.value); setPage(0); if (isGrouped) setGroupRows(new Map()); }}
             className="text-xs border border-stone-200 rounded-lg px-2 py-1 bg-stone-50">
-            <option value="date">Date</option>
-            <option value="description">Description</option>
-            <option value="amount">Amount</option>
-            <option value="account">Account</option>
-            <option value="category">Category</option>
+            {sortOptions(t).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           <button onClick={() => { setSortDir(d => d === "asc" ? "desc" : "asc"); setPage(0); if (isGrouped) setGroupRows(new Map()); }}
-            className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100" title="Sort direction">
+            className="text-xs border border-stone-200 rounded px-1.5 py-0.5 bg-stone-50 hover:bg-stone-100" title={t("views.table.sortDirection")}>
             {sortDir === "asc" ? "\u25B2" : "\u25BC"}
           </button>
         </div>
@@ -329,13 +319,13 @@ export default function SummaryPage() {
       {/* Search */}
       <div className="flex items-center gap-2 mb-4">
         <input className="flex-1 border border-stone-200 rounded-lg px-3 py-1.5 text-xs bg-stone-50 focus:outline-none focus:border-stone-400 font-mono"
-          placeholder="Search descriptions (regex)..." value={searchInput}
+          placeholder={t("views.table.searchPlaceholder")} value={searchInput}
           onChange={e => setSearchInput(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") { setSearch(searchInput); setPage(0); } }} />
         {searchInput && <button onClick={() => { setSearch(searchInput); setPage(0); }}
-          className="text-xs bg-stone-900 text-white px-3 py-1.5 rounded-lg">Search</button>}
+          className="text-xs bg-stone-900 text-white px-3 py-1.5 rounded-lg">{t("views.common.search")}</button>}
         {search && <button onClick={() => { setSearch(""); setSearchInput(""); setPage(0); }}
-          className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded">Clear</button>}
+          className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded">{t("views.common.clear")}</button>}
       </div>
 
       {/* Grouped view — all group headers visible, rows expand/collapse */}
@@ -347,7 +337,7 @@ export default function SummaryPage() {
               const allCollapsed = collapsed.size >= allKeys.length;
               setCollapsed(allCollapsed ? new Set() : new Set(allKeys));
             }} className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-0.5 rounded">
-              {collapsed.size >= groups.length ? "Expand All" : "Collapse All"}
+              {collapsed.size >= groups.length ? t("views.table.expandAll") : t("views.table.collapseAll")}
             </button>
           </div>
           <table className="w-full text-sm">
@@ -369,13 +359,13 @@ export default function SummaryPage() {
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs">
                       <span className={g.total_amount >= 0 ? "text-green-700" : "text-stone-700"}>
-                        {g.total_amount.toFixed(2)}
+                        {decimal(g.total_amount, locale)}
                       </span>
                     </td>
                   </tr>,
                   ...(!isCollapsed ? (
                     isLoading ? [
-                      <tr key={`gl-${g.key}`}><td colSpan={txColumns.length} className="px-3 py-2 text-xs text-stone-400">Loading&hellip;</td></tr>
+                      <tr key={`gl-${g.key}`}><td colSpan={txColumns.length} className="px-3 py-2 text-xs text-stone-400">{t("views.common.loading")}</td></tr>
                     ] : rows.map(dataRow)
                   ) : []),
                 ];
@@ -394,20 +384,20 @@ export default function SummaryPage() {
             </thead>
             <tbody>
               {txns.length === 0 ? (
-                <tr><td colSpan={txColumns.length} className="px-3 py-8 text-center text-stone-400 text-xs">No categorized transactions match this filter.</td></tr>
+                <tr><td colSpan={txColumns.length} className="px-3 py-8 text-center text-stone-400 text-xs">{t("views.summary.noMatch")}</td></tr>
               ) : txns.map(dataRow)}
             </tbody>
           </table>
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-2.5 mt-2 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-400">
               <div className="flex gap-2">
-                <button onClick={() => setPage(0)} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30" title="First page">|&larr;</button>
-                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30">&larr; Prev</button>
+                <button onClick={() => setPage(0)} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30" title={t("views.table.firstPage")}>|&larr;</button>
+                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="hover:text-stone-700 disabled:opacity-30">{t("views.table.prev")}</button>
               </div>
-              <span>Page {page + 1} of {totalPages} ({total} total)</span>
+              <span>{t("views.table.page", { page: page + 1, pages: totalPages, total })}</span>
               <div className="flex gap-2">
-                <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30">Next &rarr;</button>
-                <button onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30" title="Last page">&rarr;|</button>
+                <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30">{t("views.table.next")}</button>
+                <button onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1} className="hover:text-stone-700 disabled:opacity-30" title={t("views.table.lastPage")}>&rarr;|</button>
               </div>
             </div>
           )}

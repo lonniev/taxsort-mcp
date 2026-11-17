@@ -4,27 +4,12 @@ import { matchesPath, SiteNav, type SiteNavItem } from "@tollbooth-dpyc/web/reac
 import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
 import { navClassNames } from "../utils/accountStyles";
+import { useT, type Translate } from "../i18n";
 
 interface HeartbeatResult {
   others: { npub: string }[];
   collaborators: number;
 }
-
-const PAGES: readonly SiteNavItem[] = [
-  { href: "/", icon: "\u{1F4C1}", label: "Sessions", title: "Create and switch between tax year sessions", end: true },
-];
-
-const SESSION_PAGES: readonly SiteNavItem[] = [
-  { href: "/import", icon: "\u{1F4E5}", label: "Import", title: "Upload bank CSV files" },
-  { href: "/accounts", icon: "\u{1F3E6}", label: "Accounts", title: "Tag account types, view aliases and transactions" },
-  { href: "/transactions", icon: "\u{1F4C4}", label: "Transactions", title: "Browse and search raw transaction data" },
-  { href: "/classify", icon: "\u{1F916}", label: "\u2192 Categorize \u2192", title: "Run AI categorization rules on imported transactions" },
-  { href: "/summary", icon: "\u2705", label: "Categorized", title: "View classified totals with semantic categories" },
-  { href: "/subscriptions", icon: "\u{1F501}", label: "Subscriptions", title: "Find recurring charges and money leaks" },
-  { href: "/advisor", icon: "\u{1F4AC}", label: "Advisor", title: "Ask the Financial Advisor about TaxSort" },
-  { href: "/tax-research", icon: "\u{1F4D6}", label: "Tax Code", title: "Look up IRS code sections — chapter and verse" },
-  { href: "/feedback", icon: "\u{1F4E8}", label: "Feedback", title: "Report bugs, request features, ask questions" },
-];
 
 const withIcon = (icon: string, label: string) => (
   <>
@@ -33,11 +18,28 @@ const withIcon = (icon: string, label: string) => (
   </>
 );
 
-const ACCOUNT_LINKS: readonly SiteNavItem[] = [
-  { href: "/profile", label: withIcon("\u{1F4CA}", "Usage & Costs"), title: "AI usage stats and estimated costs" },
-  { href: "/wallet", label: withIcon("\u{1F4B0}", "Wallet"), title: "Credit balance and Lightning purchases" },
-  { href: "/settings", label: withIcon("\u2699\uFE0F", "Settings"), title: "Session timeout, sharing, and about" },
-  { href: "/privacy", label: withIcon("\u{1F512}", "Privacy"), title: "How your data is protected" },
+/** The pages, built at render so they follow the language. */
+const pages = (t: Translate): readonly SiteNavItem[] => [
+  { href: "/", icon: "\u{1F4C1}", label: t("ui.nav.sessions"), title: t("ui.nav.sessionsTitle"), end: true },
+];
+
+const sessionPages = (t: Translate): readonly SiteNavItem[] => [
+  { href: "/import", icon: "\u{1F4E5}", label: t("ui.nav.import"), title: t("ui.nav.importTitle") },
+  { href: "/accounts", icon: "\u{1F3E6}", label: t("ui.nav.accounts"), title: t("ui.nav.accountsTitle") },
+  { href: "/transactions", icon: "\u{1F4C4}", label: t("ui.nav.transactions"), title: t("ui.nav.transactionsTitle") },
+  { href: "/classify", icon: "\u{1F916}", label: t("ui.nav.categorize"), title: t("ui.nav.categorizeTitle") },
+  { href: "/summary", icon: "\u2705", label: t("ui.nav.categorized"), title: t("ui.nav.categorizedTitle") },
+  { href: "/subscriptions", icon: "\u{1F501}", label: t("ui.nav.subscriptions"), title: t("ui.nav.subscriptionsTitle") },
+  { href: "/advisor", icon: "\u{1F4AC}", label: t("ui.nav.advisor"), title: t("ui.nav.advisorTitle") },
+  { href: "/tax-research", icon: "\u{1F4D6}", label: t("ui.nav.taxCode"), title: t("ui.nav.taxCodeTitle") },
+  { href: "/feedback", icon: "\u{1F4E8}", label: t("ui.nav.feedback"), title: t("ui.nav.feedbackTitle") },
+];
+
+const accountLinks = (t: Translate): readonly SiteNavItem[] => [
+  { href: "/profile", label: withIcon("\u{1F4CA}", t("ui.nav.usage")), title: t("ui.nav.usageTitle") },
+  { href: "/wallet", label: withIcon("\u{1F4B0}", t("ui.nav.wallet")), title: t("ui.nav.walletTitle") },
+  { href: "/settings", label: withIcon("\u2699\uFE0F", t("ui.nav.settings")), title: t("ui.nav.settingsTitle") },
+  { href: "/privacy", label: withIcon("\u{1F512}", t("ui.nav.privacy")), title: t("ui.nav.privacyTitle") },
 ];
 
 const brand = (
@@ -48,6 +50,7 @@ const brand = (
 );
 
 export default function Nav() {
+  const t = useT();
   const { sessionId, sessionLabel, npub, logOut } = useSession();
   const { pathname } = useLocation();
   const heartbeatTool = useToolCall<HeartbeatResult>("session_heartbeat");
@@ -76,7 +79,7 @@ export default function Nav() {
     <>
       <SiteNav
         brand={brand}
-        items={sessionId ? [...PAGES, ...SESSION_PAGES] : PAGES}
+        items={sessionId ? [...pages(t), ...sessionPages(t)] : pages(t)}
         isActive={(href, item) => matchesPath(pathname, href, item.end)}
         renderLink={({ href, children, ...rest }) => (
           <Link to={href} {...rest}>
@@ -85,11 +88,11 @@ export default function Nav() {
         )}
         account={{
           npub,
-          links: ACCOUNT_LINKS,
+          links: accountLinks(t),
           onSignOut: logOut,
-          signOutLabel: withIcon("\u{1F6AA}", "Log out"),
+          signOutLabel: withIcon("\u{1F6AA}", t("ui.nav.logOut")),
           avatarSize: 28,
-          label: "Profile",
+          label: t("ui.nav.profile"),
         }}
         classNames={navClassNames}
       />
@@ -97,7 +100,7 @@ export default function Nav() {
       {/* Session info bar */}
       {sessionId && (
         <div className="bg-stone-50 border-b border-stone-100 px-4 py-1.5 flex items-center gap-3 text-xs">
-          <span className="text-stone-400">Session:</span>
+          <span className="text-stone-400">{t("ui.nav.session")}</span>
           <span className="font-medium text-stone-600">{sessionLabel}</span>
           <span className="text-stone-300 font-mono" title={sessionId}>{sessionId.slice(0, 8)}&hellip;</span>
 
@@ -121,7 +124,7 @@ export default function Nav() {
                 )}
               </div>
               <span className="text-blue-600">
-                {others.length} collaborator{others.length > 1 ? "s" : ""}
+                {t("ui.nav.collaborators", { count: others.length })}
               </span>
             </div>
           )}

@@ -1,3 +1,5 @@
+import { useT } from "../i18n";
+
 interface Slice {
   label: string;
   count: number;
@@ -11,13 +13,14 @@ interface DonutChartProps {
 }
 
 export default function DonutChart({ total, classified, needsReview }: DonutChartProps) {
+  const t = useT();
   const other = Math.max(0, total - classified - needsReview);
   const pct = total > 0 ? Math.round((classified / total) * 100) : 0;
 
   const slices: Slice[] = [
-    { label: "Classified", count: classified, color: "#f59e0b" },
-    { label: "Needs Review", count: needsReview, color: "#ef4444" },
-    { label: "Other", count: other, color: "#57534e" },
+    { label: t("views.donut.classified"), count: classified, color: "#f59e0b" },
+    { label: t("views.donut.needsReview"), count: needsReview, color: "#ef4444" },
+    { label: t("views.donut.other"), count: other, color: "#57534e" },
   ].filter(s => s.count > 0);
 
   let cumAngle = 0;

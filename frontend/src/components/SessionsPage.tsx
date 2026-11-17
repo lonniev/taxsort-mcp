@@ -4,6 +4,7 @@ import { useSession } from "../App";
 import { useToolCall } from "../hooks/useMCP";
 import { formatDate } from "@tollbooth-dpyc/web";
 import { useTimezone } from "@tollbooth-dpyc/web/react";
+import { useT } from "../i18n";
 
 interface Session {
   session_id: string;
@@ -23,6 +24,7 @@ interface CreateResult {
 
 
 export default function SessionsPage() {
+  const t = useT();
   const [, zone] = useTimezone();
   const { sessionId: currentSessionId, sessionLabel: currentLabel, setSession, clearSession, npub } = useSession();
   const navigate = useNavigate();
@@ -64,7 +66,7 @@ export default function SessionsPage() {
   return (
     <div className="w-[85%] mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-stone-800">Tax sessions</h1>
+        <h1 className="text-xl font-semibold text-stone-800">{t("views.sessions.title")}</h1>
         <div className="flex items-center gap-2">
           <span className="text-xs text-stone-400 font-mono truncate max-w-48" title={npub}>{npub.slice(0, 20)}…</span>
           <button
@@ -72,7 +74,7 @@ export default function SessionsPage() {
             disabled={listTool.loading}
             className="text-xs text-stone-400 hover:text-stone-700 border border-stone-200 px-2 py-1 rounded"
           >
-            {listTool.loading ? "…" : "Refresh"}
+            {listTool.loading ? "…" : t("views.common.refresh")}
           </button>
         </div>
       </div>
@@ -89,7 +91,7 @@ export default function SessionsPage() {
             onClick={clearSession}
             className="text-xs text-amber-600 hover:text-red-600 border border-amber-300 px-3 py-1 rounded-lg hover:border-red-300 transition-colors"
           >
-            Close Session
+            {t("views.sessions.closeSession")}
           </button>
         </div>
       )}
@@ -103,12 +105,12 @@ export default function SessionsPage() {
       {/* Create new */}
       <div className="bg-white border border-stone-200 rounded-xl p-5 mb-4">
         <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
-          New session
+          {t("views.sessions.new")}
         </div>
         <div className="flex gap-2">
           <input
             className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm bg-stone-50 focus:outline-none focus:border-stone-400"
-            placeholder="e.g. 2025 Taxes"
+            placeholder={t("views.sessions.newPlaceholder")}
             value={newLabel}
             onChange={e => setNewLabel(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleCreate()}
@@ -118,7 +120,7 @@ export default function SessionsPage() {
             disabled={createTool.loading || !newLabel.trim()}
             className="bg-stone-900 text-white text-sm px-4 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
           >
-            {createTool.loading ? "Creating…" : "Create →"}
+            {createTool.loading ? t("views.sessions.creating") : t("views.sessions.create")}
           </button>
         </div>
       </div>
@@ -127,7 +129,7 @@ export default function SessionsPage() {
       {fetched && sessions.length > 0 && (
         <div className="mb-6">
           <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">
-            Your sessions
+            {t("views.sessions.yours")}
           </div>
           <div className="space-y-2">
             {sessions.map(s => (
@@ -139,8 +141,7 @@ export default function SessionsPage() {
                 <div className="flex-1">
                   <div className="text-sm font-medium text-stone-800">{s.label}</div>
                   <div className="text-xs text-stone-400 mt-0.5">
-                    {s.tx_count} transactions &middot; updated{" "}
-                    {formatDate(s.updated_at, zone)}
+                    {t("views.sessions.row", { count: s.tx_count, date: formatDate(s.updated_at, zone) })}
                   </div>
                 </div>
                 <span className="text-stone-300 text-lg">&rarr;</span>
@@ -152,16 +153,16 @@ export default function SessionsPage() {
 
       {fetched && sessions.length === 0 && !listTool.loading && (
         <p className="text-sm text-stone-400 text-center py-8">
-          No sessions yet. Create one above to get started.
+          {t("views.sessions.none")}
         </p>
       )}
 
       {listTool.loading && !fetched && (
-        <p className="text-sm text-stone-400 text-center py-8">Loading…</p>
+        <p className="text-sm text-stone-400 text-center py-8">{t("views.common.loading")}</p>
       )}
 
       <div className="text-xs text-stone-400 text-center mt-4">
-        Share a session by using the same npub from multiple devices.
+        {t("views.sessions.share")}
       </div>
     </div>
   );

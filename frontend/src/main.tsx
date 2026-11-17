@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { configureTollbooth } from "@tollbooth-dpyc/web";
 import App from "./App";
+import { registerTaxSort } from "./i18n";
 import "./index.css";
 
 // The MCP client, the sign-in gate and the account pieces read who this site
@@ -34,6 +35,10 @@ configureTollbooth({
     "ask_tax_researcher",
   ],
 });
+
+// TaxSort's words, before the first render. The package's AppShell then starts
+// the reader's language: their choice, else their country's, else English.
+void registerTaxSort();
 
 // Cleanup, not a carry-over: the identity and theme keys from before the move
 // to the package are never read again, so drop them rather than leave them

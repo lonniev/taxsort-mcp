@@ -9,6 +9,7 @@
 
 import { useState, useCallback } from "react";
 import { callTool } from "@tollbooth-dpyc/web";
+import { tr } from "../i18n";
 
 export function useToolCall<TResult = unknown>(toolName: string) {
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,7 @@ export function useToolCall<TResult = unknown>(toolName: string) {
       try {
         return await callTool<TResult>(toolName, args);
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "Unknown error");
+        setError(e instanceof Error ? e.message : tr("lib.mcp.unknownError"));
         return null;
       } finally {
         setLoading(false);
