@@ -1,2 +1,0 @@
-- The Profile page now sits in folding groups — You, Money — with its panels side by side in a grid.
-- Your language is under You; the AI classification cost is under Money.
