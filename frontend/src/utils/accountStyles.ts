@@ -35,6 +35,9 @@ const cardLabel = "text-xs font-semibold text-stone-400 uppercase tracking-wider
 export const accountPageClassNames: AccountPageClassNames = {
   root: "w-[85%] mx-auto space-y-6",
   heading: "text-xl font-semibold text-stone-800",
+  group: "group",
+  groupSummary: "cursor-pointer select-none py-1 text-lg font-semibold text-stone-800 group-open:mb-3",
+  groupBody: "grid items-start gap-6 grid-cols-[repeat(auto-fill,minmax(min(100%,26rem),1fr))]",
   section: "bg-white border border-stone-200 rounded-xl p-5",
   sectionHeading: `${cardLabel} mb-3`,
   sectionNote: "text-xs text-stone-400 mt-2",

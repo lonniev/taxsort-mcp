@@ -58,15 +58,15 @@ export default function ProfilePage() {
         classNames: themeToggleClassNames,
       }}
       build={false}
-      after={
-        <>
+      panels={{
+        you: (
           <section className={accountPageClassNames.section}>
             <h2 className={accountPageClassNames.sectionHeading}>{t("views.profile.language")}</h2>
             <LanguageChooser classNames={themeToggleClassNames} />
           </section>
-          <AiUsagePanel />
-        </>
-      }
+        ),
+        money: <AiUsagePanel />,
+      }}
       classNames={accountPageClassNames}
     />
   );
