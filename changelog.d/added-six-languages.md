@@ -1,5 +1,0 @@
-- TaxSort's pages now read in English, French, Spanish, Japanese, Chinese and Hindi, through the shared web package.
-- The first language is the one the reader chose, else their country's, else English.
-- A language chooser sits under the sign-in card and on Profile.
-- Dollar figures, counts and dates follow the reader's language; the currency stays the US dollar.
-- IRS names, schedule letters and the categories TaxSort stores stay as they are.
