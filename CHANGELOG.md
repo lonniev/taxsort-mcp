@@ -5,6 +5,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Changes not yet released live in `changelog.d/`, one file per change — see the README there for why, and `scripts/changelog.py` for what folds them in at release time.
 
+## [0.31.1] — 2026-11-19
+
+### Added
+
+- TaxSort's pages now read in English, French, Spanish, Japanese, Chinese and Hindi, through the shared web package.
+- The first language is the one the reader chose, else their country's, else English.
+- A language chooser sits under the sign-in card and on Profile.
+- Dollar figures, counts and dates follow the reader's language; the currency stays the US dollar.
+- IRS names, schedule letters and the categories TaxSort stores stay as they are.
+
+### Changed
+
+- Runs on @tollbooth-dpyc/web 2.6.0, so Pay opens your own Lightning wallet and an open invoice says the page is watching for it.
+
+- Each page loads the first time it opens, so the first visit downloads about two-fifths less.
+
+- The MCP Registry listing carries a title (TaxSort) and a link to https://taxsort-app.pages.dev.
+
+- `/llms.txt` is built by the shared `@tollbooth-dpyc/web/agent-guide` plugin from this service's own sections, so its connecting, payments, license and links sections match the rest of the fleet.
+
+- The wallet is now the shared one from tollbooth-web 3.0.0, with a QR code on an open invoice, amounts of 100 to 25,000 plus Custom, and coupons and the statement included.
+
+- The wallet's top-up now runs on the shared package: Open in wallet opens your own Lightning wallet, the page watches for your payment by itself, and the button reads "Check now".
+
+### Fixed
+
+- Force a Horizon redeploy so the live service catches up to main (`301c864`). Deploy-verify saw stale wheel `0330b16` / version `0.31.0` for ~12 min after the frontend-deps merge; bump package metadata to `0.31.1` and refresh `.horizon-trigger`.
+
 ## [0.31.0] — 2026-10-21
 
 ### Changed
