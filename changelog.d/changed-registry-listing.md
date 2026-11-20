@@ -1,0 +1,1 @@
+- The MCP Registry listing carries a title (TaxSort) and a link to https://taxsort-app.pages.dev.
