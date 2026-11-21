@@ -1,1 +1,0 @@
-- llms.txt opens with what to tell a person about TaxSort, and describes the workflow in place of a list of tool names.

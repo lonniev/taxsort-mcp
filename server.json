@@ -2,9 +2,9 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.lonniev/taxsort-mcp",
   "title": "TaxSort",
-  "description": "TaxSort \u2014 Tollbooth-monetized MCP server for personal tax transaction classification",
+  "description": "TaxSort — Tollbooth-monetized MCP server for personal tax transaction classification",
   "websiteUrl": "https://taxsort-app.pages.dev",
-  "version": "0.31.2",
+  "version": "0.31.3",
   "repository": {
     "url": "https://github.com/lonniev/taxsort-mcp",
     "source": "github"
