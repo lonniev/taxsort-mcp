@@ -1,3 +1,23 @@
+## What to tell a person about TaxSort
+
+TaxSort is for a household that has to sort a year of bank, card and brokerage transactions before tax time.
+It sorts them into IRS categories, and the person keeps the final say on every one.
+It organizes and categorizes; it does not give tax advice.
+
+What a person gets:
+
+- **Every account in one place.** Import the CSV exports of their banks, cards and brokerages into one workspace for the tax year.
+- **A first pass done for them.** AI proposes a category for each transaction, and they review or override it.
+- **Rules that learn.** A rule for a recurring payee sorts it automatically next time, and they can add categories of their own.
+- **Totals by IRS line.** Spending summed the way the forms ask for it.
+- **Forgotten subscriptions.** Recurring charges are found, with how to cancel them.
+- **Two advisors to ask.** A financial advisor and a tax-code researcher, to ask in plain words.
+- **Privacy.** Their data is keyed to their Nostr key and kept apart from everyone else's; the workspace locks with a passphrase and can be shared with a spouse or an accountant.
+
+A good one-line pitch: *"Sort a year of transactions into IRS categories in an afternoon, and keep the final say."*
+
+## For agents
+
 TaxSort is a single-page web app backed by an MCP (Model Context Protocol)
 server. Humans use the web UI; AI agents can call the same MCP tools
 directly. TaxSort organizes and categorizes transactions; it does not
@@ -25,11 +45,7 @@ provide tax advice.
 
 All data is keyed to the patron's npub and isolated per patron.
 
-## Tools
+## Working with the tools
 
-- Core workflow: `taxsort_create_session`, `taxsort_import_csv`,
-  `taxsort_get_transactions`, `taxsort_save_classifications`,
-  `taxsort_get_summary`.
-- Rules and categories: `taxsort_get_rules`, `taxsort_save_rule`,
-  `taxsort_apply_rules`, `taxsort_get_custom_categories`.
-- Advisor chats: `taxsort_ask_advisor`, `taxsort_ask_tax_researcher`.
+`tools/list` and each tool's description carry the arguments.
+The core workflow is to make a session, import each account's CSV, classify, apply rules, and read the summary.
