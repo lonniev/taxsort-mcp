@@ -1703,7 +1703,7 @@ wheels = [
 
 [[package]]
 name = "taxsort-mcp"
-version = "0.31.5"
+version = "0.31.6"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },

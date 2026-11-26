@@ -4,7 +4,7 @@
   "title": "TaxSort",
   "description": "TaxSort — Tollbooth-monetized MCP server for personal tax transaction classification",
   "websiteUrl": "https://taxsort-app.pages.dev",
-  "version": "0.31.5",
+  "version": "0.31.6",
   "repository": {
     "url": "https://github.com/lonniev/taxsort-mcp",
     "source": "github"
